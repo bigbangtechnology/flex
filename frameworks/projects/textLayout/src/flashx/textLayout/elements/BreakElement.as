@@ -1,18 +1,17 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
-{
-	import flash.text.engine.TextElement;
-	
-	import flashx.textLayout.debug.assert;
+{	
+	import flashx.textLayout.tlf_internal;	
+	use namespace tlf_internal;
 	
 	/** 
 	* The BreakElement class defines a line break, which provides for creating a line break in the text without 
@@ -50,8 +49,10 @@ package flashx.textLayout.elements
 		
 		/** @private */
 		override protected function get abstract():Boolean
-		{
-			return false;
-		}		
+		{ return false; }
+
+		/** @private */
+		tlf_internal override function get defaultTypeName():String
+		{ return "br"; }
 	}
 }

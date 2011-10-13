@@ -1,17 +1,20 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.container
 {
+	import flash.display.BlendMode;
 	import flash.display.DisplayObject;
+	import flash.display.DisplayObjectContainer;
 	import flash.display.InteractiveObject;
+	import flash.display.Shape;
 	import flash.display.Sprite;
 	import flash.events.ContextMenuEvent;
 	import flash.events.Event;
@@ -33,6 +36,7 @@ package flashx.textLayout.container
 	
 	import flashx.textLayout.compose.BaseCompose;
 	import flashx.textLayout.compose.ISWFContext;
+	import flashx.textLayout.compose.SimpleCompose;
 	import flashx.textLayout.compose.StandardFlowComposer;
 	import flashx.textLayout.compose.TextFlowLine;
 	import flashx.textLayout.compose.TextLineRecycler;
@@ -46,6 +50,7 @@ package flashx.textLayout.container
 	import flashx.textLayout.edit.SelectionFormat;
 	import flashx.textLayout.edit.SelectionManager;
 	import flashx.textLayout.elements.Configuration;
+	import flashx.textLayout.elements.FlowElement;
 	import flashx.textLayout.elements.FlowLeafElement;
 	import flashx.textLayout.elements.IConfiguration;
 	import flashx.textLayout.elements.ParagraphElement;
@@ -58,7 +63,6 @@ package flashx.textLayout.container
 	import flashx.textLayout.events.StatusChangeEvent;
 	import flashx.textLayout.events.TextLayoutEvent;
 	import flashx.textLayout.events.UpdateCompleteEvent;
-	import flashx.textLayout.external.WeakRef;
 	import flashx.textLayout.factory.StringTextLineFactory;
 	import flashx.textLayout.factory.TextFlowTextLineFactory;
 	import flashx.textLayout.factory.TextLineFactoryBase;
@@ -66,7 +70,6 @@ package flashx.textLayout.container
 	import flashx.textLayout.formats.FormatValue;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.property.EnumStringProperty;
 	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 	import flashx.undo.IUndoManager;
@@ -233,9 +236,7 @@ package flashx.textLayout.container
 	 * @see ContainerController
 	 */			
 	public class TextContainerManager extends EventDispatcher implements ISWFContext, IInteractionEventHandler, ISandboxSupport
-	{
-		static private var _inputManagerTextFlowFactory:TextFlowTextLineFactory = new TextFlowTextLineFactory();
-		
+	{		
 		// all events that are listened for need to be in this list.
 		static private const eventList:Array = [ 
 			FlowOperationEvent.FLOW_OPERATION_BEGIN,
@@ -256,7 +257,7 @@ package flashx.textLayout.container
 		];
 		
 		/** Configuration to be used by the TextContainerManager.  This can only be set once and before the inputmanager is used.  */
-		static private var _inputManagerConfiguration:IConfiguration = null;
+		static private var _defaultConfiguration:IConfiguration = null;
 		
 		/** The default configuration for this TextContainerManager. Column and padding attributes
 		 * are set to <code>FormatValue.INHERIT</code>.
@@ -270,18 +271,41 @@ package flashx.textLayout.container
 		 */
 		static public function get defaultConfiguration():IConfiguration
 		{
-			if (_inputManagerConfiguration == null)
-			{
-				var config:Configuration = new Configuration();
-				config.flowComposerClass = TextLineFactoryBase.getDefaultFlowComposerClass();
-				_inputManagerConfiguration = config;
-			}
-			return _inputManagerConfiguration; 
+			if (_defaultConfiguration == null)
+				_defaultConfiguration = customizeConfiguration(null);
+			return _defaultConfiguration; 
 		}
 		
-		static private var stringFactoryDictionary:Dictionary = new Dictionary(true);
+		/** @private Make a configuration acceptable to the TCM */
+		static tlf_internal function customizeConfiguration(config:IConfiguration):IConfiguration
+		{
+			var newConfig:Configuration;
+			if (config)
+			{
+				if (config.flowComposerClass == TextLineFactoryBase.getDefaultFlowComposerClass())
+					return config;
+				newConfig = (config as Configuration).clone();
+			}
+			else
+				newConfig = new Configuration();
+			newConfig.flowComposerClass = TextLineFactoryBase.getDefaultFlowComposerClass();
+			return newConfig;
+		}
+		
+		static private var _inputManagerTextFlowFactory:TCMTextFlowTextLineFactory;
+		static private function inputManagerTextFlowFactory():TCMTextFlowTextLineFactory
+		{
+			if (!_inputManagerTextFlowFactory)
+				_inputManagerTextFlowFactory  = new TCMTextFlowTextLineFactory();
+			return _inputManagerTextFlowFactory;
+		}
+
+		// dictionary of stringfactories so that they can share a configuration
+		static private var stringFactoryDictionary:Dictionary;
 		static private function inputManagerStringFactory(config:IConfiguration):StringTextLineFactory
 		{
+			if (!stringFactoryDictionary)
+				stringFactoryDictionary = new Dictionary(true);
 			var factory:StringTextLineFactory = stringFactoryDictionary[config];
 			if (factory == null)
 			{
@@ -291,8 +315,15 @@ package flashx.textLayout.container
 			return factory;
 		}
 		
+		/** @private Method to release all references to factories so they can be gc'ed, for example when Flex unloads a module. */
+		static tlf_internal function releaseReferences():void
+		{
+			stringFactoryDictionary = null;
+			_inputManagerTextFlowFactory = null;
+		}
+		
 		/** Shared definition of the scrollPolicy property. @private */
-		static tlf_internal const editingModePropertyDefinition:EnumStringProperty = new EnumStringProperty("editingMode", EditingMode.READ_WRITE, false, null, 
+		static tlf_internal const editingModePropertyDefinition:Property = Property.NewEnumStringProperty("editingMode", EditingMode.READ_WRITE, false, null, 
 			EditingMode.READ_WRITE, EditingMode.READ_ONLY, EditingMode.READ_SELECT);	
 		
 		private var _container:Sprite;
@@ -304,7 +335,8 @@ package flashx.textLayout.container
 		private var _lastSeparator:String;
 		
 		private var _hostFormat:ITextLayoutFormat;
-		private var _hostFormatHash:*;
+		// textFlow format to be used by a string factory - combination of config.initialTextLayoutFormat and hostFormat
+		private var _stringFactoryTextFlowFormat:ITextLayoutFormat;
 		
 		private var _contentTop:Number;
 		private var _contentLeft:Number;
@@ -335,6 +367,8 @@ package flashx.textLayout.container
 		static tlf_internal const HANDLERS_CREATION:int  = 2;
 		/** @private */
 		static tlf_internal const HANDLERS_ACTIVE:int    = 3;
+		/** @private */
+		static tlf_internal const HANDLERS_MOUSEWHEEL:int = 4;
 		
 		private var _sourceState:int;
 		private var _composeState:int;
@@ -381,8 +415,8 @@ package flashx.textLayout.container
 			_compositionWidth = 100;
 			_compositionHeight = 100;
 			
-			_config = configuration ? configuration : defaultConfiguration;
-			_config = Configuration(_config).getImmutableClone();
+			_config = configuration ? customizeConfiguration(configuration) : defaultConfiguration;				
+			_config = (_config as Configuration).getImmutableClone();
 
 			_horizontalScrollPolicy = _verticalScrollPolicy = String(ScrollPolicy.scrollPolicyPropertyDefinition.defaultValue);
 
@@ -466,7 +500,7 @@ package flashx.textLayout.container
 				}
 			}
 		}
-		 		
+		
 		/**
 		 * Returns the current text using a separator between paragraphs.
 		 * The separator can be specified with the <code>separator</code>
@@ -528,6 +562,7 @@ package flashx.textLayout.container
 				removeTextFlowListeners();
 				if (_textFlow.flowComposer)
 					_textFlow.flowComposer.removeAllControllers();
+				_textFlow.unloadGraphics();
 				_textFlow = null;
 				_sourceState = SOURCE_STRING;
 				_composeState = COMPOSE_FACTORY;
@@ -540,10 +575,11 @@ package flashx.textLayout.container
 			_textDamaged = false;
 			
 			// Generate a damage event 
-			dispatchEvent(new DamageEvent(DamageEvent.DAMAGE, false, false, null, 0, _text.length));
+			if (hasEventListener(DamageEvent.DAMAGE))
+				dispatchEvent(new DamageEvent(DamageEvent.DAMAGE, false, false, null, 0, _text.length));
 			
 			// generate a selection changed event
-			if (hadPreviousSelection)
+			if (hadPreviousSelection && hasEventListener(SelectionEvent.SELECTION_CHANGE))
 				dispatchEvent(new SelectionEvent(SelectionEvent.SELECTION_CHANGE, false, false, null));
 			
 			if (_hasFocus)
@@ -556,7 +592,7 @@ package flashx.textLayout.container
 		public function set hostFormat(val:ITextLayoutFormat):void
 		{
 			_hostFormat = val;
-			_hostFormatHash = undefined;
+			_stringFactoryTextFlowFormat = null;
 			
 			if (_sourceState == SOURCE_TEXTFLOW)
 				_textFlow.hostFormat = _hostFormat;
@@ -674,19 +710,34 @@ package flashx.textLayout.container
 	 	 */
 		public function setTextFlow(textFlow:TextFlow):void
 		{
+			if (textFlow == _textFlow)
+				return;
+			
 			if (textFlow == null)
 			{
 				setText(null);
 				return;
 			}
+
+			// Remove the old textFlow from its TextContainerManager, if it has one
+			if (textFlow.flowComposer && textFlow.flowComposer.numControllers > 0 && textFlow.flowComposer.getControllerAt(0) is TMContainerController)
+			{
+				var controller:TMContainerController = textFlow.flowComposer.getControllerAt(0) as TMContainerController;
+				if (controller.textContainerManager && controller.textContainerManager.getTextFlow() == textFlow)
+					controller.textContainerManager.setTextFlow(null);
+			}  
+
 			if (_sourceState == SOURCE_TEXTFLOW)
 			{
 				removeTextFlowListeners();
 				if (_textFlow.flowComposer)
 					_textFlow.flowComposer.removeAllControllers();
+				_textFlow.unloadGraphics();
+				_textFlow = null;
 			}
 				
 			_textFlow = textFlow;
+			// damages the entire flow
 			_textFlow.hostFormat = hostFormat;
 			_sourceState = SOURCE_TEXTFLOW;
 			_composeState = textFlow.interactionManager || textFlow.mustUseComposer() ? COMPOSE_COMPOSER : COMPOSE_FACTORY;
@@ -701,8 +752,7 @@ package flashx.textLayout.container
 				clearComposedLines();
 				_textFlow.flowComposer = new StandardFlowComposer();
 				_textFlow.flowComposer.swfContext = _swfContext;
-				var controller:TMContainerController = new TMContainerController(_container,_compositionWidth,_compositionHeight,this);
-				_textFlow.flowComposer.addController(controller);
+				_textFlow.flowComposer.addController(new TMContainerController(_container,_compositionWidth,_compositionHeight,this));
 				
 				invalidateInteractionManager();
 				
@@ -853,12 +903,12 @@ package flashx.textLayout.container
 		/** @private - TextContainerManager wraps an underlying swfcontext - tell it to FlowComposerBase so it can avoid extra invalidation */
 		public function getBaseSWFContext():ISWFContext
 		{ return _swfContext; }
-		
+				
 		/** @private - this is part of a performance optimziation for reusing existing TextLines in place iff recreateTextLine is available. */
 	    public function callInContext(fn:Function, thisArg:Object, argsArray:Array, returns:Boolean=true):*
 		{
 			var textBlock:TextBlock = thisArg as TextBlock;
-			if (textBlock)
+			if (textBlock && _expectedFactoryCompose == TextLineFactoryBase._factoryComposer)
 			{
 			 	if (fn == textBlock.createTextLine)
 					return createTextLine(textBlock,argsArray);
@@ -870,6 +920,13 @@ package flashx.textLayout.container
 	        if (returns)
 	            return swfContext.callInContext(fn,thisArg,argsArray,returns);
 			swfContext.callInContext(fn,thisArg,argsArray,returns);
+		}
+		
+		public function resetLine(textLine:TextLine):void
+		{
+			// this line is being reset
+			if (textLine == _composedLines[_composeRecycledInPlaceLines-1])
+				_composeRecycledInPlaceLines--;
 		}
 		
 		/** 
@@ -886,9 +943,9 @@ package flashx.textLayout.container
 		private function createTextLine(textBlock:TextBlock, argsArray:Array):TextLine
 		{
 			var swfContext:ISWFContext = _swfContext ? _swfContext : BaseCompose.globalSWFContext;
-			
 			CONFIG::debug { assert(Configuration.playerEnablesArgoFeatures,"Bad call to createTextLine"); }
-			if (_composeRecycledInPlaceLines < _composedLines.length)
+
+			if (_composeRecycledInPlaceLines < _composedLines.length && _expectedFactoryCompose == TextLineFactoryBase._factoryComposer)
 			{
 				var textLine:TextLine = _composedLines[_composeRecycledInPlaceLines++];
 
@@ -923,13 +980,15 @@ package flashx.textLayout.container
 	 	 */
 		private function recreateTextLine(textBlock:TextBlock, argsArray:Array):TextLine
 		{
+			var swfContext:ISWFContext = _swfContext ? _swfContext : BaseCompose.globalSWFContext;
+			CONFIG::debug { assert(Configuration.playerEnablesArgoFeatures,"Bad call to createTextLine"); }
+
 			if (_composeRecycledInPlaceLines < _composedLines.length)
 			{
 				CONFIG::debug {assert(argsArray[0] != _composedLines[_composeRecycledInPlaceLines],"Bad args"); }
 				TextLineRecycler.addLineForReuse(argsArray[0]);	// not going to use this one
 				argsArray[0] = _composedLines[_composeRecycledInPlaceLines++];
 			}
-			var swfContext:ISWFContext = _swfContext ? _swfContext : BaseCompose.globalSWFContext;
 			return swfContext.callInContext(textBlock["recreateTextLine"],textBlock,argsArray);
 		}
 
@@ -1069,7 +1128,8 @@ package flashx.textLayout.container
 		private function getController():TMContainerController
 		{ return _textFlow.flowComposer.getControllerAt(0) as TMContainerController; }
 
-		private var _composedLines:Array = [];
+		/** @private */
+		tlf_internal var _composedLines:Array = [];
 		
 		/** Return the TextLine at the index from array of composed lines.
 		 *
@@ -1088,10 +1148,7 @@ package flashx.textLayout.container
 			{
 				// watch out for the empty TCM optimization and make a TextLine
 				if (_sourceState == SOURCE_STRING && _text.length == 0 && !_damaged && _composedLines.length == 0)
-				{
-					// flush the cache and force a recompose -- that will give us a TextLine
-					delete _emptyFormatCache[formatHash()];
-					
+				{					
 					if (_needsRedraw)
 						compose();
 					else
@@ -1121,7 +1178,23 @@ package flashx.textLayout.container
 			return _composedLines.length; 
 		}
 		
-		private function clearComposedLines():void
+		/** @private 
+		 *
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 */
+		tlf_internal function getActualNumLines():int
+		{ 
+			if (_composeState != COMPOSE_COMPOSER)
+				convertToTextFlowWithComposer();
+			// composes all lines
+			_textFlow.flowComposer.composeToPosition();
+			return _textFlow.flowComposer.numLines;
+		}
+		
+		/** @private */
+		tlf_internal function clearComposedLines():void
 		{
 			if (_composedLines)
 				_composedLines.length = 0;
@@ -1132,7 +1205,7 @@ package flashx.textLayout.container
 			_composedLines.push(displayObject);
 		}
 		
-		// TODO FOR ARGO
+		// TODO FOR ARGO - think about moving these variables into a separate helper class 
 		private var _composeRecycledInPlaceLines:int;
 		private var _composePushedLines:int;
 		private function populateAndRecycleComposedLines(object:DisplayObject):void
@@ -1149,51 +1222,8 @@ package flashx.textLayout.container
 			_composePushedLines++;
 		}		
 		
-		/** @private return the current format hash */
-		tlf_internal function formatHash():uint
-		{
-			if (_hostFormatHash === undefined)
-			{
-				if (_hostFormat == null)
-					_hostFormatHash = 0;
-				else
-				{	
-					var hash:uint = 0;
-					for each (var prop:Property in TextLayoutFormat.description)
-					{
-						var val:Object = _hostFormat[prop.name];
-						if (val)
-							hash = prop.hash(val,hash);
-					}
-					_hostFormatHash = hash;
-				}
-			}
+		static private var _expectedFactoryCompose:SimpleCompose;
 
-			return _hostFormatHash;
-		}
-		
-		/** @private Cache of emptyFormat bounds */
-		static tlf_internal var _emptyFormatCache:Dictionary = new Dictionary();
-		
-		/** @private lookup bounds for the zero length factory optimization. */
-		tlf_internal function lookupZeroLengthTextBounds():Rectangle
-		{
-			if (_sourceState != SOURCE_STRING || _text.length != 0)
-				return null;
-				
-			var hash:uint = formatHash();
-			
-			var ref:WeakRef = _emptyFormatCache[hash];
-			if (ref == null)
-				return null;
-				
-			var cachedObject:Object = ref.get();
-			
-			if (cachedObject == null)
-				return null;
-				
-			return TextLayoutFormat.isEqual(_hostFormat,cachedObject.format) ? cachedObject.bounds : null;
-		}
 		
 		/** Composes the container text; calls either the factory or <code>updateAllControllers()</code>.
 		 *
@@ -1208,65 +1238,81 @@ package flashx.textLayout.container
 			else if (_damaged)
 			{
 				if (_sourceState == SOURCE_TEXTFLOW && _textFlow.mustUseComposer())
-					convertToTextFlowWithComposer();
+				{
+					convertToTextFlowWithComposer(false);
+					_textFlow.flowComposer.compose();
+					return;
+				}
 				else
 				{
-					var bounds:Rectangle = lookupZeroLengthTextBounds();
-					if (bounds)
+					var callback:Function;
+					if (Configuration.playerEnablesArgoFeatures)
 					{
-						clearComposedLines();
+						// while the first thing in the array is not a TextLine its the background color OR its some floats OR something else from the last compose - remove it
+						for (;;)
+						{
+							var firstObj:Object = _composedLines[0];
+							if (firstObj == null || (firstObj is TextLine))
+								break;
+							_composedLines.splice(0,1);
+						}
+						_composeRecycledInPlaceLines = 0;
+						_composePushedLines = 0;
+						callback = populateAndRecycleComposedLines;
 					}
 					else
 					{
-						var callback:Function;
-						if (Configuration.playerEnablesArgoFeatures)
-						{
-							// if the first thing in the array is not a TextLine its the background color from the last compose - remove it
-							var firstObj:Object = _composedLines[0];
-							if (firstObj && !(firstObj is TextLine))
-								_composedLines.splice(0,1);
-							_composeRecycledInPlaceLines = 0;
-							_composePushedLines = 0;
-							callback = populateAndRecycleComposedLines;
-						}
-						else
-						{
-							clearComposedLines();
-							callback = populateComposedLines;
-						}
-	
-						var inputManagerFactory:TextLineFactoryBase = (_sourceState == SOURCE_STRING) ? inputManagerStringFactory(_config) : _inputManagerTextFlowFactory;
-						inputManagerFactory.verticalScrollPolicy = _verticalScrollPolicy;
-						inputManagerFactory.horizontalScrollPolicy = _horizontalScrollPolicy;
-						inputManagerFactory.compositionBounds = new Rectangle(0,0,_compositionWidth,_compositionHeight);
-						inputManagerFactory.swfContext = Configuration.playerEnablesArgoFeatures ? this : _swfContext;
-							
-						if (_sourceState == SOURCE_STRING)
-						{
-							var stringFactory:StringTextLineFactory = inputManagerFactory as StringTextLineFactory;
-							// potential bug - here we use the format as textFlow.format but in the TextFlow case it is the hostFormat
-							if (!TextLayoutFormat.isEqual(stringFactory.textFlowFormat,_hostFormat))
-								stringFactory.textFlowFormat = _hostFormat;
-							stringFactory.text = _text;
-							stringFactory.createTextLines(callback);
-						}
-						else
-							_inputManagerTextFlowFactory.createTextLines(callback,_textFlow);
-							
-						if (Configuration.playerEnablesArgoFeatures)
-							_composedLines.length = _composePushedLines;
-
-						bounds = inputManagerFactory.getContentBounds();
-						
-						if (_sourceState == SOURCE_STRING && _text.length == 0)
-						{
-							var obj:Object = new Object();
-							obj.format = _hostFormat;
-							obj.bounds = bounds.clone();
-							
-							_emptyFormatCache[formatHash()] = new WeakRef(obj);
-						}
+						clearComposedLines();
+						callback = populateComposedLines;
 					}
+					var inputManagerFactory:TextLineFactoryBase = (_sourceState == SOURCE_STRING) ? inputManagerStringFactory(_config) : inputManagerTextFlowFactory();
+					inputManagerFactory.verticalScrollPolicy = _verticalScrollPolicy;
+					inputManagerFactory.horizontalScrollPolicy = _horizontalScrollPolicy;
+					inputManagerFactory.compositionBounds = new Rectangle(0,0,_compositionWidth,_compositionHeight);
+					inputManagerFactory.swfContext = Configuration.playerEnablesArgoFeatures ? this : _swfContext;
+					
+					// compose can recurse for composing.  this sets up the swfContext so it doesn't recycle a line into a numberline
+					_expectedFactoryCompose = TextLineFactoryBase.peekFactoryCompose();
+					if (_sourceState == SOURCE_STRING)
+					{
+						var stringFactory:StringTextLineFactory = inputManagerFactory as StringTextLineFactory;
+						if (!_stringFactoryTextFlowFormat)
+						{
+							if (_hostFormat == null)
+								_stringFactoryTextFlowFormat = _config.textFlowInitialFormat;
+							else
+							{
+								// mini cascade of initialFormat onto the hostFormat
+								var format:TextLayoutFormat = new TextLayoutFormat(_hostFormat);
+								TextLayoutFormat.resetModifiedNoninheritedStyles(format);
+								var holderStyles:Object = (_config.textFlowInitialFormat as TextLayoutFormat).getStyles();
+								for (var key:String in holderStyles)
+								{
+									var val:* = holderStyles[key];
+									format[key] = (val !== FormatValue.INHERIT) ? val : _hostFormat[key];
+								}
+								_stringFactoryTextFlowFormat = format;
+							}
+						}
+						if (!TextLayoutFormat.isEqual(stringFactory.textFlowFormat,_stringFactoryTextFlowFormat))
+							stringFactory.textFlowFormat = _stringFactoryTextFlowFormat;
+						stringFactory.text = _text;
+						stringFactory.createTextLines(callback);
+					}
+					else
+					{
+						var factory:TCMTextFlowTextLineFactory = inputManagerFactory as TCMTextFlowTextLineFactory;
+						factory.tcm = this;
+						factory.createTextLines(callback,_textFlow);
+						factory.tcm = null;
+					}
+					inputManagerFactory.swfContext = null;	// release any references to the swfContext
+					_expectedFactoryCompose = null;
+							
+					if (Configuration.playerEnablesArgoFeatures)
+						_composedLines.length = _composePushedLines;
+
+					var bounds:Rectangle = inputManagerFactory.getContentBounds();
 					
 					_contentLeft   = bounds.x;
 					_contentTop    = bounds.y;
@@ -1284,88 +1330,108 @@ package flashx.textLayout.container
 		}
 		
 		/** Updates the display; calls either the factory or updateAllControllers().
+		 * 
+		 * @return true if anything changed.
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
 	 	 * @langversion 3.0
 	 	 */
-		public function updateContainer():void
+		public function updateContainer():Boolean
 		{
-			compose();
-
 			if (_composeState == COMPOSE_COMPOSER)
-				_textFlow.flowComposer.updateAllControllers();
-			else if (_needsRedraw)
+				return _textFlow.flowComposer.updateAllControllers();
+			
+			compose();
+			
+			// depending on edits the Flow may now have a composer
+			if (_composeState == COMPOSE_COMPOSER)
 			{
-				var textObject:DisplayObject; 	// scratch - TextLines and background shapes
-				if (Configuration.playerEnablesArgoFeatures)
-				{
-					// if the first child in the container is a Shape - its the background color - lose it
-					if (_container.numChildren != 0)
-					{
-						textObject = _container.getChildAt(0);
-						if (textObject && !(textObject is TextLine))
-							_container.removeChildAt(0);
-					}
-						
-					// if the first child in _composedLines is a shape push it at the head of the container
-					textObject = _composedLines[0];
-					if (textObject && !(textObject is TextLine))
-						_container.addChildAt(textObject,0);
-						
-					// expect the leading lines are reused
-					while (_container.numChildren < _composedLines.length)
-						_container.addChild(_composedLines[_container.numChildren]);
-					// recycle any trailing lines
-					while (_container.numChildren > _composedLines.length)
-					{
-						var textLine:TextLine = _container.getChildAt(_composedLines.length) as TextLine;
-						_container.removeChildAt(_composedLines.length);
-						if (textLine)
-						{
-							// lines were rebroken but aren't being displayed
-							if (textLine.validity == TextLineValidity.VALID)
-								textLine.textBlock.releaseLines(textLine,textLine.textBlock.lastLine);
-							textLine.userData = null;
-							TextLineRecycler.addLineForReuse(textLine);
-						}
-					}
-				}
-				else
-				{
-					clearContainerChildren(false);
-					
-					for each (textObject in _composedLines)
-						_container.addChild(textObject);
-						
-					clearComposedLines();
-				}
-									
-				updateBackgroundAndVisibleRectangle();
-				
-				if (_handlersState == HANDLERS_NOTADDED)
-					addActivationEventListeners();
-
-				// generate a updateComplete event.  Note that the controller isn't known
-				if (hasEventListener(UpdateCompleteEvent.UPDATE_COMPLETE))
-					dispatchEvent(new UpdateCompleteEvent(UpdateCompleteEvent.UPDATE_COMPLETE,false,false,null));	
-					
-				_needsRedraw = false;
+				_textFlow.flowComposer.updateAllControllers();
+				return true;
 			}
+				
+			if (!_needsRedraw)
+				return false;
+			
+			factoryUpdateContainerChildren();									
+			drawBackgroundAndSetScrollRect(0,0);
+					
+			if (_handlersState == HANDLERS_NOTADDED)
+				addActivationEventListeners();
+	
+			// generate a updateComplete event.  Note that the controller isn't known
+			if (hasEventListener(UpdateCompleteEvent.UPDATE_COMPLETE))
+				dispatchEvent(new UpdateCompleteEvent(UpdateCompleteEvent.UPDATE_COMPLETE,false,false,null));	
+						
+			_needsRedraw = false;
+			return true;	// things changed
 		}
 		
 		/** @private */
-		private function updateBackgroundAndVisibleRectangle() :void
+		tlf_internal function factoryUpdateContainerChildren():void
 		{
-			drawBackgroundAndSetScrollRect(0,0);
+			var textObject:DisplayObject; 	// scratch - TextLines and background shapes
+			if (Configuration.playerEnablesArgoFeatures)
+			{
+				// while the first child in the container is a Shape - its the background color OR a Float OR something else - lose it
+				while (_container.numChildren != 0)
+				{
+					textObject = _container.getChildAt(0);
+					if (textObject is TextLine)
+						break;
+					_container.removeChildAt(0);
+				}
+				
+				// add leading children _composedLines that are not TextLines into the Container
+				for (var idx:int = 0; idx < _composedLines.length; idx++)
+				{
+					textObject = _composedLines[idx];
+					if (textObject is TextLine)
+						break;
+					_container.addChildAt(textObject,idx);
+				}
+				
+				// expect the leading lines are reused
+				while (_container.numChildren < _composedLines.length)
+					_container.addChild(_composedLines[_container.numChildren]);
+				// recycle any trailing lines
+				while (_container.numChildren > _composedLines.length)
+				{
+					var textLine:TextLine = _container.getChildAt(_composedLines.length) as TextLine;
+					_container.removeChildAt(_composedLines.length);
+					if (textLine)
+					{
+						// lines were rebroken but aren't being displayed
+						if (textLine.validity == TextLineValidity.VALID)
+							textLine.textBlock.releaseLines(textLine,textLine.textBlock.lastLine);
+						textLine.userData = null;
+						TextLineRecycler.addLineForReuse(textLine);
+					}
+				}
+			}
+			else
+			{
+				clearContainerChildren(false);
+				
+				for each (textObject in _composedLines)
+					_container.addChild(textObject);
+				
+				clearComposedLines();
+			}
 		}
 		
 		private function addActivationEventListeners():void
 		{	
 			var newState:int =  HANDLERS_NONE;
 			
-			if (_editingMode != EditingMode.READ_ONLY && _composeState == COMPOSE_FACTORY)
-				newState = _handlersState == HANDLERS_NOTADDED ? HANDLERS_CREATION : HANDLERS_ACTIVE;
+			if (_composeState == COMPOSE_FACTORY)
+			{
+				if (_editingMode == EditingMode.READ_ONLY)
+					newState = HANDLERS_MOUSEWHEEL;
+				else
+					newState = _handlersState == HANDLERS_NOTADDED ? HANDLERS_CREATION : HANDLERS_ACTIVE;
+			}
 			
 			if (newState == _handlersState)
 				return;
@@ -1387,12 +1453,17 @@ package flashx.textLayout.container
 			//	_container.addEventListener(IMEEvent.IME_START_COMPOSITION, imeStartCompositionHandler);
 			// attach by literal event name to avoid Argo dependency
 				_container.addEventListener("imeStartComposition", imeStartCompositionHandler);
-				_container.contextMenu = getContextMenu();
+				
+				// If TCM's getContextMenu returns null assume client has control of the contextMenu
+				if (getContextMenu() != null)
+					_container.contextMenu = _contextMenu;
 				if (_container.contextMenu)
-		            _container.contextMenu.addEventListener(ContextMenuEvent.MENU_SELECT, menuSelectHandler);
+					_container.contextMenu.addEventListener(ContextMenuEvent.MENU_SELECT, menuSelectHandler);
 		            
 		        _container.addEventListener(Event.SELECT_ALL, editHandler);
 			}
+			else if (newState == HANDLERS_MOUSEWHEEL)
+				_container.addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);				
 			
 			_handlersState = newState;
 		}
@@ -1413,11 +1484,13 @@ package flashx.textLayout.container
 		{
 			if (_handlersState == HANDLERS_CREATION)
 			{
+				CONFIG::debug { assert(_composeState != COMPOSE_COMPOSER,"Bad call to removeActivationEventListeners"); }
 				_container.removeEventListener(FocusEvent.FOCUS_IN, requiredFocusInHandler);				
 				_container.removeEventListener(MouseEvent.MOUSE_OVER, requiredMouseOverHandler);
 			}
 			else if (_handlersState == HANDLERS_ACTIVE)
 			{
+				CONFIG::debug { assert(_composeState != COMPOSE_COMPOSER,"Bad call to removeActivationEventListeners"); }
 				_container.removeEventListener(FocusEvent.FOCUS_IN, requiredFocusInHandler);				
 				_container.removeEventListener(MouseEvent.MOUSE_OVER, requiredMouseOverHandler);
 				_container.removeEventListener(MouseEvent.MOUSE_DOWN, mouseDownHandler);
@@ -1426,13 +1499,21 @@ package flashx.textLayout.container
 			//	_container.removeEventListener(IMEEvent.IME_START_COMPOSITION, imeStartCompositionHandler);
 			// detach by literal event name to avoid Argo dependency
 				_container.removeEventListener("imeStartComposition", imeStartCompositionHandler);
-				if (_container.contextMenu)	
-				{
-	            	_container.contextMenu.removeEventListener(ContextMenuEvent.MENU_SELECT, menuSelectHandler);
+				// if _contextMenu is set then this TCM created the contextMenu and is manging it
+				if (_container.contextMenu)
+					_container.contextMenu.removeEventListener(ContextMenuEvent.MENU_SELECT, menuSelectHandler);
+				// otherwise client is managing it
+				if (_contextMenu)	
 					_container.contextMenu = null;
-				}
+
 		        _container.removeEventListener(Event.SELECT_ALL, editHandler);
 			}
+			else if (_handlersState == HANDLERS_MOUSEWHEEL)
+			{
+				CONFIG::debug { assert(_composeState != COMPOSE_COMPOSER,"Bad call to removeActivationEventListeners"); }
+				_container.removeEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler);		
+			}
+
 			_handlersState = HANDLERS_NOTADDED;
 		}
 		
@@ -1475,7 +1556,8 @@ package flashx.textLayout.container
 			return result;
 		}
 		
-		private function clearContainerChildren(recycle:Boolean):void
+		/** @private */
+		tlf_internal function clearContainerChildren(recycle:Boolean):void
 		{
 			while(_container.numChildren)
 			{
@@ -1520,7 +1602,7 @@ package flashx.textLayout.container
 		}
 				
 		/** @private */
-		tlf_internal function convertToTextFlowWithComposer():void
+		tlf_internal function convertToTextFlowWithComposer(callUpdateContainer:Boolean = true):void
 		{
 			removeActivationEventListeners();
 			
@@ -1538,7 +1620,8 @@ package flashx.textLayout.container
 				_composeState = COMPOSE_COMPOSER;
 				
 				invalidateInteractionManager();
-				updateContainer();
+				if (callUpdateContainer)
+					updateContainer();
 			}
 		}
 		
@@ -1615,13 +1698,13 @@ package flashx.textLayout.container
 			{
 				var controller:ContainerController = getController();
 				contentWidth = controller.contentWidth;
-				contentHeight = controller.contentHeight
+				contentHeight = controller.contentHeight;
 			}
 			var width:Number;
 			if (isNaN(compositionWidth))
 			{
 				var contentLeft:Number = (_composeState == COMPOSE_FACTORY) ? _contentLeft : controller.contentLeft;
-				width = contentLeft + contentWidth;
+				width = contentLeft + contentWidth - scrollX;
 			}
 			else
 				width = compositionWidth;
@@ -1629,7 +1712,7 @@ package flashx.textLayout.container
 			if (isNaN(compositionHeight))
 			{ 
 				var contentTop:Number = (_composeState == COMPOSE_FACTORY) ? _contentTop : controller.contentTop;
-				height = contentTop+contentHeight;
+				height = contentTop + contentHeight - scrollY;
 			}
 			else
 				height = compositionHeight;
@@ -1798,7 +1881,7 @@ package flashx.textLayout.container
 				getController().textInputHandler(event);
 		}
 
-		/** Processes the <code>IME.START_COMPOSITION</code> event when the client manages events.
+		/** Processes the <code>IME_START_COMPOSITION</code> event when the client manages events.
 		 *
 		 * @param event  The IMEEvent object.
 		 *
@@ -1807,12 +1890,29 @@ package flashx.textLayout.container
 		 * @langversion 3.0
 		 * 
 		 *
-		 * @see flash.events.IMEEvent#START_COMPOSITION IMEEvent.START_COMPOSITION
+		 * @see flash.events.IMEEvent#IME_START_COMPOSITION IMEEvent.IME_START_COMPOSITION
 		 */
 		public function imeStartCompositionHandler(event:IMEEvent):void
 		{
 			if (_composeState == COMPOSE_COMPOSER)
 				getController().imeStartCompositionHandler(event);
+		}
+		
+		/** Processes the <code>SOFT_KEYBOARD_ACTIVATING</code> event when the client manages events.
+		 *
+		 * @param event  The SoftKeyboardEvent object.
+		 *
+		 * @playerversion Flash 10.2
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 *
+		 * @see flash.events.SoftKeyboardEvent#SOFT_KEYBOARD_ACTIVATING SoftKeyboardEvent.SOFT_KEYBOARD_ACTIVATING
+		 */
+		public function softKeyboardActivatingHandler(event:Event):void
+		{
+			if (_composeState == COMPOSE_COMPOSER)
+				getController().softKeyboardActivatingHandler(event);
 		}
 		
 		/** @copy flashx.textLayout.container.ContainerController#mouseDownHandler()
@@ -2012,12 +2112,16 @@ package flashx.textLayout.container
 			if (_composeState == COMPOSE_FACTORY)
 			{
 				// there is no selection
-				var cbItems:ContextMenuClipboardItems = _container.contextMenu.clipboardItems
-				cbItems.selectAll = _editingMode != EditingMode.READ_ONLY;
-				cbItems.clear = false;
-				cbItems.copy = false;
-				cbItems.cut = false;
-				cbItems.paste = false;
+				var contextMenu:ContextMenu = _container.contextMenu as ContextMenu;
+				if (contextMenu)
+				{
+					var cbItems:ContextMenuClipboardItems = contextMenu.clipboardItems;
+					cbItems.selectAll = _editingMode != EditingMode.READ_ONLY;
+					cbItems.clear = false;
+					cbItems.copy = false;
+					cbItems.cut = false;
+					cbItems.paste = false;
+				}
 			}
 			else
 				getController().menuSelectHandler(event);			
@@ -2032,6 +2136,9 @@ package flashx.textLayout.container
 		*/				
 		public function mouseWheelHandler(event:MouseEvent):void
 		{
+			if (event.isDefaultPrevented())
+				return;
+
 			if (_composeState == COMPOSE_FACTORY)
 			{
 				convertToTextFlowWithComposer();
@@ -2102,27 +2209,250 @@ package flashx.textLayout.container
 			if (_composeState == COMPOSE_COMPOSER)
 				getController().mouseUpSomewhere(e);
 		}
+	
+		/** @private
+		 * Gets the index at which the first text line must appear in its parent.
+		 * The default implementation of this method, which may be overriden, returns the child index 
+		 * of the first <code>flash.text.engine.TextLine</code> child of <code>container</code>
+		 * if one exists, and that of the last child of <code>container</code> otherwise. 
+		 * 
+		 * @return the index at which the first text line must appear in its parent.
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 * @see flash.text.engine.TextLine
+		 * @see #container
+		 */	
+		tlf_internal function getFirstTextLineChildIndex():int
+		{			
+			// skip past any non-TextLine children below the text in the container,
+			// This also means that in a container devoid of text, we will always
+			// populate the text starting at index container.numChildren, which is intentional.
+			var firstTextLine:int;
+			for(firstTextLine = 0; firstTextLine<_container.numChildren; ++firstTextLine)
+			{
+				if(_container.getChildAt(firstTextLine) is TextLine)
+				{
+					break;
+				}
+			}
+			return firstTextLine;
+		}
 		
+		/** @private
+		 * Adds a <code>flash.text.engine.TextLine</code> object as a descendant of <code>container</code>.
+		 * The default implementation of this method, which may be overriden, adds the object
+		 * as a direct child of <code>container</code> at the specified index.
+		 * 
+		 * @param textLine the <code>flash.text.engine.TextLine</code> object to add
+		 * @param index insertion index of the text line in its parent 
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 * @see flash.text.engine.TextLine
+		 * @see #container
+		 * 
+		 */	
+		tlf_internal function addTextLine(textLine:TextLine, index:int):void
+		{ 
+			_container.addChildAt(textLine, index);
+		}
+		
+		/** @private
+		 * Removes a <code>flash.text.engine.TextLine</code> object from its parent. 
+		 * The default implementation of this method, which may be overriden, removes the object
+		 * from <code>container</code> if it is a direct child of the latter.
+		 * 
+		 * This method may be called even if the object is not a descendant of <code>container</code>.
+		 * Any implementation of this method must ensure that no action is taken in this case.
+		 * 
+		 * @param textLine the <code>flash.text.engine.TextLine</code> object to remove 
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 * @see flash.text.engine.TextLine
+		 * @see #container
+		 * 
+		 */	
+		tlf_internal function removeTextLine(textLine:TextLine):void
+		{
+			if (_container.contains(textLine))
+				_container.removeChild(textLine);
+		}
+		
+		/** @private
+		 * Adds a <code>flash.display.Shape</code> object on which background shapes (such as background color) are drawn.
+		 * The default implementation of this method, which may be overriden, adds the object to <code>container</code>
+		 * just before the first <code>flash.text.engine.TextLine</code> child, if one exists, and after the last exisiting
+		 * child otherwise. 
+		 * 
+		 * @param shape <code>flash.display.Shape</code> object to add
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 * @see flash.display.Shape
+		 * @see flash.text.engine.TextLine
+		 * @see #container
+		 * 
+		 */
+		tlf_internal function addBackgroundShape(shape:Shape):void	// No PMD
+		{
+			_container.addChildAt(shape, getFirstTextLineChildIndex());
+		}
+		
+		/** @private
+		 * Removes a <code>flash.display.Shape</code> object on which background shapes (such as background color) are drawn.
+		 * The default implementation of this method, which may be overriden, removes the object from its <code>parent</code>.
+		 * 
+		 * @param shape <code>flash.display.Shape</code> object to remove
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 * @see flash.display.Shape
+		 * @see flash.text.engine.TextLine
+		 * @see #container
+		 * 
+		 */
+		tlf_internal function removeBackgroundShape(shape:Shape):void	
+		{
+			if (shape.parent)
+				shape.parent.removeChild(shape);
+		}
+		
+		/** @private
+		 * Adds a <code>flash.display.DisplayObjectContainer</code> object to which selection shapes (such as block selection highlight, cursor etc.) are added.
+		 * The default implementation of this method, which may be overriden, has the following behavior:
+		 * The object is added just before first <code>flash.text.engine.TextLine</code> child of <code>container</code> if one exists 
+		 * and the object is opaque and has normal blend mode. 
+		 * In all other cases, it is added as the last child of <code>container</code>.
+		 * 
+		 * @param selectionContainer <code>flash.display.DisplayObjectContainer</code> object to add
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 * @see flash.display.DisplayObjectContainer
+		 * @see flash.text.engine.TextLine
+		 * @see #container
+		 */
+		tlf_internal function addSelectionContainer(selectionContainer:DisplayObjectContainer):void
+		{
+			if (selectionContainer.blendMode == BlendMode.NORMAL && selectionContainer.alpha == 1)
+			{
+				// don't put selection behind background color or existing content in container, put it behind first text line
+				_container.addChildAt(selectionContainer, getFirstTextLineChildIndex());
+			}
+			else
+				_container.addChild(selectionContainer);
+		}
+		
+		/** @private
+		 * Removes the <code>flash.display.DisplayObjectContainer</code> object which contains selection shapes (such as block selection highlight, cursor etc.).
+		 * The default implementation of this method, which may be overriden, removes the object from its parent if one exists.
+		 * 
+		 * @param selectionContainer <code>flash.display.DisplayObjectContainer</code> object to remove
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 * @see flash.display.DisplayObjectContainer
+		 * @see #container
+		 * 
+		 */
+		tlf_internal function removeSelectionContainer(selectionContainer:DisplayObjectContainer):void
+		{	
+			selectionContainer.parent.removeChild(selectionContainer);
+		}
+		
+		/** @private
+		 * Adds a <code>flash.display.DisplayObject</code> object as a descendant of <code>parent</code>.
+		 * The default implementation of this method, which may be overriden, adds the object
+		 * as a direct child of <code>parent</code> at the specified index. This is called to add 
+		 * InlineGraphicElements to the TextLine or container.
+		 * 
+		 * @param parent the <code>flash.display.DisplayObjectContainer</code> object to add the inlineGraphicElement to
+		 * @param inlineGraphicElement the <code>flash.display.DisplayObject</code> object to add
+		 * @param index insertion index of the float in its parent 
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 2.0
+		 * @langversion 3.0
+		 * 
+		 * @see flash.display.DisplayObjectContainer
+		 * @see flash.display.DisplayObject
+		 * @see #container
+		 * 
+		 */	
+		tlf_internal function addInlineGraphicElement(parent:DisplayObjectContainer, inlineGraphicElement:DisplayObject, index:int):void
+		{
+			parent.addChildAt(inlineGraphicElement, index);
+		}
+		
+		/** @private
+		 * Removes a <code>flash.display.DisplayObject</code> object from its parent. 
+		 * The default implementation of this method, which may be overriden, removes the object
+		 * from <code>container</code> if it is a direct child of the latter.
+		 * 
+		 * This method may be called even if the object is not a descendant of <code>parent</code>.
+		 * Any implementation of this method must ensure that no action is taken in this case.
+		 * 
+		 * @param float the <code>flash.display.DisplayObject</code> object to remove 
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 2.0
+		 * @langversion 3.0
+		 * 
+		 * @see flash.display.DisplayObjectContainer
+		 * @see flash.display.DisplayObject
+		 * @see #container
+		 * 
+		 */	
+		tlf_internal function removeInlineGraphicElement(parent:DisplayObjectContainer, inlineGraphicElement:DisplayObject):void
+		{
+			if (inlineGraphicElement.parent == parent)
+				parent.removeChild(inlineGraphicElement);
+		}
+	
 	}
 	
 }
 
 import flash.display.DisplayObject;
 import flash.display.DisplayObjectContainer;
+import flash.display.Shape;
 import flash.display.Sprite;
 import flash.events.Event;
-import flash.geom.Rectangle;
+import flash.events.MouseEvent;
 import flash.geom.Point;
+import flash.geom.Rectangle;
+import flash.text.engine.TextLine;
+import flash.ui.ContextMenu;
 
+import flashx.textLayout.compose.IFlowComposer;
+import flashx.textLayout.compose.SimpleCompose;
 import flashx.textLayout.container.ContainerController;
 import flashx.textLayout.container.ScrollPolicy;
 import flashx.textLayout.container.TextContainerManager;
 import flashx.textLayout.edit.IInteractionEventHandler;
+import flashx.textLayout.elements.ContainerFormattedElement;
+import flashx.textLayout.factory.FactoryDisplayComposer;
+import flashx.textLayout.factory.TextFlowTextLineFactory;
+import flashx.textLayout.factory.TextLineFactoryBase;
+import flashx.textLayout.formats.BackgroundColor;
 import flashx.textLayout.formats.BlockProgression;
 import flashx.textLayout.tlf_internal;
-import flash.events.MouseEvent;
-import flashx.textLayout.formats.BackgroundColor;
-import flash.ui.ContextMenu;
 
 use namespace tlf_internal;
 
@@ -2138,6 +2468,8 @@ class TMContainerController extends ContainerController
 		horizontalScrollPolicy = tm.horizontalScrollPolicy;
 	}
 
+	public function get textContainerManager():TextContainerManager { return _inputManager; }
+	
 	/** Reroute to the TextContainerManger's override.  Reuse the one that's already been created. */
 	protected override function createContextMenu():ContextMenu
 	{ return _inputManager.getContextMenu(); }
@@ -2156,7 +2488,10 @@ class TMContainerController extends ContainerController
 		var xpos:Number;
 		var ypos:Number;
 		// see the adjustLines boolean in ContainerController.fillShapeChildren - this logic clones that and allows for skipping the scrollRect
-		xpos = effectiveBlockProgression == BlockProgression.RL && (verticalScrollPolicy != ScrollPolicy.OFF || horizontalScrollPolicy != ScrollPolicy.OFF) ? horizontalScrollPosition - compositionWidth : horizontalScrollPosition;
+		xpos = horizontalScrollPosition;
+		if (effectiveBlockProgression == BlockProgression.RL && (verticalScrollPolicy != ScrollPolicy.OFF || horizontalScrollPolicy != ScrollPolicy.OFF))
+			xpos -= !isNaN(compositionWidth) ? compositionWidth : contentWidth;
+
 		ypos = verticalScrollPosition;
 			
 		_hasScrollRect = _inputManager.drawBackgroundAndSetScrollRect(xpos,ypos);
@@ -2165,7 +2500,44 @@ class TMContainerController extends ContainerController
 	/** @private */
 	tlf_internal override function getInteractionHandler():IInteractionEventHandler
 	{ return _inputManager; }
-
+	
+	
+	/** @private */
+	tlf_internal override function attachContextMenu():void
+	{ 
+		if (_inputManager.getContextMenu() != null)
+			super.attachContextMenu();
+	}
+	
+	/** @private */
+	tlf_internal override function removeContextMenu():void
+	{ 				
+		// otherwise client is managing it
+		if (_inputManager.getContextMenu())	
+			super.removeContextMenu();
+	}
+	
+	// ////////////////////////////////////////////////////////////////////////////
+	// push all these methods for manipulating the object list to the _inputmanager
+	// ////////////////////////////////////////////////////////////////////////////
+	protected override function getFirstTextLineChildIndex():int
+	{ return _inputManager.getFirstTextLineChildIndex(); }
+	protected override function addTextLine(textLine:TextLine, index:int):void
+	{ _inputManager.addTextLine(textLine,index); }
+	protected override function removeTextLine(textLine:TextLine):void
+	{ _inputManager.removeTextLine(textLine); }
+	protected override function addBackgroundShape(shape:Shape):void
+	{ _inputManager.addBackgroundShape(shape); }
+	protected override function removeBackgroundShape(shape:Shape):void
+	{ _inputManager.removeBackgroundShape(shape); }
+	protected override function addSelectionContainer(selectionContainer:DisplayObjectContainer):void
+	{ _inputManager.addSelectionContainer(selectionContainer); }
+	protected override function removeSelectionContainer(selectionContainer:DisplayObjectContainer):void
+	{ _inputManager.removeSelectionContainer(selectionContainer); }
+	protected override function addInlineGraphicElement(parent:DisplayObjectContainer, inlineGraphicElement:DisplayObject, index:int):void
+	{ _inputManager.addInlineGraphicElement(parent,inlineGraphicElement,index); }
+	protected override function removeInlineGraphicElement(parent:DisplayObjectContainer, inlineGraphicElement:DisplayObject):void
+	{ _inputManager.removeInlineGraphicElement(parent,inlineGraphicElement); }
 }
 
 // remap the mouse event for processing inside TLF.  This is just the initial click.  Make it as if the event was on the container and not the textline
@@ -2232,4 +2604,41 @@ class RemappedMouseEvent extends MouseEvent
 	
 	public override function stopPropagation():void
 	{ _event.stopPropagation(); }
+}
+
+class TCMTextFlowTextLineFactory extends TextFlowTextLineFactory
+{
+	private var _tcm:TextContainerManager;
+	
+	public function TCMTextFlowTextLineFactory()
+	{ super(); }
+	
+	/** @private */
+	tlf_internal override function createFlowComposer():IFlowComposer
+	{ return new TCMFactoryDisplayComposer(_tcm); }
+	
+	public function get tcm():TextContainerManager
+	{ return _tcm; }
+	public function set tcm(val:TextContainerManager):void
+	{ _tcm = val; }
+}
+
+
+class TCMFactoryDisplayComposer extends FactoryDisplayComposer
+{
+	tlf_internal var _tcm:TextContainerManager;
+	public function TCMFactoryDisplayComposer(tcm:TextContainerManager)
+	{ _tcm = tcm; }
+	
+	tlf_internal override function callTheComposer(absoluteEndPosition:int, controllerEndIndex:int):ContainerController
+	{
+		// always do a full compose
+		clearCompositionResults();
+		
+		var state:SimpleCompose = TextLineFactoryBase._factoryComposer;
+		state.resetLineHandler = _tcm.resetLine;
+		state.composeTextFlow(textFlow, -1, -1);
+		state.releaseAnyReferences()
+		return getControllerAt(0);
+	}
 }

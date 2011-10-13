@@ -13,12 +13,15 @@ package spark.components
 {
 
 import flash.display.DisplayObject;
+import flash.display.InteractiveObject;
 import flash.events.Event;
 import flash.events.FocusEvent;
 import flash.events.KeyboardEvent;
+import flash.globalization.LocaleID;
+import flash.globalization.NumberFormatter;
 
-import mx.core.mx_internal;
 import mx.core.IIMESupport;
+import mx.core.mx_internal;
 import mx.events.FlexEvent;
 import mx.managers.IFocusManagerComponent;
 
@@ -83,8 +86,6 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
 /**
  *  @copy spark.components.supportClasses.GroupBase#style:contentBackgroundColor
  *
- *  @default 0xFFFFFF
- *  
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
@@ -103,6 +104,14 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
 [IconFile("NumericStepper.png")]
 
 /**
+ * Because this component does not define a skin for the mobile theme, Adobe
+ * recommends that you not use it in a mobile application. Alternatively, you
+ * can define your own mobile skin for the component. For more information,
+ * see <a href="http://help.adobe.com/en_US/Flex/4.0/UsingSDK/WS53116913-F952-4b21-831F-9DE85B647C8A.html">Spark Skinning</a>.
+ */
+[DiscouragedForProfile("mobileDevice")]
+
+/**
  *  The NumericStepper control lets you select
  *  a number from an ordered set.
  *  The NumericStepper provides the same functionality as
@@ -119,6 +128,12 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *  the user presses the Enter key, removes focus from the
  *  component, or steps the NumericStepper by pressing an arrow button
  *  or by calling the <code>changeValueByStep()</code> method.</p>
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  <p>The NumericStepper control has the following default characteristics:</p>
  *     <table class="innertable">
@@ -173,13 +188,14 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
 *    color="0"
 *    contentBackgroundAlpha="1.0"
 *    contentBackgroundColor="0xFFFFFF"
+*    clearFloats="none"
 *    digitCase="DEFAULT"
 *    digitWidth="DEFAULT"
 *    direction="LTR"
 *    dominantBaseline="AUTO"
 *    firstBaselineOffset="AUTO"
 *    focusedTextSelectionColor=""
-*    fontFamily="Times New Roman"
+*    fontFamily="Arial"
 *    fontLookup="DEVICE"
 *    fontSize="12"
 *    fontStyle="NORMAL"
@@ -192,6 +208,9 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
 *    ligatureLevel="COMMON"
 *    lineHeight="120%"
 *    lineThrough="false"
+*    listAutoPadding="40"
+*    listStylePosition="outside"
+*    listStyleType="disc"
 *    locale="en"
 *    paragraphEndIndent="0"
 *    paragraphSpaceAfter="0"
@@ -211,6 +230,7 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
 *    typographicCase="DEFAULT"
 *    unfocusedTextSelectionColor=""
 *    whiteSpaceCollapse="COLLAPSE"
+*    wordSpacing="100%,50%,150%"
 *  /&gt;
 *  </pre>
 *
@@ -287,6 +307,17 @@ public class NumericStepper extends Spinner
 
     //--------------------------------------------------------------------------
     //
+    //  Variables
+    //
+    //--------------------------------------------------------------------------
+
+    /**
+     *  @private
+     */
+    private var dataFormatter:NumberFormatter;
+    
+    //--------------------------------------------------------------------------
+    //
     //  Overridden properties: UIComponent
     //
     //--------------------------------------------------------------------------
@@ -318,6 +349,8 @@ public class NumericStepper extends Spinner
      */
     private var maxChanged:Boolean = false;
     
+    [Inspectable(category="General", defaultValue="10.0")]
+    
     /**
      *  Number which represents the maximum value possible for 
      *  <code>value</code>. If the values for either 
@@ -346,6 +379,8 @@ public class NumericStepper extends Spinner
      *  @private
      */
     private var stepSizeChanged:Boolean = false;
+    
+    [Inspectable(category="General", defaultValue="1.0", minValue="0.0")]
     
     /**
      *  @private
@@ -397,6 +432,8 @@ public class NumericStepper extends Spinner
      *  @private
      */
     private var maxCharsChanged:Boolean = false;
+    
+    [Inspectable(category="General", defaultValue="0")]
 
     /**
      *  The maximum number of characters that can be entered in the field.
@@ -533,13 +570,11 @@ public class NumericStepper extends Spinner
      */
     private var _imeMode:String = null;
 
-    [Inspectable(defaultValue="")]
-
     /**
      *  @private
      */
     private var imeModeChanged:Boolean = false;
-
+    
     /**
      *  Specifies the IME (Input Method Editor) mode.
      *  The IME enables users to enter text in Chinese, Japanese, and Korean.
@@ -674,7 +709,7 @@ public class NumericStepper extends Spinner
     {
         if (stage)
         {
-            stage.focus = textDisplay.textDisplay;
+            stage.focus = textDisplay.textDisplay as InteractiveObject;
             
             // Since the API ignores the visual editable and selectable 
             // properties make sure the selection should be set first.
@@ -742,9 +777,16 @@ public class NumericStepper extends Spinner
         var prevValue:Number = value;
         
         if (valueParseFunction != null)
+        {
             inputValue = valueParseFunction(textDisplay.text);
+        }
         else 
-            inputValue = Number(textDisplay.text);
+        {
+            if (dataFormatter == null)
+                dataFormatter = new NumberFormatter(LocaleID.DEFAULT);
+
+            inputValue = dataFormatter.parseNumber(textDisplay.text);
+        }
         
         if ((textDisplay.text && textDisplay.text.length != value.toString().length)
             || textDisplay.text == "" || (inputValue != value && 

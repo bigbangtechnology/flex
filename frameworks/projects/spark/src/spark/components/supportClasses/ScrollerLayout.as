@@ -14,12 +14,16 @@ package spark.components.supportClasses
 import flash.geom.Point;
 
 import mx.core.IUIComponent;
+import mx.core.InteractionMode;
 import mx.core.ScrollPolicy;
+import mx.core.mx_internal;
 import mx.utils.MatrixUtil;
 
 import spark.components.Scroller;
 import spark.core.IViewport;
 import spark.layouts.supportClasses.LayoutBase;
+
+use namespace mx_internal;
 
 [ExcludeClass]
 
@@ -28,25 +32,42 @@ import spark.layouts.supportClasses.LayoutBase;
  */
 public class ScrollerLayout extends LayoutBase
 {
-    public function ScrollerLayout()    
-    {
-        super();
-    }
-
+    //--------------------------------------------------------------------------
+    //
+    //  Class constants
+    //
+    //--------------------------------------------------------------------------
+    
     /**
      *  @private
      *  SDT - Scrollbar Display Threshold.  If the content size exceeds the
      *  viewport's size by SDT, then we show a scrollbar.  For example, if the 
      *  contentWidth >= viewport width + SDT, show the horizontal scrollbar.
      */
-    private static const SDT:Number = 1.0;
+    mx_internal static const SDT:Number = 1.0;
+    
+    //--------------------------------------------------------------------------
+    //
+    //  Constructor
+    //
+    //--------------------------------------------------------------------------
+    
+    public function ScrollerLayout()    
+    {
+        super();
+    }
+    
+    //--------------------------------------------------------------------------
+    //
+    //  Variables
+    //
+    //--------------------------------------------------------------------------   
 
     /**
      *  @private
      *  Used by updateDisplayList() to prevent looping.
      */
     private var invalidationCount:int = 0;
-    
     
     /**
      *  @private
@@ -72,6 +93,52 @@ public class ScrollerLayout extends LayoutBase
         if (((cw == 0) && (ch == 0)) || (isNaN(cw) || isNaN(ch)))
             return new Point(0,0);
         return MatrixUtil.transformSize(cw, ch, viewport.getLayoutMatrix());
+    }
+    
+    //----------------------------------
+    //  canScrollHorizontally
+    //----------------------------------  
+    
+    /**
+     *  @private
+     */
+    private var _canScrollHorizontally:Boolean;
+    
+    /**
+     *  @private
+     *  Helper function to determine whether the viewport scrolls horizontally.
+     * 
+     *  <p>This is used for touch scrolling purposes to 
+     *  determine if one can scroll horizontally.</p>
+     * 
+     *  <p>The value is set in updateDisplayList()</p>
+     */
+    mx_internal function get canScrollHorizontally():Boolean
+    {
+        return _canScrollHorizontally;
+    }
+    
+    //----------------------------------
+    //  canScrollVertically
+    //----------------------------------  
+    
+    /**
+     *  @private
+     */
+    private var _canScrollVertically:Boolean;
+    
+    /**
+     *  @private
+     *  Helper function to determine whether the viewport scrolls vertically.
+     * 
+     *  <p>This is used for touch scrolling purposes to 
+     *  determine if one can scroll vertically.</p>
+     * 
+     *  <p>The value is set in updateDisplayList()</p>
+     */
+    mx_internal function get canScrollVertically():Boolean
+    {
+        return _canScrollVertically;
     }
 
     //----------------------------------
@@ -99,7 +166,7 @@ public class ScrollerLayout extends LayoutBase
     private function set hsbVisible(value:Boolean):void
     {
         var hsb:ScrollBarBase = getScroller().horizontalScrollBar;
-        if (!hsb)
+        if (!hsb || hsb.visible == value)
             return;
 
         hsb.includeInLayout = hsb.visible = value;
@@ -118,6 +185,9 @@ public class ScrollerLayout extends LayoutBase
                 hsbScaleY = hsb.scaleY;
             hsb.scaleX = hsb.scaleY = 0;            
         }
+        
+        // TODO (rfrishbe) (or hmuller): perhaps rather than setting scale to 0,
+        // we should be adding/removing it from the display list
     }
 
     /**
@@ -183,7 +253,7 @@ public class ScrollerLayout extends LayoutBase
     private function set vsbVisible(value:Boolean):void
     {
         var vsb:ScrollBarBase = getScroller().verticalScrollBar;
-        if (!vsb)
+        if (!vsb || vsb.visible == value)
             return;
         
         vsb.includeInLayout = vsb.visible = value;
@@ -243,7 +313,15 @@ public class ScrollerLayout extends LayoutBase
         var vsb:ScrollBarBase = getScroller().verticalScrollBar;  
         return (w >= vsb.getPreferredBoundsWidth()) && (h >= vsb.getMinBoundsHeight());
     }
-
+    
+	
+	
+    //--------------------------------------------------------------------------
+    //
+    //  Overidden Methods
+    //
+    //--------------------------------------------------------------------------
+    
     /**
      * @private
      *  Computes the union of the preferred size of the visible scrollbars 
@@ -262,7 +340,7 @@ public class ScrollerLayout extends LayoutBase
             return;
             
         const minViewportInset:Number = scroller.minViewportInset;
-        const measuredSizeIncludesScrollBars:Boolean = scroller.measuredSizeIncludesScrollBars;
+        const measuredSizeIncludesScrollBars:Boolean = scroller.measuredSizeIncludesScrollBars && (scroller.getStyle("interactionMode") == InteractionMode.MOUSE);
 
         var measuredW:Number = minViewportInset;
         var measuredH:Number = minViewportInset;
@@ -415,54 +493,72 @@ public class ScrollerLayout extends LayoutBase
         var oldShowHSB:Boolean = hsbVisible;
         var oldShowVSB:Boolean = vsbVisible;
         
-        var hAuto:Boolean = false; 
+        var hAuto:Boolean = false;
+        var hsbTakeUpSpace:Boolean = true; // if visible
         switch(scroller.getStyle("horizontalScrollPolicy")) 
         {
             case ScrollPolicy.ON: 
+				_canScrollHorizontally = true;
                 hsbVisible = true;
                 break;
 
             case ScrollPolicy.AUTO: 
-                if (hsb && viewport)
+                if (viewport)
                 {
                     hAuto = true;
-                    hsbVisible = (contentW >= (viewportW + SDT));
+					_canScrollHorizontally = (contentW >= (viewportW + SDT));
+                    hsbVisible = (hsb && _canScrollHorizontally);
                 } 
                 break;
-
+            
             default:
+				_canScrollHorizontally = false;
                 hsbVisible = false;
-        } 
+        }
 
         var vAuto:Boolean = false;
+        var vsbTakeUpSpace:Boolean = true; // if visible
         switch(scroller.getStyle("verticalScrollPolicy")) 
         {
            case ScrollPolicy.ON: 
-                vsbVisible = true; 
+                _canScrollVertically = true;
+                vsbVisible = true;
                 break;
 
             case ScrollPolicy.AUTO: 
-                if (vsb && viewport)
+                if (viewport)
                 { 
                     vAuto = true;
-                    vsbVisible = (contentH >= (viewportH + SDT));
+					_canScrollVertically = (contentH >= (viewportH + SDT));
+                    vsbVisible = (vsb && _canScrollVertically);
                 }                        
                 break;
-
+            
             default:
+                _canScrollVertically = false;
                 vsbVisible = false;
+        }
+        
+        // if in touch mode, only show scrollbars if a scroll is currently in progress
+        if (scroller.getStyle("interactionMode") == InteractionMode.TOUCH)
+        {
+            hsbTakeUpSpace = false;
+            hsbVisible = scroller.horizontalScrollInProgress;
+            
+            vsbTakeUpSpace = false;
+            vsbVisible = scroller.verticalScrollInProgress;
         }
 
         // Reset the viewport's width,height to account for the visible scrollbars, unless
         // the viewport's size was explicitly set, then we just use that. 
         
         if (isNaN(explicitViewportW))
-            viewportW = w - ((vsbVisible) ? (minViewportInset + vsbRequiredWidth()) : (minViewportInset * 2));
+            viewportW = w - ((vsbVisible && vsbTakeUpSpace) ? (minViewportInset + vsbRequiredWidth()) : (minViewportInset * 2));
         else 
             viewportW = explicitViewportW;
         
         if (isNaN(explicitViewportH))
-            viewportH = h - ((hsbVisible) ? (minViewportInset + hsbRequiredHeight()) : (minViewportInset * 2));
+            viewportH = h - ((hsbVisible && hsbTakeUpSpace) ? (minViewportInset + hsbRequiredHeight()) : (minViewportInset * 2));
         else 
             viewportH = explicitViewportH;
 
@@ -473,16 +569,16 @@ public class ScrollerLayout extends LayoutBase
         var vsbIsDependent:Boolean = false;
         
         if (vsbVisible && !hsbVisible && hAuto && (contentW >= (viewportW + SDT)))
-            hsbVisible = hsbIsDependent = true;
+            hsbVisible = hsbIsDependent = _canScrollHorizontally = true;
         else if (!vsbVisible && hsbVisible && vAuto && (contentH >= (viewportH + SDT)))
-            vsbVisible = vsbIsDependent = true;
+            vsbVisible = vsbIsDependent = _canScrollVertically = true;
 
         // If the HSB doesn't fit, hide it and give the space back.   Likewise for VSB.
         // If both scrollbars are supposed to be visible but they don't both fit, 
         // then prefer to show the "non-dependent" auto scrollbar if we added the second
         // "dependent" auto scrollbar because of the space consumed by the first.
         
-        if (hsbVisible && vsbVisible) 
+        if ((hsbVisible && hsbTakeUpSpace) && (vsbVisible && vsbTakeUpSpace)) 
         {
             if (hsbFits(w, h) && vsbFits(w, h))
             {
@@ -521,21 +617,29 @@ public class ScrollerLayout extends LayoutBase
                     vsbVisible = false;
             }
         }
-        else if (hsbVisible && !hsbFits(w, h))  // just trying to show HSB, but it doesn't fit
+        else if (hsbVisible && hsbTakeUpSpace && !hsbFits(w, h))  // just trying to show HSB, but it doesn't fit
             hsbVisible = false;
-        else if (vsbVisible && !vsbFits(w, h))  // just trying to show VSB, but it doesn't fit
+        else if (vsbVisible && vsbTakeUpSpace && !vsbFits(w, h))  // just trying to show VSB, but it doesn't fit
             vsbVisible = false;
+        
+        // if the only reason for showing one particular scrollbar was because the 
+        // other scrollbar was visible, and we're now not showing the other scrollbar, 
+        // then there's no need to allow scrolling in that direction anymore.
+        if (hsbIsDependent && !vsbVisible)
+            _canScrollHorizontally = false;
+        if (vsbIsDependent && !hsbVisible)
+            _canScrollVertically = false;
         
         // Reset the viewport's width,height to account for the visible scrollbars, unless
         // the viewport's size was explicitly set, then we just use that.
         
         if (isNaN(explicitViewportW))
-            viewportW = w - ((vsbVisible) ? (minViewportInset + vsbRequiredWidth()) : (minViewportInset * 2));
+            viewportW = w - ((vsbVisible && vsbTakeUpSpace) ? (minViewportInset + vsbRequiredWidth()) : (minViewportInset * 2));
         else 
             viewportW = explicitViewportW;
 
         if (isNaN(explicitViewportH))
-            viewportH = h - ((hsbVisible) ? (minViewportInset + hsbRequiredHeight()) : (minViewportInset * 2));
+            viewportH = h - ((hsbVisible && hsbTakeUpSpace) ? (minViewportInset + hsbRequiredHeight()) : (minViewportInset * 2));
         else 
             viewportH = explicitViewportH;
         
@@ -549,18 +653,20 @@ public class ScrollerLayout extends LayoutBase
         
         if (hsbVisible)
         {
-            var hsbW:Number = (vsbVisible) ? w - vsb.getPreferredBoundsWidth() : w;
-            var hsbH:Number = hsb.getPreferredBoundsHeight();
+			var hsbH:Number = hsb.getPreferredBoundsHeight();
+            var hsbW:Number = vsbVisible ? w - vsb.getPreferredBoundsWidth() : w;
             hsb.setLayoutBoundsSize(Math.max(hsb.getMinBoundsWidth(), hsbW), hsbH);
-            hsb.setLayoutBoundsPosition(0, h - hsbH);
+            
+			hsb.setLayoutBoundsPosition(0, h - hsbH);
         }
 
         if (vsbVisible)
         {
             var vsbW:Number = vsb.getPreferredBoundsWidth(); 
-            var vsbH:Number = (hsbVisible) ? h - hsb.getPreferredBoundsHeight() : h;
-            vsb.setLayoutBoundsSize(vsbW, Math.max(vsb.getMinBoundsHeight(), vsbH));
-            vsb.setLayoutBoundsPosition(w - vsbW, 0);
+            var vsbH:Number = hsbVisible ? h - hsb.getPreferredBoundsHeight() : h;
+			vsb.setLayoutBoundsSize(vsbW, Math.max(vsb.getMinBoundsHeight(), vsbH));
+			
+			vsb.setLayoutBoundsPosition(w - vsbW, 0);
         }
 
         // If we've added an auto scrollbar, then the measured size is likely to have been wrong.

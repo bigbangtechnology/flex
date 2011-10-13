@@ -48,6 +48,8 @@ import spark.layouts.supportClasses.LayoutBase;
  *    paddingLeft="0"
  *    paddingRight="0"
  *    paddingTop="0"
+ *    requestedMaxRowCount="-1"
+ *    requestedMinRowCount="-1"
  *    requestedRowCount"-1"
  *    rowHeight="no default"
  *    variableRowHeight="true"
@@ -101,7 +103,7 @@ public class VGroup extends Group
     //  gap
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="6")]
 
     /**
      *  @copy spark.layouts.VerticalLayout#gap
@@ -188,7 +190,7 @@ public class VGroup extends Group
     //  paddingLeft
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="0.0")]
 
     /**
      *  @copy spark.layouts.VerticalLayout#paddingLeft
@@ -217,7 +219,7 @@ public class VGroup extends Group
     //  paddingRight
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="0.0")]
 
     /**
      *  @copy spark.layouts.VerticalLayout#paddingRight
@@ -246,7 +248,7 @@ public class VGroup extends Group
     //  paddingTop
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="0.0")]
 
     /**
      *  @copy spark.layouts.VerticalLayout#paddingTop
@@ -275,7 +277,7 @@ public class VGroup extends Group
     //  paddingBottom
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="0.0")]
 
     /**
      *  @copy spark.layouts.VerticalLayout#paddingBottom
@@ -323,11 +325,69 @@ public class VGroup extends Group
     }
     
     //----------------------------------
-    //  requestedRowCount
+    //  requestedMaxRowCount
     //----------------------------------
 
     [Inspectable(category="General")]
 
+    /**
+     *  @copy spark.layouts.VerticalLayout#requestedMaxRowCount
+     * 
+     *  @default -1
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     */
+    public function get requestedMaxRowCount():int
+    {
+        return verticalLayout.requestedMaxRowCount;
+    }
+
+    /**
+     *  @private
+     */
+    public function set requestedMaxRowCount(value:int):void
+    {
+        verticalLayout.requestedMaxRowCount = value;
+    }    
+    
+    //----------------------------------
+    //  requestedMinRowCount
+    //----------------------------------
+    
+    [Inspectable(category="General")]
+    
+    /**
+     *  @copy spark.layouts.VerticalLayout#requestedMinRowCount
+     * 
+     *  @default -1
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     */
+    public function get requestedMinRowCount():int
+    {
+        return verticalLayout.requestedMinRowCount;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set requestedMinRowCount(value:int):void
+    {
+        verticalLayout.requestedMinRowCount = value;
+    }    
+    
+    //----------------------------------
+    //  requestedRowCount
+    //----------------------------------
+    
+    [Inspectable(category="General")]
+    
     /**
      *  @copy spark.layouts.VerticalLayout#requestedRowCount
      * 
@@ -342,7 +402,7 @@ public class VGroup extends Group
     {
         return verticalLayout.requestedRowCount;
     }
-
+    
     /**
      *  @private
      */
@@ -382,7 +442,7 @@ public class VGroup extends Group
     //  variableRowHeight
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="true")]
 
     /**
      *  @copy spark.layouts.VerticalLayout#variableRowHeight

@@ -69,7 +69,7 @@ include "../styles/metadata/TextStyles.as"
  *  @playerversion AIR 1.1
  *  @productversion Flex 3
  */
-[Style(name="cornerRadius", type="Number", format="Length", inherit="no", theme="halo, spark")]
+[Style(name="cornerRadius", type="Number", format="Length", inherit="no", theme="halo, spark, mobile")]
 
 /**
  *  Number of pixels between the container's bottom border and its content area.
@@ -95,6 +95,13 @@ include "../styles/metadata/TextStyles.as"
  */
 [Style(name="paddingTop", type="Number", format="Length", inherit="no")]
 
+/**
+ * Because this component does not define a skin for the mobile theme, Adobe
+ * recommends that you not use it in a mobile application. Alternatively, you
+ * can define your own mobile skin for the component. For more information,
+ * see <a href="http://help.adobe.com/en_US/Flex/4.0/UsingSDK/WS53116913-F952-4b21-831F-9DE85B647C8A.html">Spark Skinning</a>.
+ */
+[DiscouragedForProfile("mobileDevice")]
 
 /**
  *  The ToolTip control lets you provide helpful information to your users.
@@ -286,14 +293,7 @@ public class ToolTip extends UIComponent implements IToolTip, IFontContextCompon
         super.createChildren();
 
         // Create the border/background.
-        if (!border)
-        {
-            var borderClass:Class = getStyle("borderSkin");
-            border = new borderClass();
-            if (border is ISimpleStyleClient)
-                ISimpleStyleClient(border).styleName = this;
-            addChild(DisplayObject(border));
-        }
+        createBorder();
 
         // Create the TextField that displays the tooltip text.
         createTextField(-1);
@@ -405,9 +405,20 @@ public class ToolTip extends UIComponent implements IToolTip, IFontContextCompon
         // won't call updateDisplayList() because the size hasn't changed.
         // But the TextField has to be repositioned, so we need to
         // invalidate the layout as well as the size.
-        if (styleProp == "borderStyle" ||
-            styleProp == "styleName" ||
+        if (styleProp == "styleName" ||
+            styleProp == "borderSkin" ||
             styleProp == null)
+        {
+            //if the border skin has changed then rebuild it.
+            if(border)
+            {
+                removeChild(DisplayObject(border));
+                border = null;
+            }
+            
+            createBorder();         
+        }
+        else if (styleProp == "borderStyle")
         {
             invalidateDisplayList();
         }
@@ -466,6 +477,30 @@ public class ToolTip extends UIComponent implements IToolTip, IFontContextCompon
     mx_internal function getTextField():IUITextField
     {
         return textField;
+    }
+    
+    /**
+     *  @private
+     */
+    private function createBorder():void
+    {        
+        if (!border)
+        {
+            var borderClass:Class = getStyle("borderSkin");
+            
+            if (borderClass != null)
+            {
+                border = new borderClass();
+                
+                if (border is ISimpleStyleClient)
+                    ISimpleStyleClient(border).styleName = this;
+                
+                // Add the border behind all the children.
+                addChildAt(DisplayObject(border), 0);
+                
+                invalidateDisplayList();
+            }
+        }
     }
 }
 

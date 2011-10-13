@@ -24,6 +24,7 @@ import flash.ui.Keyboard;
 
 import flashx.textLayout.container.ContainerController;
 import flashx.textLayout.container.TextContainerManager;
+import flashx.textLayout.edit.EditManager;
 import flashx.textLayout.edit.EditingMode;
 import flashx.textLayout.edit.ElementRange;
 import flashx.textLayout.edit.IEditManager;
@@ -35,6 +36,7 @@ import flashx.textLayout.elements.FlowLeafElement;
 import flashx.textLayout.elements.IConfiguration;
 import flashx.textLayout.elements.ParagraphElement;
 import flashx.textLayout.elements.TextFlow;
+import flashx.textLayout.elements.TextRange;
 import flashx.textLayout.events.SelectionEvent;
 import flashx.textLayout.formats.Category;
 import flashx.textLayout.formats.ITextLayoutFormat;
@@ -79,7 +81,8 @@ public class RichEditableTextContainerManager extends TextContainerManager
      *  @productversion Flex 4
      */
     public function RichEditableTextContainerManager(
-                        container:RichEditableText, configuration:IConfiguration)
+                        container:RichEditableText, 
+                        configuration:IConfiguration=null)
     {
         super(container, configuration);
 
@@ -102,14 +105,6 @@ public class RichEditableTextContainerManager extends TextContainerManager
      */
     private var textDisplay:RichEditableText;
 
-    
-    /**
-     *  @private
-     *  TLF doesn't guarantee it won't touch the context menu.  It removes it
-     *  when it switches from the factory to the composer so we need to save it.
-     */
-    private var userContextMenu:ContextMenu;
-    
     //--------------------------------------------------------------------------
     //
     //  Overridden methods
@@ -199,7 +194,7 @@ public class RichEditableTextContainerManager extends TextContainerManager
     /**
      *  @private
      * 
-     * If the user specified a custom context menu then save it and use
+     * If the user specified a custom context menu then use
      * it rather than the default context menu. It must be set before the
      * first mouse over/mouse hover or foucsIn event to be used.
      * 
@@ -208,22 +203,15 @@ public class RichEditableTextContainerManager extends TextContainerManager
      */
     override tlf_internal function getContextMenu():ContextMenu
     {
-        // ToDo(cframpto): can't differentiate between the user removing the
-        // context menu because they don't want it and TLF removing it and
-        // it is requesting it again.  Need additional API to support
-        // contextMenus correctly.  Ideally could specify the context
+        // ToDo(cframpto): Ideally could specify the context
         // menu on the TextArea or the TextInput and it wouldn't be obscured
         // by TLF's context menu.
-        
-        if (textDisplay.contextMenu)
-            userContextMenu = textDisplay.contextMenu;
 
-        if (!userContextMenu)
-            userContextMenu = super.getContextMenu();
-        
-        return userContextMenu;        
+        // Return null to use the existing contextMenu on the container.
+        // Otherwise the TCM will overwrite this contextMenu.
+        return textDisplay.contextMenu != null ? null : super.getContextMenu();
     }
-
+    
     /**
      *  @private
      */
@@ -304,7 +292,24 @@ public class RichEditableTextContainerManager extends TextContainerManager
     override protected function createEditManager(
                         undoManager:flashx.undo.IUndoManager):IEditManager
     {
-        return new RichEditableTextEditManager(textDisplay, undoManager);
+        var editManager:IEditManager = super.createEditManager(undoManager);
+        
+        // Default is to batch text input.  If the component, like ComboBox
+        // wants to act on each keystroke then set this to false.
+        editManager.allowDelayedOperations = textDisplay.batchTextInput;
+        
+        // Do not delayUpdates until further work is done to ensure our public API methods to
+        // format and insert text work correctly.  TLF does not dispatch the selectionChange
+        // event until the display is updated which means our selection properties may not
+        // be in sync with the TLF values. This could matter for our API methods that
+        // take the selection as parameters or default to the current selection.  In the
+        // former case, the user could query for the selection or rely on the selectionChange
+        // event and get incorrect values if there is a pending update and in the later case 
+        // we fill in the default selection which might not be current if there is a pending 
+        // update.
+        editManager.delayUpdates = false;
+        
+        return editManager;
     }
 
     /**
@@ -377,10 +382,21 @@ public class RichEditableTextContainerManager extends TextContainerManager
         
         var operationState:SelectionState =
             new SelectionState(textFlow, anchorPosition, activePosition);
+                    
+        // If using the edit manager and the selection is the current selection,
+        // need to set the flag so point selection is set with pending formats for next 
+        // char typed.
+        const editManager:IEditManager = textFlow.interactionManager as IEditManager;
+        if (editManager)
+        {
+            const absoluteStart:int = getAbsoluteStart(anchorPosition, activePosition);
+            const absoluteEnd:int = getAbsoluteEnd(anchorPosition, activePosition);
+            
+            if (editManager.absoluteStart == absoluteStart && editManager.absoluteEnd == absoluteEnd)
+                operationState.selectionManagerOperationState = true;
+        }
         
-        // On point selection remember pendling formats for next char typed.
-        operationState.selectionManagerOperationState = true;
-        
+        // For the case when interactive editing is not allowed.
         var op:ApplyFormatOperation = 
             new ApplyFormatOperation(
                 operationState, leafFormat, paragraphFormat, containerFormat);
@@ -390,16 +406,16 @@ public class RichEditableTextContainerManager extends TextContainerManager
         {
             textFlow.normalize(); 
             textFlow.flowComposer.updateAllControllers(); 
-        } 
+        }
         
         return success;
     }
 
     /**
      *  @private
-     *  To get the format of a character without using a SelectionManager.
-     *  The method should be kept in sync with the version in the 
-     *  SelectionManager.
+     *  To get the format of a character.  Our API allows this operation even
+     *  when the editingMode does not permit either interactive selection or
+     *  editing.
      */
     mx_internal function getCommonCharacterFormat(
                                         anchorPosition:int, 
@@ -410,42 +426,26 @@ public class RichEditableTextContainerManager extends TextContainerManager
         
         var textFlow:TextFlow = getTextFlowWithComposer();
         
-        var absoluteStart:int = getAbsoluteStart(anchorPosition, activePosition);
-        var absoluteEnd:int = getAbsoluteEnd(anchorPosition, activePosition);
-        
-        var selRange:ElementRange = 
-            ElementRange.createElementRange(textFlow, absoluteStart, absoluteEnd); 
-        
-        var leaf:FlowLeafElement = selRange.firstLeaf;
-        var attr:TextLayoutFormat = new TextLayoutFormat(leaf.computedFormat);
-        
-        // If there is a insertion point, see if there is an interaction
-        // manager with a pending point format.
-        if (anchorPosition != -1 && anchorPosition == activePosition)
+        if (textFlow.interactionManager)
         {
-            if (textFlow.interactionManager)
-            {
-                var selectionState:SelectionState = 
-                    textFlow.interactionManager.getSelectionState();                
-                if (selectionState.pointFormat)
-                    attr.apply(selectionState.pointFormat);
-            }
+            // If there is a selection manager use it so that the format,
+            // depending on the range, may include any attributes set on a point 
+            // selection but not yet applied.	
+            const range:TextRange = 
+                new TextRange(textFlow, anchorPosition, activePosition);
+            
+            return textFlow.interactionManager.getCommonCharacterFormat(range);
         }
         else
         {
-            for (;;)
-            {
-                if (leaf == selRange.lastLeaf)
-                    break;
-                leaf = leaf.getNextLeaf();
-                attr.removeClashing(leaf.computedFormat);
-            }
+            // ElementRange will order the selection points.  Since there isn't
+            // an interactionManager there is not a point selection to worry
+            // about.
+            var selRange:ElementRange = 
+                ElementRange.createElementRange(textFlow, anchorPosition, activePosition); 
+            
+            return selRange.getCommonCharacterFormat();
         }
-        
-        return Property.extractInCategory(
-                    TextLayoutFormat, 
-                    TextLayoutFormat.description, 
-                    attr, Category.CHARACTER) as ITextLayoutFormat;
     }
     
     /**
@@ -458,13 +458,11 @@ public class RichEditableTextContainerManager extends TextContainerManager
     {
         var textFlow:TextFlow = getTextFlowWithComposer();
         
-        var controller:ContainerController = 
-            textFlow.flowComposer.getControllerAt(0);
-            
-        return Property.extractInCategory(
-                    TextLayoutFormat, TextLayoutFormat.description, 
-                    controller.computedFormat,
-                    Category.CONTAINER) as ITextLayoutFormat;
+        // absoluteStart and absoluteEnd values not used. 
+        var selRange:ElementRange = 
+            ElementRange.createElementRange(textFlow, 0, textFlow.textLength - 1); 
+        
+        return selRange.getCommonContainerFormat();
     }
     
     /**
@@ -481,28 +479,12 @@ public class RichEditableTextContainerManager extends TextContainerManager
             return null;
                 
         var textFlow:TextFlow = getTextFlowWithComposer();
-
-        var absoluteStart:int = getAbsoluteStart(anchorPosition, activePosition);
-        var absoluteEnd:int = getAbsoluteEnd(anchorPosition, activePosition);
-
+    
+        // ElementRange will order the selection points.
         var selRange:ElementRange = 
-            ElementRange.createElementRange(textFlow, absoluteStart, absoluteEnd); 
-        
-        var para:ParagraphElement = selRange.firstParagraph;
-        var attr:TextLayoutFormat = new TextLayoutFormat(para.computedFormat);
-        for (;;)
-        {
-            if (para == selRange.lastParagraph)
-                break;
-            
-            para = textFlow.findAbsoluteParagraph(
-                            para.getAbsoluteStart() + para.textLength);
-            attr.removeClashing(para.computedFormat);
-        }
-        
-        return Property.extractInCategory(TextLayoutFormat,
-                    TextLayoutFormat.description,
-                    attr, Category.PARAGRAPH) as ITextLayoutFormat;
+            ElementRange.createElementRange(textFlow, anchorPosition, activePosition); 
+                
+        return selRange.getCommonParagraphFormat();
     }
     
     /**
@@ -569,6 +551,11 @@ public class RichEditableTextContainerManager extends TextContainerManager
         return success;
     }
 
+    /**
+     *  Note:  It is probably a TLF bug that, if delayedUpdates is true, we have to call 
+     *  updateAllControllers before doing a format operation to guarantee the correct
+     *  results.
+     */
     mx_internal function getTextFlowWithComposer():TextFlow
     {
         var textFlow:TextFlow = getTextFlow();
@@ -576,11 +563,20 @@ public class RichEditableTextContainerManager extends TextContainerManager
         // Make sure there is a text flow with a flow composer.  There will
         // not be an interaction manager if editingMode is read-only.  If
         // there is an interaction manager flush any pending inserts into the
-        // text flow.
+        // text flow unless we are delaying updates in which case we may have to finish
+        // composition.
         if (composeState != TextContainerManager.COMPOSE_COMPOSER)
+        {
             convertToTextFlowWithComposer();
+        }
         else if (textFlow.interactionManager)
-            textFlow.interactionManager.flushPendingOperations();
+        {
+            const editManager:IEditManager = textFlow.interactionManager as IEditManager;
+            if (editManager && editManager.delayUpdates)
+                editManager.updateAllControllers();
+            else
+                textFlow.interactionManager.flushPendingOperations();
+        }
         
         return textFlow;
     }
@@ -637,8 +633,13 @@ public class RichEditableTextContainerManager extends TextContainerManager
         textDisplay.keyDownHandler(event);
 
         if (!event.isDefaultPrevented())
-            super.keyDownHandler(event);
-    }    
+        {
+            var clone:KeyboardEvent = KeyboardEvent(event.clone());
+            super.keyDownHandler(clone);
+            if (clone.isDefaultPrevented())
+                event.preventDefault();
+        }
+    }
 
     /**
      *  @private
@@ -646,20 +647,14 @@ public class RichEditableTextContainerManager extends TextContainerManager
     override public function keyUpHandler(event:KeyboardEvent):void
     {
         if (!event.isDefaultPrevented())
-            super.keyUpHandler(event);
+        {
+            var clone:KeyboardEvent = KeyboardEvent(event.clone());
+            super.keyUpHandler(clone);
+            if (clone.isDefaultPrevented())
+                event.preventDefault();
+        }
     }
-    
-    /**
-     *  @private
-     */
-    override public function mouseWheelHandler(event:MouseEvent):void
-    {
-        // Bug: ContainerController.mouseWheelHandler() should be checking
-        // if the default behavior is prevented before it acts on the event.
-        if (!event.isDefaultPrevented())
-            super.mouseWheelHandler(event);
-    }
-    
+        
     /**
      *  @private
      */

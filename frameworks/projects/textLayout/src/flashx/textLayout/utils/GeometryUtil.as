@@ -1,18 +1,20 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.utils
 {
 	import flash.geom.Rectangle;
 	import flash.text.engine.TextLine;
+	import flash.text.engine.TextLineValidity
 	
+	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.compose.IFlowComposer;
 	import flashx.textLayout.compose.TextFlowLine;
 	import flashx.textLayout.elements.TextRange;
@@ -77,19 +79,19 @@ package flashx.textLayout.utils
 			var prevLine:TextFlowLine = begLine > 0 ? flowComposer.getLineAt(begLine-1) : null;
 			var nextLine:TextFlowLine;
 
-			var line:TextFlowLine = flowComposer.getLineAt(begLine); 
+			var line:TextFlowLine = flowComposer.getLineAt(begLine); 			
 			
+			var mainRects:Array = [];
 			
 			for (var curLineIndex:int = begLine; curLineIndex <= endLine; curLineIndex++)
 			{
 				nextLine = curLineIndex != (flowComposer.numLines - 1) ? flowComposer.getLineAt(curLineIndex + 1) : null;
 				
-				var mainRects:Array = new Array();
-				var tcyRects:Array = new Array();
 				
 				var heightAndAdj:Array = line.getRomanSelectionHeightAndVerticalAdjustment(prevLine, nextLine);
 				
-				var textLine:TextLine = line.getTextLine();
+				var textLine:TextLine = line.getTextLine(true);
+
 				line.calculateSelectionBounds(textLine, mainRects, 
 					range.absoluteStart < line.absoluteStart ? line.absoluteStart - line.paragraph.getAbsoluteStart()
  															 : range.absoluteStart - line.paragraph.getAbsoluteStart(), 
@@ -100,17 +102,17 @@ package flashx.textLayout.utils
 					
 				for each(var rect:Rectangle in mainRects)
 				{
-					var obj:Object = new Object();
+					var obj:Object = new Object();	// NO PMD
 					obj.textLine = textLine;
 					obj.rect = rect.clone();
 					
 					resultShapes.push(obj);
 				}
+				mainRects.length = 0;
 				
 				var temp:TextFlowLine = line;
 				line = nextLine;
 				prevLine = temp;
-				
 			}
 			
 			return resultShapes;

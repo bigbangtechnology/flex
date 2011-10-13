@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
 	import flashx.textLayout.debug.assert;
@@ -20,7 +20,6 @@ package flashx.textLayout.operations
 	import flashx.textLayout.formats.Category;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
 	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 
@@ -45,7 +44,7 @@ package flashx.textLayout.operations
 	{
 		private var _format:ITextLayoutFormat;
 		
-		private var undoCoreStyles:Object;
+		private var _undoStyles:TextLayoutFormat;
 				
 		/** 
 		* Creates an ClearFormatOnElementOperation object. 
@@ -91,11 +90,11 @@ package flashx.textLayout.operations
 			
 			adjustForDoOperation(targetElement);
 			
-			undoCoreStyles = targetElement.coreStyles;
+			_undoStyles = new TextLayoutFormat(targetElement.format);
 			
 			if (_format)
 			{
-				var newFormat:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder(targetElement.format);
+				var newFormat:TextLayoutFormat = new TextLayoutFormat(targetElement.format);
 				// this is fairly rare so this operation is not optimizied
 				for (var prop:String in TextLayoutFormat.description)
 				{
@@ -113,7 +112,7 @@ package flashx.textLayout.operations
 		{
 			var targetElement:FlowElement = getTargetElement();
 			
-			targetElement.setCoreStylesInternal (undoCoreStyles);
+			targetElement.format = new TextLayoutFormat(_undoStyles);
 			
 			adjustForUndoOperation(targetElement);
 			

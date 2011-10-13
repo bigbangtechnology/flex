@@ -21,12 +21,18 @@
 *****************************************************/
 package org.osmf.events
 {
-	import org.osmf.traits.MediaTraitType;
-	
 	import flash.events.Event;
 	
+	import org.osmf.elements.CompositeElement;
+	import org.osmf.metadata.Metadata;
+	
 	/**
-	 * A MediaElementEvent is dispatched when properties of a MediaElement have changed.
+	 * A MediaElementEvent is dispatched when the properties of a MediaElement change.
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */
 	public class MediaElementEvent extends Event
 	{
@@ -35,7 +41,12 @@ package org.osmf.events
 		 * property of the event object for a traitAdd event.
 		 * 
 		 * @eventType traitAdd
-		 **/
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		public static const TRAIT_ADD:String = "traitAdd";
 		
 		/**
@@ -43,8 +54,39 @@ package org.osmf.events
 		 * type property of the event object for a traitRemove event.
 		 * 
 		 * @eventType traitRemove
-		 **/
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		public static const TRAIT_REMOVE:String = "traitRemove";
+		
+		/**
+		 * The MediaElementEvent.METADATA_ADD constant defines the value of the type
+		 * property of the event object for a metadataAdd event.
+		 * 
+		 * @eventType metadataAdd
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static const METADATA_ADD:String = "metadataAdd";
+		
+		/**
+		 * The MediaElementEvent.METADATA_REMOVE constant defines the value of the
+		 * type property of the event object for a metadataRemove event.
+		 * 
+		 * @eventType metadataRemove
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static const METADATA_REMOVE:String = "metadataRemove";
 		
 		/**
 		 * Constructor.
@@ -54,34 +96,72 @@ package org.osmf.events
  		 * list hierarchy.
  		 * @param cancelable Specifies whether the behavior associated with the
  		 * event can be prevented. 
-		 * @param traitType The trait class for the trait that was added or removed,.
- 		 **/
-		public function MediaElementEvent(type:String, bubbles:Boolean=false, cancelable:Boolean=false, traitType:MediaTraitType=null)
+		 * @param traitType The MediaTraitType for the trait that was added or removed.  Null
+		 * if type is not TRAIT_ADD or TRAIT_REMOVE.
+		 * @param namespaceURL The namespace URL of the Metadata that was added or removed.
+		 * Null if type is not METADATA_ADD or METADATA_REMOVE.
+		 * @param metadata The Metadata that was added or removed. Null if type is not
+		 * METADATA_ADD or METADATA_REMOVE.
+		 *  
+ 		 *  @langversion 3.0
+ 		 *  @playerversion Flash 10
+ 		 *  @playerversion AIR 1.5
+ 		 *  @productversion OSMF 1.0
+ 		 */
+		public function MediaElementEvent(type:String, bubbles:Boolean=false, cancelable:Boolean=false, traitType:String=null, namespaceURL:String=null, metadata:Metadata=null)
 		{
 			super(type, bubbles, cancelable);
 
 			_traitType = traitType;
+			_namespaceURL = namespaceURL;
+			_metadata = metadata;
 		}
 		
 		/**
 		 * @private
-		 **/
+		 */
 		override public function clone():Event
 		{
-			return new MediaElementEvent(type, bubbles, cancelable, traitType);
+			return new MediaElementEvent(type, bubbles, cancelable, traitType, namespaceURL, metadata);
 		}
 		
 		/**
-		 * The trait class for this event.
-		 **/
-		public function get traitType():MediaTraitType
+		 * The MediaTraitType for the trait that was added or removed.  Null
+		 * if type is not TRAIT_ADD or TRAIT_REMOVE.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public function get traitType():String
 		{
 			return _traitType;
+		}
+
+		/**
+		 * The namespace URL for the Metadata that was added or removed.  Null if
+		 * type is not METADATA_ADD or METADATA_REMOVE.
+		 **/
+		public function get namespaceURL():String
+		{
+			return _namespaceURL;
+		}
+		
+		/**
+		 * The Metadata that was added or removed.  Null if type is not
+		 * METADATA_ADD or METADATA_REMOVE.
+		 **/
+		public function get metadata():Metadata
+		{
+			return _metadata;
 		}
 		
 		// Internals
 		//
 		
-		private var _traitType:MediaTraitType;
+		private var _traitType:String;
+		private var _namespaceURL:String;
+		private var _metadata:Metadata;
 	}
 }

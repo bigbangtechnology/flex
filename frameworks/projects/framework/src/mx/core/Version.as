@@ -1,4 +1,4 @@
-﻿////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //  ADOBE SYSTEMS INCORPORATED
 //  Copyright 2005-2007 Adobe Systems Incorporated
@@ -15,4 +15,4 @@ import mx.core.mx_internal;
  *  @private
  *  Version string for this class.
  */
-mx_internal static const VERSION:String = "4.1.0.16076";
+mx_internal static const VERSION:String = "4.5.1.21328";

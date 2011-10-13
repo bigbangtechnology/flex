@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.conversion
 {
 	import flash.utils.Dictionary;
@@ -20,11 +20,15 @@ package flashx.textLayout.conversion
 	import flashx.textLayout.elements.FlowValueHolder;
 	import flashx.textLayout.elements.InlineGraphicElement;
 	import flashx.textLayout.elements.LinkElement;
+	import flashx.textLayout.elements.ListElement;
 	import flashx.textLayout.elements.ParagraphFormattedElement;
 	import flashx.textLayout.elements.SpanElement;
+	import flashx.textLayout.elements.SubParagraphGroupElement;
 	import flashx.textLayout.elements.TCYElement;
 	import flashx.textLayout.elements.TextFlow;
+	import flashx.textLayout.formats.FormatValue;
 	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.ListMarkerFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.formats.WhiteSpaceCollapse;
 	import flashx.textLayout.property.Property;
@@ -39,69 +43,11 @@ package flashx.textLayout.conversion
 	 */
 	internal class TextLayoutExporter extends BaseTextLayoutExporter
 	{	
-		private static var nameCounter:int = 0;
 		static private var _formatDescription:Object= TextLayoutFormat.description;
 
-		private var queuedExport:Object = null;
-		
 		public function TextLayoutExporter()
 		{
 			super(new Namespace("http://ns.adobe.com/textLayout/2008"), null, TextLayoutImporter.defaultConfiguration);
-		}
-		
-		override protected function clear():void
-		{
-			nameCounter = 0;
-			queuedExport = null;
-		}
-		
-		/** Export text content of a TextFlow into TextLayout format.
-		 * @param source	the text to export
-		 * @return XML	the exported content
-		 */
-		protected override function exportToXML(textFlow:TextFlow) : XML
-		{
-			var result:XML = super.exportToXML(textFlow);
-			var queuedXML:XMLList = exportQueuedObjects();
-			if (queuedXML)
-				result.appendChild(queuedXML);
-			return result;
-		}
-		
-		private function exportQueuedObjects():XMLList
-		{
-			if (!queuedExport)
-				return null;
-			
-			// pump out the queued objects
-			var result:XMLList = new XMLList();
-			for  (var idName:String in queuedExport) {
-				var objectToExport:Object = queuedExport[idName];
-				var output:XMLList = new XMLList();
-				if (objectToExport is FlowValueHolder) {
-					var characterFormatXML:XML = new XML("<format/>");
-					characterFormatXML.setNamespace(flowNS);
-					output += characterFormatXML;
-					output.@id = idName;
-					exportStyles(output, objectToExport.coreStyles, formatDescription);
-					exportStyles(output, objectToExport.userStyles);
-				}
-				result += output;
-			}
-			return result;
-		}
-		
-		/** Get additional objects that are required for export
-		 * The subject may have dependent objects that will need to be exported, in addition
-		 * to the subject itself.
-		 * @return XML	array of Objects to export
-		 */
-		private function queueForExport(object:Object, name:String):void
-		{
-			if (!queuedExport)
-				queuedExport = new Object();
-				
-			queuedExport[name] = object;
 		}
 		
 		static private const brTabRegEx:RegExp = new RegExp("[" + "\u2028" + "\t" + "]"); // Doesn't /\u2028\t/ work?
@@ -133,27 +79,94 @@ package flashx.textLayout.conversion
 			return replacementXML;	
 		}
 		
+		/** Helper function to export styles (core or user) in the form of xml attributes or xml children
+		 * @private
+		 */
+		tlf_internal function createStylesFromDescription(styles:Object, description:Object, includeUserStyles:Boolean, exclusions:Array):Array
+		{
+			var sortableStyles:Array = [];
+			for (var key:String in styles)
+			{
+				var val:Object = styles[key];
+				if (exclusions && exclusions.indexOf(val) != -1)
+					continue;
+				
+				var prop:Property = description[key];
+				if (!prop)
+				{
+					if (includeUserStyles)
+					{
+						// User style
+						if ((val is String) || val.hasOwnProperty("toString"))
+						{
+							// Is or can be converted to a String which will be used as an XML attribute value
+							sortableStyles.push({xmlName:key, xmlVal:val});
+						}						
+					}
+				}
+				else if (val is TextLayoutFormat)
+				{
+					// A style dictionary; Will be converted to an XMLList containing elements to be added as children 
+					var customDictProp:XMLList = exportObjectAsTextLayoutFormat(key,(val as TextLayoutFormat).getStyles());
+					if (customDictProp)
+						sortableStyles.push({xmlName:key, xmlVal:customDictProp});
+				}
+				else
+					sortableStyles.push({xmlName:key, xmlVal:prop.toXMLString(val)});		
+			}
+			return sortableStyles;  
+		}
+		
+		tlf_internal function exportObjectAsTextLayoutFormat(key:String,styleDict:Object):XMLList
+		{
+			// link attributes and ListMarkerFormat
+			var elementName:String;
+			var description:Object;
+			if (key == LinkElement.LINK_NORMAL_FORMAT_NAME || key == LinkElement.LINK_ACTIVE_FORMAT_NAME || key == LinkElement.LINK_HOVER_FORMAT_NAME)
+			{
+				elementName = "TextLayoutFormat";
+				description = TextLayoutFormat.description;
+			}
+			else if (key == ListElement.LIST_MARKER_FORMAT_NAME)
+			{
+				elementName = "ListMarkerFormat";
+				description = ListMarkerFormat.description;
+			}
+			
+			if (elementName == null)
+				return null;
+				
+			// create the  element
+			var formatXML:XML = <{elementName}/>;
+			formatXML.setNamespace(flowNS);
+			var sortableStyles:Array = createStylesFromDescription(styleDict, description, true, null);
+			exportStyles(XMLList(formatXML), sortableStyles);
+			
+			// create the link format element
+			var propertyXML:XMLList = XMLList(<{key}/>);
+			propertyXML.appendChild(formatXML);
+			return propertyXML;
+		}
+			
 		protected override function exportFlowElement(flowElement:FlowElement):XMLList
 		{
 			var rslt:XMLList = super.exportFlowElement(flowElement);
 			
-			var coreStyles:Object = flowElement.coreStyles;
-			if (coreStyles)
+			var allStyles:Object = flowElement.styles;
+			if (allStyles)
 			{
 				// WhiteSpaceCollapse attribute should never be exported (except on TextFlow -- handled separately)
-				delete coreStyles[TextLayoutFormat.whiteSpaceCollapseProperty.name];
-				exportStyles(rslt, coreStyles, formatDescription);
+				delete allStyles[TextLayoutFormat.whiteSpaceCollapseProperty.name];
+				// To prevent "inherit" from getting exported for the root node, comment in the following line, and remove the one after that (only need one call to exportStyles
+				var sortableStyles:Array = createStylesFromDescription(allStyles,formatDescription,true,flowElement.parent ? null : [FormatValue.INHERIT]);
+				exportStyles(rslt, sortableStyles );
 			}
 			
 			// export id and styleName
 			if (flowElement.id != null)
 				rslt.@["id"] = flowElement.id;
-			if (flowElement.styleName != null)
-				rslt.@["styleName"] = flowElement.styleName;
-			// export any user defined styles
-			var styles:Object = flowElement.userStyles;
-			if (styles)
-				exportStyles(rslt, styles);
+			if (flowElement.typeName != flowElement.defaultTypeName)
+				rslt.@["typeName"] = flowElement.typeName;
 				
 			return rslt;
 		}
@@ -176,7 +189,8 @@ package flashx.textLayout.conversion
 		//	output.@rotation = image.rotation;  don't support rotation yet
 			if (image.source != null)
 				output.@source = image.source;
-			// FUTURE!!! output.@float = image.float;
+			if (image.float != undefined)
+				output.@float = image.float;
 						
 			return output;
 		}
@@ -210,6 +224,15 @@ package flashx.textLayout.conversion
 			return exportContainerFormattedElement(exporter, div);
 		}
 		
+		/** Base functionality for exporting a SubParagraphGroupElement. Exports as a FlowGroupElement
+		 * @param exporter	Root object for the export
+		 * @param elem	Element to export
+		 * @return XMLList	XML for the element
+		 */
+		static public function exportSPGE(exporter:BaseTextLayoutExporter, elem:SubParagraphGroupElement):XMLList
+		{
+			return exportFlowGroupElement(exporter, elem);
+		}
 		/** Base functionality for exporting a TCYElement. Exports as a FlowGroupElement
 		 * @param exporter	Root object for the export
 		 * @param tcy	Element to export
@@ -218,20 +241,6 @@ package flashx.textLayout.conversion
 		static public function exportTCY(exporter:BaseTextLayoutExporter, tcy:TCYElement):XMLList
 		{
 			return exportFlowGroupElement(exporter, tcy);
-		}
-		
-		/** Queues the object for export later, generates an ID for it, and returns
-		 * the ID.
-		 * @param exporter	Root object for the export
-		 * @param obj	Element to export
-		 * @return String	ID of the object
-		 */
-		static private function exportToName(exporter:BaseTextLayoutExporter, obj:Object):String
-		{
-			var newName:String = "ObjectID" + nameCounter.toString();
-			TextLayoutExporter(exporter).queueForExport(obj, newName);
-			nameCounter++;
-			return newName;
 		}
 		
 		override protected function get formatDescription():Object

@@ -1,21 +1,24 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
-	import flashx.textLayout.edit.ElementRange;
+	import flashx.textLayout.debug.assert;
+	import flashx.textLayout.edit.ModelEdit;
 	import flashx.textLayout.edit.ParaEdit;
+	import flashx.textLayout.edit.PointFormat;
 	import flashx.textLayout.edit.SelectionState;
+	import flashx.textLayout.edit.TextFlowEdit;
+	import flashx.textLayout.elements.FlowElement;
 	import flashx.textLayout.elements.FlowLeafElement;
-	import flashx.textLayout.elements.InlineGraphicElement;
-	import flashx.textLayout.elements.ParagraphElement;
+	import flashx.textLayout.elements.LinkElement;
 	import flashx.textLayout.elements.SpanElement;
 	import flashx.textLayout.elements.TCYElement;
 	import flashx.textLayout.formats.ITextLayoutFormat;
@@ -41,9 +44,8 @@ package flashx.textLayout.operations
 		private var delSelOp:DeleteTextOperation = null; 
 		/** @private - this should be private but too late for code changes on Labs */
 		public var _text:String;
-		private var adjustedForInsert:Boolean = false;
 		
-		private var _characterFormat:ITextLayoutFormat;
+		private var _pointFormat:ITextLayoutFormat;
 			
 		/** 
 		 * Creates an InsertTextOperation object.
@@ -61,7 +63,7 @@ package flashx.textLayout.operations
 		{
 			super(operationState);
 			
-			_characterFormat = operationState.pointFormat;
+			_pointFormat = operationState.pointFormat;
 			_text = text;
 			
 			initialize(deleteSelectionState);
@@ -120,125 +122,117 @@ package flashx.textLayout.operations
 		*/
 		public function get characterFormat():ITextLayoutFormat
 		{
-			return _characterFormat;
+			return _pointFormat;
 		}
 		public function set characterFormat(value:ITextLayoutFormat):void
 		{
-			_characterFormat = new TextLayoutFormat(value);
+			_pointFormat = new PointFormat(value);
 		}
 		
+		private function doDelete(leaf:FlowLeafElement):ITextLayoutFormat
+		{			
+			// User selected a range of text and is replacing it. We're doing the delete here.
+			// We preserve the format from the deleted text, and apply it to the text insert,
+			// unless the user has specified an alternate format.
+			var deleteFormat:PointFormat = PointFormat.createFromFlowElement(textFlow.findLeaf(absoluteStart));
+			var beforeDeleteFormat:PointFormat = absoluteStart == leaf.getParagraph().getAbsoluteStart() ? null : PointFormat.createFromFlowElement(textFlow.findLeaf(absoluteStart - 1));
+
+			if (delSelOp.doOperation())		// figure out what to do here
+			{
+				//do not change characterFormat if user specified one already, or if its the same as in the surrounding text.
+				// If the surrounding text is the same, forcing the point format requires more composition because it inserts
+				// the text in its own span.
+				if (!_pointFormat && (absoluteStart < absoluteEnd) && PointFormat.isEqual(deleteFormat, beforeDeleteFormat))
+					deleteFormat = null;
+				else 
+				{
+					// If the leaf element is empty, remove it now
+					if (leaf.textLength == 0) 
+						leaf.parent.removeChild(leaf);
+				}
+			} 
+			return deleteFormat;
+		}
+				
+		private function applyPointFormat(span:SpanElement, pointFormat:ITextLayoutFormat):void
+		{
+			if (!TextLayoutFormat.isEqual(pointFormat, span.format))
+			{
+				var spanFormat:TextLayoutFormat = new TextLayoutFormat(span.format);
+				spanFormat.apply(pointFormat);
+				span.format = spanFormat;
+			}
+			if (pointFormat is PointFormat)
+			{
+				var pf:PointFormat = pointFormat as PointFormat;
+				if (pf.linkElement)
+				{
+					if (pf.linkElement.href)
+					{
+						TextFlowEdit.makeLink(textFlow, absoluteStart, absoluteStart + _text.length, pf.linkElement.href, pf.linkElement.target);
+						var linkLeaf:FlowLeafElement = textFlow.findLeaf(absoluteStart);
+						var linkElement:FlowElement = linkLeaf.getParentByType(LinkElement);
+						linkElement.format = pf.linkElement.format;
+					}
+				}
+				if (pf.tcyElement)
+				{
+						TextFlowEdit.makeTCY(textFlow, absoluteStart, absoluteStart + _text.length);
+						var tcyLeaf:FlowLeafElement = textFlow.findLeaf(absoluteStart);
+						var tcyElement:FlowElement = tcyLeaf.getParentByType(TCYElement);
+						tcyElement.format = pf.tcyElement.format;
+				}
+				else if (span.getParentByType(TCYElement))
+					TextFlowEdit.removeTCY(textFlow, absoluteStart, absoluteStart + _text.length);
+			}
+		}
 		private function doInternal():void
 		{
-			var leafEl:FlowLeafElement = textFlow.findLeaf(absoluteStart);
-			var tcyEl:TCYElement = null;
+			var deleteFormat:ITextLayoutFormat;
 			
-			if(leafEl is InlineGraphicElement && leafEl.parent is TCYElement)
-			{
-				tcyEl = leafEl.parent as TCYElement;
-			}
-			
-			if (delSelOp != null) {	
-				var deleteFormat:ITextLayoutFormat = new TextLayoutFormat(textFlow.findLeaf(absoluteStart).format);
-				if (delSelOp.doOperation())		// figure out what to do here
-				{
-					//do not change characterFormat if user specified one already
-					if ((characterFormat == null) && (absoluteStart < absoluteEnd))
-					{
-						_characterFormat = deleteFormat;
-					} 
-					else 
-					{
-						if (leafEl.textLength == 0) 
-						{
-							var pos:int = leafEl.parent.getChildIndex(leafEl);
-							leafEl.parent.replaceChildren(pos, pos + 1, null);
-						}
-					}
-					
-					if(tcyEl && tcyEl.numChildren == 0)
-					{
-						leafEl = new SpanElement();
-						tcyEl.replaceChildren(0,0,leafEl);
-					}
-				} 
-			} 
-			
-			// Wasteful, but it gives us the leanLeft logic for insert - which we only want to do if this is a point selection.
-			
-			var range:ElementRange;
-			var useExistingLeaf:Boolean = false;
-			// favor using leaf we have if it's valid (i.e., it has a paragraph in its parent chain and it is still inside a TextFlow)
-			if (absoluteStart >= absoluteEnd || leafEl.getParagraph() == null || leafEl.getTextFlow() == null)
-			{
-				range = ElementRange.createElementRange(textFlow,absoluteStart, absoluteStart);
-			}
-			else
-			{
-				range = new ElementRange();
-				range.firstParagraph = leafEl.getParagraph();
-				range.firstLeaf = leafEl;
-				useExistingLeaf = true;
-			}
-			var paraSelBegIdx:int = absoluteStart-range.firstParagraph.getAbsoluteStart();
-			
-			// force insert to use the leaf given if we have a good one
-			ParaEdit.insertText(range.firstParagraph, range.firstLeaf, paraSelBegIdx, _text, useExistingLeaf);
+			if (delSelOp != null) 
+				deleteFormat = doDelete(textFlow.findLeaf(absoluteStart));
+						
+			var span:SpanElement = ParaEdit.insertText(textFlow, absoluteStart, _text, _pointFormat != null || deleteFormat != null/* createNewSpan */);
 			if (textFlow.interactionManager)
 				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, _text.length);
 			
-			if (_characterFormat && !TextLayoutFormat.isEqual(_characterFormat, range.firstLeaf.format))
-				ParaEdit.applyTextStyleChange(textFlow,absoluteStart,absoluteStart+_text.length,_characterFormat,null);
+			if (span != null)
+			{
+				if (deleteFormat)
+				{
+					span.format = deleteFormat;
+					applyPointFormat(span, deleteFormat);
+					if ((deleteFormat is PointFormat) && PointFormat(deleteFormat).linkElement && PointFormat(deleteFormat).linkElement.href && originalSelectionState.selectionManagerOperationState && textFlow.interactionManager)
+					{
+						// set pointFormat from leafFormat, to insure link attributes are propagated from replaced text to next insertion
+						// if I select a range of text in a link, and type over it to replace, the new text should be in a link with the same settings.
+						var state:SelectionState = textFlow.interactionManager.getSelectionState();
+						state.pointFormat = PointFormat.clone(deleteFormat as PointFormat);
+						textFlow.interactionManager.setSelectionState(state);
+					}
+				}
+				if (_pointFormat)
+					applyPointFormat(span, _pointFormat);
+			}
 		}
 		
 		/** @private */
 		public override function doOperation():Boolean
 		{
 			doInternal();
-			if (originalSelectionState.selectionManagerOperationState && textFlow.interactionManager)
-			{
-				var state:SelectionState = textFlow.interactionManager.getSelectionState();
-				if (state.pointFormat)
-				{
-					state.pointFormat = null;
-					textFlow.interactionManager.setSelectionState(state);
-				}
-			}
 			return true;
 		}
 	
 		/** @private */
 		public override function undo():SelectionState
 		{ 
-			var para:ParagraphElement = textFlow.findAbsoluteParagraph(absoluteStart);
-			// paragraph relative offset - into the store
-			var paraSelBegIdx:int = absoluteStart-para.getAbsoluteStart();
-
-			ParaEdit.deleteText(para, paraSelBegIdx, _text.length);
-			if (textFlow.interactionManager)
-				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, -_text.length);
+			ModelEdit.deleteText(textFlow, absoluteStart, absoluteStart + _text.length, false);
 			
 			var newSelectionState:SelectionState = originalSelectionState;
 			if (delSelOp != null)
-			{
 				newSelectionState = delSelOp.undo();
-			}
 			
-			if (adjustedForInsert)
-			{
-				var newBegIdx:int = newSelectionState.anchorPosition;
-				var newEndIdx:int = newSelectionState.activePosition;
-				if (newEndIdx > newBegIdx) newEndIdx--;
-				else newBegIdx--;
-				
-				if (absoluteStart < absoluteEnd)
-				{
-					return new SelectionState(textFlow, newBegIdx, newEndIdx, newSelectionState.pointFormat);
-				}
-				else
-				{
-					return new SelectionState(textFlow, newBegIdx, newEndIdx, originalSelectionState.pointFormat);
-				}
-			}
 			return originalSelectionState;
 		}
 		
@@ -281,8 +275,11 @@ package flashx.textLayout.operations
 				if (originalSelectionState.absoluteStart + _text.length != insertOp.originalSelectionState.absoluteStart)
 					return null;
 				if (((originalSelectionState.pointFormat == null) && (insertOp.originalSelectionState.pointFormat == null)) ||
-					(TextLayoutFormat.isEqual(originalSelectionState.pointFormat, insertOp.originalSelectionState.pointFormat)))
+					(PointFormat.isEqual(originalSelectionState.pointFormat, insertOp.originalSelectionState.pointFormat)))
+				{
 					_text += insertOp.text;
+					setGenerations(beginGeneration,insertOp.endGeneration);
+				}
 				else
 					return null;
 				setGenerations(beginGeneration,insertOp.endGeneration);

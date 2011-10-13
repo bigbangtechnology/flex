@@ -1,16 +1,18 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
+	import flashx.textLayout.elements.Configuration;
 	import flashx.textLayout.edit.SelectionFormat;
+	import flashx.textLayout.formats.IListMarkerFormat;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	/** Read-only interface to a configuration object.  Used by TextFlow to guarantee it has an unchangeable 
 	 * configuration once its constructed.
@@ -20,6 +22,14 @@ package flashx.textLayout.elements
 	 */
 	public interface IConfiguration 
 	{
+		/** Creates a writeable clone of the IConfiguration object.
+		 *
+		 * @playerversion Flash 10.2
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 */
+		function clone():Configuration;
+		
 		/** 
 		* Specifies whether the TAB key is entered as text by Text Layout Framework, or Flash Player or AIR handles it and 
 		* turns it into a tabbed panel event. 
@@ -128,7 +138,24 @@ package flashx.textLayout.elements
 		*/
 		
 		function get defaultLinkActiveFormat():ITextLayoutFormat
+
+		/** 
+		 * Specifies the active character format attributes that initially apply for all ListItems in the text 
+		 * flow. These are defaults for new ListItemElements objects that don't specify values for these attributes. 
+		 *
+		 * <p>Default is <code>null</code>.</p>
+		 *
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 *
+		 * @see FlowElement#linkActiveFormat 
+		 * @see flashx.textLayout.formats.ITextLayoutFormat ITextLayoutFormat
+		 * @see LinkElement
+		 */
 		
+		function get defaultListMarkerFormat():IListMarkerFormat
+			
 		/** 
 		* Specifies the initial format TextLayoutFormat configuration for a text flow (TextFlow object).
 		*
@@ -270,7 +297,7 @@ package flashx.textLayout.elements
 		* <p>Default value is <code>false</code>.</p>
 		*
 		* @see flashx.textLayout.compose.StandardFlowComposer StandardFlowComposer
-		* @see flash.text.engine.TextBlock#releaseLineCreationData TextBlock.releaseLineCreationData
+		* @see flash.text.engine.TextBlock#releaseLineCreationData() TextBlock.releaseLineCreationData()
 		* 
 		* @playerversion Flash 10
 		* @playerversion AIR 1.5
@@ -294,5 +321,6 @@ package flashx.textLayout.elements
 		* @langversion 3.0
 		*/
 		function get inlineGraphicResolverFunction():Function;
+
 	}
 }

@@ -13,10 +13,12 @@
 package spark.components
 {
 
+import mx.core.IVisualElement;
 import mx.core.UIComponentGlobals;
 import mx.core.mx_internal;
 
 import spark.components.supportClasses.DropDownListBase;
+import spark.core.IDisplayText;
 import spark.components.supportClasses.TextBase;
 import spark.utils.LabelUtil;
     
@@ -27,6 +29,14 @@ use namespace mx_internal;
 //--------------------------------------
 
 [IconFile("DropDownList.png")]
+
+/**
+ * Because this component does not define a skin for the mobile theme, Adobe
+ * recommends that you not use it in a mobile application. Alternatively, you
+ * can define your own mobile skin for the component. For more information,
+ * see <a href="http://help.adobe.com/en_US/Flex/4.0/UsingSDK/WS53116913-F952-4b21-831F-9DE85B647C8A.html">Spark Skinning</a>.
+ */
+[DiscouragedForProfile("mobileDevice")]
 
 /**
  *  The DropDownList control contains a drop-down list
@@ -56,6 +66,12 @@ use namespace mx_internal;
  *  such as ButtonBar, ComboBox, DropDownList, List, and TabBar) do not support the BasicLayout class
  *  as the value of the <code>layout</code> property. 
  *  Do not use BasicLayout with the Spark list-based controls.</p>
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *  
  *  <p>The DropDownList control has the following default characteristics:</p>
  *  <table class="innertable">
@@ -134,7 +150,7 @@ public class DropDownList extends DropDownListBase
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-    public var labelDisplay:TextBase;
+    public var labelDisplay:IDisplayText;
        
     //--------------------------------------------------------------------------
     //
@@ -162,7 +178,7 @@ public class DropDownList extends DropDownListBase
      */
     override public function get baselinePosition():Number
     {
-        return getBaselinePositionForPart(labelDisplay);
+        return getBaselinePositionForPart(labelDisplay as IVisualElement);
     }
 
     //--------------------------------------------------------------------------
@@ -180,6 +196,8 @@ public class DropDownList extends DropDownListBase
      */
     private var _prompt:String = "";
 
+    [Inspectable(category="General", defaultValue="")]
+    
     /**
      *  The prompt for the DropDownList control. 
      *  The prompt is a String that is displayed in the
@@ -218,6 +236,8 @@ public class DropDownList extends DropDownListBase
     //  Overridden Properties
     //
     //--------------------------------------------------------------------------
+    
+    [Inspectable(category="Data")]
     
     /**
      *  Layouts use the preferred size of the <code>typicalItem</code>
@@ -292,36 +312,38 @@ public class DropDownList extends DropDownListBase
      */
     override protected function measure():void
     {
+        var labelComp:TextBase = labelDisplay as TextBase;
+        
         // If typicalItem is set, then use it for measurement
-        if (labelDisplay && typicalItem != null)
+        if (labelComp && typicalItem != null)
         {   
             // Save the labelDisplay's dimensions in case we clear out typicalItem
             if (!sizeSetByTypicalItem)
             {
-                labelDisplayExplicitWidth = labelDisplay.explicitWidth;
-                labelDisplayExplicitHeight = labelDisplay.explicitHeight;
+                labelDisplayExplicitWidth = labelComp.explicitWidth;
+                labelDisplayExplicitHeight = labelComp.explicitHeight;
                 sizeSetByTypicalItem = true;
             }
             
-            labelDisplay.explicitWidth = NaN;
-            labelDisplay.explicitHeight = NaN;
+            labelComp.explicitWidth = NaN;
+            labelComp.explicitHeight = NaN;
             
             // Swap in the typicalItem into the labelDisplay
             updateLabelDisplay(typicalItem);
             UIComponentGlobals.layoutManager.validateClient(skin, true);
             
             // Force the labelDisplay to be sized to the measured size
-            labelDisplay.width = labelDisplay.measuredWidth;
-            labelDisplay.height = labelDisplay.measuredHeight;
+            labelComp.width = labelComp.measuredWidth;
+            labelComp.height = labelComp.measuredHeight;
             
             // Set the labelDisplay back to selectedItem
             updateLabelDisplay();
         }
-        else if (sizeSetByTypicalItem && typicalItem == null)
+        else if (labelComp && sizeSetByTypicalItem && typicalItem == null)
         {
             // Restore the labelDisplay to its original size
-            labelDisplay.width = labelDisplayExplicitWidth;
-            labelDisplay.height = labelDisplayExplicitHeight;
+            labelComp.width = labelDisplayExplicitWidth;
+            labelComp.height = labelDisplayExplicitHeight;
             sizeSetByTypicalItem = false;
         }
         

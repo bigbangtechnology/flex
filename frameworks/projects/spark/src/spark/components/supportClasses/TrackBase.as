@@ -18,9 +18,11 @@ import flash.events.FocusEvent;
 import flash.events.MouseEvent;
 import flash.geom.Point;
 
+import mx.core.InteractionMode;
 import mx.events.FlexEvent;
 import mx.events.ResizeEvent;
 import mx.events.SandboxMouseEvent;
+import mx.events.TouchInteractionEvent;
 
 import spark.components.Button;
 import spark.events.TrackBaseEvent;
@@ -263,6 +265,8 @@ public class TrackBase extends Range
     // maximum
     //---------------------------------     
     
+    [Inspectable(category="General", defaultValue="100.0")]
+    
     /**
      *  @private
      *  Overidden so that this property can be the source of a binding expression.
@@ -288,6 +292,8 @@ public class TrackBase extends Range
     // minimum
     //---------------------------------     
 
+    [Inspectable(category="General", defaultValue="0.0")]
+    
     /**
      *  @private
      *  Overidden so that this property can be the source of a binding expression.
@@ -310,10 +316,67 @@ public class TrackBase extends Range
     }
     
     //---------------------------------
+    // scaleX
+    //---------------------------------
+    
+    /**
+     *  @private
+     *  Overridden so that we can call invalidateDisplayList() 
+     *  when scaleX changes since the positioning of the thumb 
+     *  is incorrect when scaleX = 0 thanks to globalToLocal/localToGlobal().
+     * 
+     *  <p>We override it here in TrackBase instead of where the issue 
+     *  actually exists (HScrollBar, HSlider, VScrollBar, VSlider) because it 
+     *  is easier this way and most subclasses who rely on updateSkinDisplayList() 
+     *  will probably run in to this issue.</p>
+     */
+    override public function set scaleX(value:Number):void
+    {
+        if (value == super.scaleX)
+            return;
+        
+        // if we were scaled at 0 and are being set to something else,
+        // invalidate the display list (see comment above)
+        if (super.scaleX == 0)
+            invalidateDisplayList();
+        
+        super.scaleX = value;
+    }
+    
+    //---------------------------------
+    // scaleY
+    //---------------------------------
+    
+    /**
+     *  @private
+     *  Overridden so that we can call invalidateDisplayList() 
+     *  when scaleY changes since the positioning of the thumb 
+     *  is incorrect when scaleY = 0 thanks to globalToLocal/localToGlobal().
+     * 
+     *  <p>We override it here in TrackBase instead of where the issue 
+     *  actually exists (HScrollBar, HSlider, VScrollBar, VSlider) because it 
+     *  is easier this way and most subclasses who rely on updateSkinDisplayList() 
+     *  will probably run in to this issue.</p>
+     */
+    override public function set scaleY(value:Number):void
+    {
+        if (value == super.scaleY)
+            return;
+        
+        // if we were scaled at 0 and are being set to something else,
+        // invalidate the display list (see comment above)
+        if (super.scaleY == 0)
+            invalidateDisplayList();
+        
+        super.scaleY = value;
+    }
+    
+    //---------------------------------
     // value
     //---------------------------------     
 
     [Bindable(event="valueCommit")]  // Warning: must match the Bindable tag in Range
+    [Inspectable(category="General", defaultValue="0.0")]
     
     /**
      *  @private 
@@ -417,14 +480,18 @@ public class TrackBase extends Range
         if (instance == thumb)
         {
             thumb.addEventListener(MouseEvent.MOUSE_DOWN, thumb_mouseDownHandler);
+            thumb.addEventListener(TouchInteractionEvent.TOUCH_INTERACTION_STARTING, thumb_touchInteractionStartingHandler);
             thumb.addEventListener(ResizeEvent.RESIZE, thumb_resizeHandler);
             thumb.addEventListener(FlexEvent.UPDATE_COMPLETE, thumb_updateCompleteHandler);
             thumb.stickyHighlighting = true;
         }
         else if (instance == track)
         {
-            track.addEventListener(MouseEvent.MOUSE_DOWN, track_mouseDownHandler);
             track.addEventListener(ResizeEvent.RESIZE, track_resizeHandler);
+            
+            // track is only clickable if in mouse interactionMode
+            if (getStyle("interactionMode") == InteractionMode.MOUSE)
+                track.addEventListener(MouseEvent.MOUSE_DOWN, track_mouseDownHandler);
         }
     }
 
@@ -438,6 +505,7 @@ public class TrackBase extends Range
         if (instance == thumb)
         {
             thumb.removeEventListener(MouseEvent.MOUSE_DOWN, thumb_mouseDownHandler);
+            thumb.removeEventListener(TouchInteractionEvent.TOUCH_INTERACTION_STARTING, thumb_touchInteractionStartingHandler);
             thumb.removeEventListener(ResizeEvent.RESIZE, thumb_resizeHandler);            
             thumb.removeEventListener(FlexEvent.UPDATE_COMPLETE, thumb_updateCompleteHandler);            
         }
@@ -447,6 +515,29 @@ public class TrackBase extends Range
             track.removeEventListener(ResizeEvent.RESIZE, track_resizeHandler);
         }
     }
+    
+    /**
+     *  @private
+     */ 
+    override public function styleChanged(styleName:String):void
+    {
+        var allStyles:Boolean = styleName == null || styleName == "styleName";
+        
+        super.styleChanged(styleName);
+        
+        if (allStyles || styleName == "interactionMode")
+        {
+            if (track)
+            {
+                // track is only clickable if in mouse interactionMode
+                if (getStyle("interactionMode") == InteractionMode.MOUSE)
+                    track.addEventListener(MouseEvent.MOUSE_DOWN, track_mouseDownHandler);
+                else
+                    track.removeEventListener(MouseEvent.MOUSE_DOWN, track_mouseDownHandler);
+            }
+        }
+    }
+    
     /**
      *  @private
      *  If the component is in focus, then it should respond to mouseWheel events. We listen to these
@@ -584,6 +675,15 @@ public class TrackBase extends Range
         
         dispatchEvent(new TrackBaseEvent(TrackBaseEvent.THUMB_PRESS));
         dispatchEvent(new FlexEvent(FlexEvent.CHANGE_START));
+    }
+    
+    /**
+     *  @private
+     */
+    protected function thumb_touchInteractionStartingHandler(event:TouchInteractionEvent):void
+    {
+        // cancel this event b/c I want to control it
+        event.preventDefault();
     }
 
     /**

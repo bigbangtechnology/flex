@@ -27,14 +27,6 @@ component while in the fullScreen state.
 		[HostComponent("spark.components.Button")]
 	</fx:Metadata>
 	
-	<!-- states -->
-	<s:states>
-		<s:State name="up" />
-		<s:State name="over" />
-		<s:State name="down" />
-		<s:State name="disabled"/>
-	</s:states>
-    
     <!-- states -->
     <s:states>
         <s:State name="up" />

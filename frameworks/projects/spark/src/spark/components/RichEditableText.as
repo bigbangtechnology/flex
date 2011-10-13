@@ -21,7 +21,6 @@ package spark.components
     import flash.geom.Rectangle;
     import flash.system.IME;
     import flash.system.IMEConversionMode;
-    import flash.text.TextFormat;
     import flash.text.engine.ElementFormat;
     import flash.text.engine.FontDescription;
     import flash.text.engine.FontLookup;
@@ -51,10 +50,13 @@ package spark.components
     import flashx.textLayout.events.FlowOperationEvent;
     import flashx.textLayout.events.SelectionEvent;
     import flashx.textLayout.events.StatusChangeEvent;
+    import flashx.textLayout.factory.StringTextLineFactory;
+    import flashx.textLayout.factory.TextFlowTextLineFactory;
     import flashx.textLayout.formats.BlockProgression;
     import flashx.textLayout.formats.Category;
     import flashx.textLayout.formats.ITextLayoutFormat;
     import flashx.textLayout.formats.TextLayoutFormat;
+    import flashx.textLayout.operations.CopyOperation;
     import flashx.textLayout.operations.CutOperation;
     import flashx.textLayout.operations.DeleteTextOperation;
     import flashx.textLayout.operations.FlowOperation;
@@ -72,12 +74,12 @@ package spark.components
     import mx.events.FlexEvent;
     import mx.managers.IFocusManager;
     import mx.managers.IFocusManagerComponent;
-    import mx.managers.ISystemManager;
     import mx.resources.ResourceManager;
     import mx.utils.StringUtil;
     
     import spark.components.supportClasses.RichEditableTextContainerManager;
     import spark.core.CSSTextLayoutFormat;
+    import spark.core.IEditableText;
     import spark.core.IViewport;
     import spark.core.NavigationUnit;
     import spark.events.TextOperationEvent;
@@ -195,9 +197,14 @@ package spark.components
     //--------------------------------------
     
     [AccessibilityClass(implementation="spark.accessibility.RichEditableTextAccImpl")]
+    
     [DefaultProperty("content")]
+    
     [IconFile("RichEditableText.png")]
+    
     [DefaultTriggerEvent("change")]
+    
+    [DiscouragedForProfile("mobileDevice")]
     
     /**
      *  RichEditableText is a low-level UIComponent for displaying,
@@ -304,9 +311,13 @@ package spark.components
      *  <code>maxWidth</code> as you type. It grows in height when you 
      *  press the Enter key to start a new line.</p>
      *
-     *  <p>The <code>widthInChars</code> and <code>heightInChars</code>
+     *  <p>The <code>widthInChars</code> and <code>heightInLines</code>
      *  properties provide a convenient way to specify the width and height
      *  in a way that scales with the font size.
+     *  You can use the <code>typicalText</code> property as well.
+     *  Note that if you use <code>typicalText</code>, the
+     *  <code>widthInChars</code> and <code>heightInLines</code>
+     *  are ignored.
      *  You can also specify an explicit width or height in pixels,
      *  or use a percent width and height, or use constraints such as
      *  <code>left</code> and <code>right</code>
@@ -359,12 +370,13 @@ package spark.components
      *  and ends when it loses focus.</p>
      *
      *  <p>RichEditableText uses TLF's TextContainerManager class
-     *  to handle its text display, scrolling, selection, and editing.</p>
+     *  to handle its text display, scrolling, selection, editing and context menu.</p>
      *
-     *  @see spark.components.Label
-     *  @see spark.components.RichText
-     *  @see spark.utils.TextFlowUtil
-     *  @see flashx.textLayout.container.TextContainerManager
+     *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+     *  create an item renderer.
+     *  For information about creating an item renderer, see 
+     *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+     *  Custom Spark item renderers</a>. </p>
      *
      *  @mxml
      *
@@ -391,6 +403,7 @@ package spark.components
      *    selectionHighlighting="TextSelectionHighlighting.WHEN_FOCUSED"
      *    text=""
      *    textFlow="<i>TextFlow</i>"
+     *    typicalText=null
      *    verticalScrollPosition="0"
      *    widthInChars="NaN"
      *  
@@ -409,9 +422,15 @@ package spark.components
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
+     *
+     *  @see spark.components.Label
+     *  @see spark.components.RichText
+     *  @see spark.utils.TextFlowUtil
+     *  @see flashx.textLayout.container.TextContainerManager
      */
     public class RichEditableText extends UIComponent
-        implements IFocusManagerComponent, IIMESupport, ISystemCursorClient, IViewport
+        implements IFocusManagerComponent, IIMESupport, ISystemCursorClient, 
+                   IViewport, IEditableText
     {
         include "../core/Version.as";
         
@@ -464,14 +483,8 @@ package spark.components
             GlobalSettings.enableDefaultTabStops = 
                 !Configuration.playerEnablesArgoFeatures;
             
-            staticConfiguration = 
-                Configuration(TextContainerManager.defaultConfiguration).clone();
-            staticConfiguration.manageEnterKey = false; // default is true
-            staticConfiguration.manageTabKey = false;   // default is false
-            
             staticPlainTextImporter =
-                TextConverter.getImporter(TextConverter.PLAIN_TEXT_FORMAT,
-                    staticConfiguration);
+                TextConverter.getImporter(TextConverter.PLAIN_TEXT_FORMAT);
             
             // Throw import errors rather than return a null textFlow.
             // Alternatively, the error strings are in the Vector, importer.errors.
@@ -493,15 +506,23 @@ package spark.components
          *  @private
          */
         private static var classInitialized:Boolean = false;
+                
+        /**
+         *  @private
+         *  This TLF object composes TextLines from a text String.
+         *  We use it when the 'typicalText' property is set to a String
+         *  that doesn't contain linebreaks.
+         */
+        private static var staticStringFactory:StringTextLineFactory;
         
         /**
          *  @private
-         *  Create a single Configuration used by all Text instances.  
-         *  It tells the TextContainerManager that we don't want it 
-         *  to handle the ENTER key, because we need the ENTER key to behave 
-         *  differently based on the 'multiline' property.
+         *  This TLF object composes TextLines from a TextFlow.
+         *  We use it when the 'typicalText is set to a String
+         *  that contains linebreaks (and therefore is interpreted
+         *  as multiple paragraphs).
          */
-        private static var staticConfiguration:Configuration;
+        private static var staticTextFlowFactory:TextFlowTextLineFactory;
         
         /**
          *  @private
@@ -529,6 +550,31 @@ package spark.components
         //  Class methods
         //
         //--------------------------------------------------------------------------
+        /**
+         *  @private
+         */
+        public static function getNumberOrPercentOf(value:Object,
+                                                    n:Number):Number
+        {
+            // If 'value' is a Number like 10.5, return it.
+            if (value is Number)
+                return Number(value);
+            
+            // If 'value' is a percentage String like "10.5%",
+            // return that percentage of 'n'.
+            if (value is String)
+            {
+                var len:int = String(value).length;
+                if (len >= 1 && value.charAt(len - 1) == "%")
+                {
+                    var percent:Number = Number(value.substring(0, len - 1));
+                    return percent / 100 * n;
+                }
+            }
+            
+            // Otherwise, return NaN.
+            return NaN;
+        }        
         
         /**
          *  @private
@@ -540,7 +586,7 @@ package spark.components
                 strToInsert +
                 str.substring(end, str.length);
         }
-        
+
         //--------------------------------------------------------------------------
         //
         //  Constructor
@@ -571,6 +617,7 @@ package spark.components
             _textContainerManager = createTextContainerManager();
             
             // Add event listeners on this component.
+            addEventListener(Event.REMOVED_FROM_STAGE, removedFromStageHandler);
             
             // The focusInHandler is called by the TCMContainer focusInHandler.
             // The focusOutHandler is called by the TCMContainer focusOutHandler.
@@ -614,6 +661,12 @@ package spark.components
         //  Variables
         //
         //--------------------------------------------------------------------------
+        
+        /**
+         *  @private
+         *  The composition bounds used when creating the TextLines.
+         */
+        mx_internal var unbounded:Rectangle = new Rectangle(0, 0, NaN, NaN);
         
         /**
          *  @private
@@ -676,6 +729,16 @@ package spark.components
         /**
          *  @private
          */
+        private var inUpdateDLMethod:Boolean = false;
+        
+        /**
+         *  @private
+         */
+        private var remeasuringText:Boolean = false;
+
+        /**
+         *  @private
+         */
         mx_internal var passwordChar:String = "*";
         
         /**
@@ -716,11 +779,6 @@ package spark.components
         
         /**
          *  @private
-         */    
-        private var errorCaught:Boolean = false;
-        
-        /**
-         *  @private
          *  Hold the previous editingMode while using a specific instance manager
          *  so that the editingMode can be restored when the instance manager is
          *  released.
@@ -755,6 +813,25 @@ package spark.components
          *  contents.
          */
         mx_internal var autoSize:Boolean = false;
+        
+        /**
+         *  @private
+         */
+        private var lastMeasuredWidth:Number = NaN;
+        
+        /**
+         *  @private
+         */
+        private var lastMeasuredHeight:Number = NaN;
+        
+        /**
+         *  @private
+         */
+        private var lastUnscaledWidth:Number;
+        /**
+         *  @private
+         */
+        private var lastUnscaledHeight:Number;
         
         //--------------------------------------------------------------------------
         //
@@ -834,6 +911,19 @@ package spark.components
             invalidateDisplayList();
         }
         
+        //----------------------------------
+        // isTruncated
+        //----------------------------------
+        
+        /**
+         *  @private
+         */
+        public function get isTruncated():Boolean
+        {
+            // This class does not support truncation
+            return false;
+        }
+               
         //----------------------------------
         // percentHeight
         //----------------------------------
@@ -1016,7 +1106,7 @@ package spark.components
         //----------------------------------
         //  horizontalScrollPosition
         //----------------------------------
-        
+
         /**
          *  @private
          */
@@ -1028,7 +1118,8 @@ package spark.components
         private var horizontalScrollPositionChanged:Boolean = false;
         
         [Bindable("propertyChange")]
-        
+        [Inspectable(defaultValue="0", minValue="0.0")]
+                
         /**
          *  The number of pixels by which the text is scrolled horizontally.
          *
@@ -1085,7 +1176,8 @@ package spark.components
         private var verticalScrollPositionChanged:Boolean = false;
         
         [Bindable("propertyChange")]
-        
+        [Inspectable(defaultValue="0", minValue="0.0")]
+                
         /**
          *  The number of pixels by which the text is scrolled vertically.
          *
@@ -1163,7 +1255,7 @@ package spark.components
          *  within <p>, <span>, etc.
          */
         [RichTextContent]
-        
+                
         /**
          *  This property is intended for use in MXML at compile time;
          *  to get or set rich text content at runtime,
@@ -1255,9 +1347,11 @@ package spark.components
          */
         private var displayAsPasswordChanged:Boolean = false;
         
+        [Inspectable(category="General", defaultValue="false")]
+        
         /**
          *  @copy flash.text.TextField#displayAsPassword
-         *  
+         *
          *  @langversion 3.0
          *  @playerversion Flash 10
          *  @playerversion AIR 1.5
@@ -1297,6 +1391,8 @@ package spark.components
          *  @private
          */
         private var editableChanged:Boolean = false;
+        
+        [Inspectable(category="General", defaultValue="true")]
         
         /**
          *  A flag indicating whether the user is allowed
@@ -1342,6 +1438,8 @@ package spark.components
         //  editingMode
         //----------------------------------
         
+        [Inspectable(category="General", defaultValue="readWrite", enumeration="readOnly,readWrite,readSelect")]
+
         /**
          *  @private
          *  The editingMode of this component's TextContainerManager.
@@ -1423,6 +1521,8 @@ package spark.components
          */
         private var heightInLinesChanged:Boolean = false;
         
+        [Inspectable(category="General", minValue="0.0")]
+        
         /**
          *  The default height of the control, measured in lines.
          *
@@ -1442,10 +1542,13 @@ package spark.components
          *  a percent height, or both <code>top</code> and <code>bottom</code>
          *  constraints.</p>
          *
+         *  <p>This property will also be ignored if the <code>typicalText</code> 
+         *  property is specified.</p>
+         * 
          *  <p>RichEditableText's <code>measure()</code> method uses
          *  <code>widthInChars</code> and <code>heightInLines</code>
          *  to determine the <code>measuredWidth</code>
-         *  and <code>measuredHeight</code>. 
+         *  and <code>measuredHeight</code>.
          *  These are similar to the <code>cols</code> and <code>rows</code>
          *  of an HTML TextArea.</p>
          *
@@ -1528,6 +1631,32 @@ package spark.components
         }
         
         //----------------------------------
+        //  lineBreak
+        //----------------------------------
+        
+        [Inspectable(environment="none")]
+
+        /**
+         *  @private
+         * 
+         *  This property is only defined to implement the IEditableText
+         *  interface. The lineBreak style should be used instead of this
+         *  property.
+         */
+        public function get lineBreak():String
+        {
+            return getStyle("lineBreak");
+        }
+        
+        /**
+         *  @private
+         */
+        public function set lineBreak(value:String):void
+        {
+            setStyle("lineBreak", value);
+        }
+        
+        //----------------------------------
         //  maxChars
         //----------------------------------
         
@@ -1535,6 +1664,8 @@ package spark.components
          *  @private
          */
         private var _maxChars:int = 0;
+        
+        [Inspectable(category="General", defaultValue="0")]
         
         /**
          *  @copy flash.text.TextField#maxChars
@@ -1568,6 +1699,8 @@ package spark.components
          */
         private var _multiline:Boolean = true;
         
+        [Inspectable(category="General", defaultValue="true")]
+        
         /**
          *  Determines whether the user can enter multiline text.
          *
@@ -1575,7 +1708,7 @@ package spark.components
          *  If <code>false</code>, the Enter key doesn't affect the text
          *  but causes the RichEditableText to dispatch an <code>"enter"</code> 
          *  event.  If you paste text into the RichEditableText with a multiline 
-         *  value of <code>true</code>, newlines are stripped out of the text. </p>  
+         *  value of <code>false</code>, newlines are stripped out of the text. </p>  
          * 
          *  @default true
          *  
@@ -1605,6 +1738,8 @@ package spark.components
          *  @private
          */
         private var _restrict:String = null;
+        
+        [Inspectable(category="General", defaultValue="null")]
         
         /**
          *  @copy flash.text.TextField#restrict
@@ -1642,6 +1777,8 @@ package spark.components
          *  @private
          */
         private var selectableChanged:Boolean = false;
+        
+        [Inspectable(category="General", defaultValue="true")]
         
         /**
          *  A flag indicating whether the content is selectable
@@ -1690,6 +1827,7 @@ package spark.components
         private var _selectionActivePosition:int = -1;
         
         [Bindable("selectionChange")]
+        [Inspectable(category="General", defaultValue="-1")]
         
         /**
          *  A character position, relative to the beginning of the
@@ -1731,6 +1869,7 @@ package spark.components
         private var _selectionAnchorPosition:int = -1;
         
         [Bindable("selectionChange")]
+        [Inspectable(category="General", defaultValue="-1")]
         
         /**
          *  A character position, relative to the beginning of the
@@ -1778,6 +1917,8 @@ package spark.components
          *  changed.
          */
         private var selectionFormatsChanged:Boolean = false;
+        
+        [Inspectable(category="General", enumeration="always,whenActive,whenFocused", defaultValue="whenFocused")]
         
         /**
          *  Determines when the text selection is highlighted.
@@ -1843,7 +1984,7 @@ package spark.components
         private var textChanged:Boolean = false;
         
         [Bindable("change")]
-        [Inspectable(category="General")]
+        [Inspectable(category="General", defaultValue="")]
         
         /**
          *  The text String displayed by this component.
@@ -1856,6 +1997,9 @@ package spark.components
          *  it will be a TextFlow containing a single ParagraphElement
          *  with a single SpanElement.</p>
          *
+         *  <p>If you set the <code>text</code> to null, it will be
+         *  set to the default value which is an empty string.</p>
+         * 
          *  <p>If the text contains explicit line breaks --
          *  CR ("\r"), LF ("\n"), or CR+LF ("\r\n") --
          *  then the content will be set to a TextFlow
@@ -2040,6 +2184,11 @@ package spark.components
          *  @see spark.utils.TextFlowUtil#importFromString()
          *  @see spark.utils.TextFlowUtil#importFromXML()
          *  @see spark.components.RichEditableText#text
+         *  
+         *  @langversion 3.0
+         *  @playerversion Flash 10
+         *  @playerversion AIR 2.5
+         *  @productversion Flex 4.5
          */
         public function get textFlow():TextFlow
         {
@@ -2059,9 +2208,10 @@ package spark.components
                 {
                     _textFlow = staticPlainTextImporter.importToFlow(_text);
                 }
+                textFlowChanged = true;
             }
             
-            // Make sure the interactionManager is added to this textFlow.           
+            // Make sure the interactionManager and controller are added to this textFlow.           
             if (textChanged || contentChanged || textFlowChanged)
             {
                 _textContainerManager.setTextFlow(_textFlow);
@@ -2116,6 +2266,72 @@ package spark.components
         }
         
         //----------------------------------
+        //  typicalText
+        //----------------------------------
+        
+        /**
+         *  @private
+         */
+        private var typicalTextChanged:Boolean;
+                
+        /**
+         *  @private
+         */
+        private var _typicalText:String;
+        
+        /**
+         *  @private
+         *  Used when _typicalText is multiline
+         */
+        private var _typicalTextFlow:TextFlow;
+        
+        [Inspectable(category="General", defaultValue="null")]
+
+        /**
+         *  Text that is used to determine
+         *  the default width and height of the control, 
+         *  without actually being displayed.
+         *
+         *  <p>This property will be ignored if you specify an explicit width,
+         *  a percent width, or both <code>left</code> and <code>right</code>
+         *  constraints.</p>
+         *
+         *  <p>Use of this property causes the <code>widthInChars</code> 
+         *  and <code>heightInLines</code> properties to be ignored. </p>
+         *
+         *  @default null
+         *
+         *  @see spark.primitives.heightInLines
+         *  @see spark.primitives.widthInChars
+         *
+         *  @langversion 3.0
+         *  @playerversion Flash 10.2
+         *  @playerversion AIR 2.0
+         *  @productversion Flex 4.5
+         */
+        public function get typicalText():String 
+        {
+            return _typicalText;
+        }
+        
+        /**
+         *  @private
+         */
+        public function set typicalText(value:String):void
+        {
+            if (value == _typicalText)
+                return;
+            
+            _typicalText = value;
+            
+            typicalTextChanged = true;
+            
+            invalidateProperties();
+            invalidateSize();
+            invalidateDisplayList();
+        }
+        
+        //----------------------------------
         //  widthInChars
         //----------------------------------
         
@@ -2130,6 +2346,8 @@ package spark.components
          */
         private var widthInCharsChanged:Boolean = true;
         
+        [Inspectable(category="General", minValue="0.0")]
+
         /**
          *  The default width of the control, measured in em units.
          *
@@ -2152,6 +2370,9 @@ package spark.components
          *  a percent width, or both <code>left</code> and <code>right</code>
          *  constraints.</p>
          *
+         *  <p>This property will also be ignored if the <code>typicalText</code> 
+         *  property is specified.</p>
+         * 
          *  <p>RichEditableText's <code>measure()</code> method uses
          *  <code>widthInChars</code> and <code>heightInLines</code>
          *  to determine the <code>measuredWidth</code>
@@ -2161,7 +2382,7 @@ package spark.components
          *
          *  <p>Since both <code>widthInChars</code> and <code>heightInLines</code>
          *  default to <code>NaN</code>, RichTextEditable "autosizes" by default:
-         *  it starts out very samll if it has no text, grows in width as you
+         *  it starts out very small if it has no text, grows in width as you
          *  type, and grows in height when you press Enter to start a new line.</p>
          *
          *  @default NaN
@@ -2332,7 +2553,9 @@ package spark.components
                 
                 textChanged = false;
                 textFlowChanged = false;
-                contentChanged = false;             
+                contentChanged = false;
+                invalidateSize();
+                invalidateDisplayList();
             }
             
             // If displayAsPassword changed, it only applies to the display, 
@@ -2360,6 +2583,12 @@ package spark.components
                     // Text was displayed as password.  Now display as plain text.
                     _textContainerManager.setText(_text);
                 }
+                
+                // When TLF text is set above, TLF's textFlow is recreated so reset
+                // our copy of the textFlow and the generation.
+                _textFlow = null;
+                lastGeneration = 0;
+                lastContentBoundsGeneration = 0;
                 
                 if (editingMode != EditingMode.READ_ONLY)
                 {
@@ -2428,10 +2657,15 @@ package spark.components
          */
         override protected function measure():void 
         {
+            var bounds:Rectangle;
+            
             // If the damage handler is called while measuring text, this means
             // the text lines are damaged and the display needs to be updated. 
             // This flag tells the handler to invalidate just the display list.
             inMeasureMethod = true;
+            
+            lastMeasuredWidth = measuredWidth;
+            lastMeasuredHeight = measuredHeight;
             
             super.measure();
             
@@ -2449,20 +2683,84 @@ package spark.components
             {            
                 autoSize = false;
                 
-                // Go large.  For performance reasons, want to avoid a scrollRect 
-                // whenever possible in drawBackgroundAndSetScrollRect().  This is
-                // particularly true for 1 line TextInput components.
-                measuredWidth = !isNaN(explicitWidth) ? explicitWidth :
-                    Math.ceil(calculateWidthInChars());
-                measuredHeight = !isNaN(explicitHeight) ? explicitHeight :
-                    Math.ceil(calculateHeightInLines());
+                if (typicalText)
+                {
+                    if (typicalTextChanged)
+                    {
+                        // If the text has linebreaks (CR, LF, or CF+LF)
+                        // create a multi-paragraph TextFlow from it
+                        // and use the TextFlowTextLineFactory to render it.
+                        // Otherwise the StringTextLineFactory will put
+                        // all of the lines into a single paragraph
+                        // and FTE performance will degrade on a large paragraph.
+                        if (_typicalText.indexOf("\n") != -1 || _typicalText.indexOf("\r") != -1)
+                        {
+                            _typicalTextFlow = staticPlainTextImporter.importToFlow(_typicalText);
+                            // this helped get the factory to generate the same bounds as the
+                            // composer
+                            _typicalTextFlow.hostFormat = _textContainerManager.hostFormat;
+                        }
+                        else
+                            _typicalTextFlow = null;
+                        typicalTextChanged = false;
+                    }
+                    // if multiline...
+                    if (_typicalTextFlow)
+                    {
+                        // create the factory if needed
+                        if (!staticTextFlowFactory)
+                        {
+                            staticTextFlowFactory = new TextFlowTextLineFactory();
+                            // set bounds to natural bounds
+                            staticTextFlowFactory.compositionBounds = unbounded;
+                        }
+                        if (_typicalTextFlow.flowComposer)
+                        {
+                            _typicalTextFlow.flowComposer.swfContext = 
+                                ISWFContext(embeddedFontContext);
+                        }                       
+                        staticTextFlowFactory.swfContext = ISWFContext(embeddedFontContext);
+                        // create the textlines
+                        staticTextFlowFactory.createTextLines(tossTextLine, _typicalTextFlow);
+                        // get the bounds
+                        bounds = staticTextFlowFactory.getContentBounds();
+                    }
+                    else // single line
+                    {
+                        // create the factory if needed
+                        if (!staticStringFactory)
+                        {
+                            staticStringFactory = new StringTextLineFactory();
+                            // set bounds to natural bounds
+                            staticStringFactory.compositionBounds = unbounded;
+                        }
+                        // create the textlines
+                        staticStringFactory.text = _typicalText;
+                        staticStringFactory.textFlowFormat = _textContainerManager.hostFormat;
+                        staticStringFactory.swfContext = ISWFContext(embeddedFontContext);
+                        staticStringFactory.createTextLines(tossTextLine);
+                        // get the bounds
+                        bounds = staticStringFactory.getContentBounds();
+                    }           
+                    
+                    measuredWidth = Math.ceil(bounds.width);
+                    measuredHeight = Math.ceil(bounds.height);                  
+                }
+                else
+                {
+                    // Go large.  For performance reasons, want to avoid a scrollRect 
+                    // whenever possible in drawBackgroundAndSetScrollRect().  This is
+                    // particularly true for 1 line TextInput components.
+                    measuredWidth = !isNaN(explicitWidth) ? explicitWidth :
+                        Math.ceil(calculateWidthInChars());
+                    measuredHeight = !isNaN(explicitHeight) ? explicitHeight :
+                        Math.ceil(calculateHeightInLines());
+                }
             }
             else
             {
                 var composeWidth:Number;
                 var composeHeight:Number;
-                
-                var bounds:Rectangle;
                 
                 // If we're here, then at one or both of the width and height can
                 // grow to fit the text.  It is important to figure out whether
@@ -2488,7 +2786,13 @@ package spark.components
                     // except if we're using the explicitWidth.  
                     bounds = measureTextSize(composeWidth);
                     
-                    measuredWidth = _textContainerManager.compositionWidth;
+                    // The measured width shouldn’t be pinned to the composeWidth if 
+                    // the composeWidth is set by %, otherwise the measuredWidth 
+                    // can keep stretching
+                    if (!isNaN(explicitWidth) || !isNaN(widthInChars))
+                        measuredWidth = textContainerManager.compositionWidth;
+                    else
+                        measuredWidth = Math.ceil(bounds.width); 
                     measuredHeight = Math.ceil(bounds.bottom);
                 }
                 else if (!isNaN(heightConstraint) || !isNaN(explicitHeight) || 
@@ -2540,13 +2844,24 @@ package spark.components
                 }
                 
                 // Make sure we weren't previously scrolled. 
-                if (autoSize)
+                if (autoSize && getStyle("lineBreak") == "toFit")
                 {
                     _textContainerManager.horizontalScrollPosition = 0;
                     _textContainerManager.verticalScrollPosition = 0;                
                 }               
+                
+                // If we remeasured, we composed and cleared the display.  We need to update the 
+                // display if the size didn't change, since validateSize will not do it for us.  
+                // This code path can be used by itemRenderer's since setLayoutBounds(), which is
+                // where the constraints are set, is not always called.
+                if (remeasuringText && 
+                    lastMeasuredWidth == measuredWidth && lastMeasuredHeight == measuredHeight)
+                {
+                    _textContainerManager.updateContainer();
+                }
             }
             
+            remeasuringText = false;
             inMeasureMethod = false;
             
             //trace("measure", measuredWidth, measuredHeight, "autoSize", autoSize);
@@ -2558,6 +2873,8 @@ package spark.components
         override protected function updateDisplayList(unscaledWidth:Number,
                                                       unscaledHeight:Number):void 
         {
+            inUpdateDLMethod = true;
+            
             //trace("updateDisplayList", unscaledWidth, unscaledHeight, "autoSize", autoSize);
             
             // Styles can be changed in event handlers while in the middle
@@ -2569,8 +2886,15 @@ package spark.components
             // to be remeasured.  If one of the dimension changes, the text may
             // compose differently and have a different size which the layout 
             // manager needs to know.
-            if (autoSize && remeasureText(unscaledWidth, unscaledHeight))
+            // Don't exit early if we have changed size.  We may have to run 
+            // drawBackgroundAndSetScrollRect 
+            if (autoSize && 
+                lastUnscaledHeight == unscaledHeight && lastUnscaledWidth == unscaledWidth && 
+                remeasureText(unscaledWidth, unscaledHeight))
+            {
+                inUpdateDLMethod = false;
                 return;
+            }
             
             super.updateDisplayList(unscaledWidth, unscaledHeight);
             
@@ -2598,8 +2922,32 @@ package spark.components
                 _textContainerManager.convertToTextFlowWithComposer();
             }
             
+            // The EditManager calls updateAllControllers() directly when there
+            // is interactive input such as typing or cut/paste. This bypasses
+            // our update cycle which matters if we are auto-sizing.
+            // compositionWidth/Height are NaN and the background is drawn with
+            // the old width/height because measureTextSize hasn't had a
+            // chance to update the layout manager yet.  Once the layoutManager
+            // has been updated, the compositionWidth/Height are still NaN
+            // so TLF doesn't think there is anything to compose.  The text 
+            // hasn't changed shape, but the background has.
+            if (autoSize && !isNaN(lastUnscaledWidth) &&
+                (lastUnscaledWidth != unscaledWidth || 
+                    lastUnscaledHeight != unscaledHeight))
+            {
+                if (_textContainerManager.composeState == TextContainerManager.COMPOSE_COMPOSER)
+                     _textContainerManager.getTextFlow().flowComposer.getControllerAt(0).shapesInvalid = true;
+                else if (!_textContainerManager.isDamaged())
+                    _textContainerManager.drawBackgroundAndSetScrollRect(0,0);
+            }
+               
             _textContainerManager.updateContainer();
-        }
+            
+            lastUnscaledWidth = unscaledWidth;
+            lastUnscaledHeight = unscaledHeight;
+            
+            inUpdateDLMethod = false;
+         }
         
         /**
          *  @private
@@ -2622,10 +2970,46 @@ package spark.components
             // between a measured width/height that is the same as the
             // constrained width/height to know whether that dimension can
             // be sized or must be fixed at the constrained value.                
-            widthConstraint = width;
             heightConstraint = height;
 
             super.setLayoutBoundsSize(width, height, postLayoutTransform);
+
+            // Did we already constrain the width?
+            if (widthConstraint == width)
+                return;
+            
+            // No reflow for explicit lineBreak
+            if (getStyle("lineBreak") == "explicit")
+                return;
+            
+            // If we don't measure.
+            // Call super so we don't call the override
+            // and set autoSize to false;
+            if (super.canSkipMeasurement())
+                return;
+            
+            if (!isNaN(explicitHeight))
+                return;
+            
+            // We support reflow only in the case of constrained width and
+            // unconstrained height. Note that we compare with measuredWidth,
+            // as for example the RichEditableText can be
+            // constrained by the layout with "left" and "right", but the
+            // container width itself may not be constrained and it would depend
+            // on the element's measuredWidth.
+            var constrainedWidth:Boolean = !isNaN(width) && (width != measuredWidth) && (width != 0); 
+            if (!constrainedWidth)
+                return;
+            
+            // We support reflow only when we don't have a transform.
+            // We could add support for scale, but not skew or rotation.
+            if (postLayoutTransform && hasComplexLayoutMatrix)
+                return;
+            
+            widthConstraint = width;
+
+            invalidateSize();
+            
         }
         
         /**
@@ -2952,7 +3336,8 @@ package spark.components
         }
         
         /**
-         *  Selects all of the text.
+         *  Selects all of the text. This does not include the final paragraph
+         *  terminator.
          *  
          *  @langversion 3.0
          *  @playerversion Flash 10
@@ -2963,9 +3348,9 @@ package spark.components
         {
             selectRange(0, int.MAX_VALUE);
         }
-        
+       
         /**
-         *  Returns a TextLayoutFormat object specifying the formats
+         *  Returns a TextLayoutFormat object specifying the computed formats
          *  for the specified range of characters.
          *
          *  <p>If a format is not consistently set across the entire range,
@@ -2985,6 +3370,8 @@ package spark.components
          *
          *  @param activePosition A character position specifying
          *   the movable end of the selection.
+         *
+         *  @return A TextLayoutFormat object.
          *  
          *  @langversion 3.0
          *  @playerversion Flash 10
@@ -3096,9 +3483,16 @@ package spark.components
         }
         
         /**
-         *  Applies the specified format to the specified range.
-         *
-         *  <p>The supported formats are those in TextFormatLayout.
+         *  Applies the specified formats to each element in the specified
+         *  range that correspond to the given format.  
+         *  It applies the character formats to the text in the specified range
+         *  (no change is made if the specified range is a single point). 
+         *  It applies the paragraph formats to any paragraphs at least 
+         *  partially within the range (or a single paragraph if the range is a 
+         *  single point).
+         *  It applies the container formats to the container.
+         * 
+         *  <p>The supported formats are those in TextLayoutFormat.
          *  A value of <code>undefined</code> does not get applied.
          *  If you don't specify a range, the selected range is used.</p>
          *
@@ -3111,6 +3505,23 @@ package spark.components
          *  </pre>
          *  </p>
          *  
+         *  <p>If you use the results of <code>getFormatOfRange()</code> to
+         *  specify the <code>format</code>, note that every format in the
+         *  <code>TextLayoutFormat</code> has a
+         *  computed value, which will be applied to each element that 
+         *  corresponds to the given format.</p>
+         * 
+         *  <p>If you would like to specify a format to be applied to all the text
+         *  it would be better to use <code>setStyle(format, value)</code>
+         *  on the component itself.</p>
+         * 
+         *  <p>The following example sets the <code>fontSize</code> and <code>color</code> of all the text:
+         *  <pre>
+         *  myRET.setStyle("fontSize", 12);
+         *  myRET.setStyle("color", 0xFF0000);
+         *  </pre>
+         *  </p>
+         * 
          *  @param format The TextLayoutFormat to apply to the selection.
          * 
          *  @param anchorPosition A character position, relative to the beginning of the 
@@ -3193,7 +3604,7 @@ package spark.components
          */
         mx_internal function createTextContainerManager():RichEditableTextContainerManager
         {
-            return new RichEditableTextContainerManager(this, staticConfiguration);
+            return new RichEditableTextContainerManager(this);
         }
         
         /**
@@ -3279,6 +3690,9 @@ package spark.components
                 return true;
             }
 
+            if (typicalText != null)
+                return true;
+            
             // Is there some sort of width and some sort of height?
             return  (!isNaN(explicitWidth) || !isNaN(_widthInChars) ||
                 !isNaN(widthConstraint)) &&
@@ -3296,15 +3710,28 @@ package spark.components
                                          composeHeight:Number=NaN):Rectangle
         {   
             // Adjust for explicit min/maxWidth so the measurement is accurate.
-            if (isNaN(explicitWidth))
+            // If no explicitWidth or widthInChars
+            if (isNaN(explicitWidth) && isNaN(widthInChars))
             {
+                // then if there is an explicit minWidth and
+                // a specified composeWidth and the composeWidth
+                // is less than the minWidth, use the minWidth
                 if (!isNaN(explicitMinWidth) &&
-                    isNaN(composeWidth) || composeWidth < minWidth)
+                    !isNaN(composeWidth) && composeWidth < minWidth)
                 {
                     composeWidth = minWidth;
                 }
+                // if composeWidth is NaN, just compose and see what happens
+                // and fix up the measurements afterwards.  See final check
+                // at the end of the method
+                
+                // On the other hand, if there is an explicit maxWidth and
+                // no specified composeWidth then use maxWidth, 
+                // or if there is a a specified composeWidth 
+                // and the composeWidth is greater than maxWidth, use the maxWidth.
                 if (!isNaN(explicitMaxWidth) &&
-                    isNaN(composeWidth) || composeWidth > maxWidth)
+                    isNaN(composeWidth) || 
+                    composeWidth > maxWidth)
                 {
                     composeWidth = maxWidth;
                 }
@@ -3326,7 +3753,7 @@ package spark.components
             {
                 _textContainerManager.convertToTextFlowWithComposer();
             }
-            
+                        
             // Compose only.  The display should not be updated.
             _textContainerManager.compose();
             
@@ -3346,6 +3773,19 @@ package spark.components
             
             //trace("measureTextSize", composeWidth, "->", bounds.width, composeHeight, "->", bounds.height);
             
+            // one final check:  If there is no explicitWidth...
+            if (isNaN(explicitWidth) && isNaN(widthInChars))
+            {
+                // but there is a minWidth, and no specified composeWidth
+                // and we measure out to be less than the minWidth
+                // report the minWidth anyway.
+                if (!isNaN(explicitMinWidth) &&
+                    isNaN(composeWidth) &&
+                    bounds.width < minWidth)
+                {
+                    bounds.width = minWidth;
+                }
+            }
             return bounds;
         }
         
@@ -3373,6 +3813,14 @@ package spark.components
             if (width == 0 || height == 0) 
                 return false;
             
+            // If we're using typical text, no need to remeasure.
+            if (typicalText != null)
+                return false;
+            
+            // No reflow for explicit lineBreak
+            if (_textContainerManager.hostFormat.lineBreak == "explicit")
+                return false;
+            
             if (!isNaN(widthConstraint))
             {
                 // Do we have a constrained width and an explicit height?
@@ -3382,10 +3830,6 @@ package spark.components
                 {
                     return false;
                 }
-                
-                // No reflow for explicit lineBreak
-                if (_textContainerManager.hostFormat.lineBreak == "explicit")
-                    return false;
             } 
             
             if (!isNaN(heightConstraint))
@@ -3400,6 +3844,10 @@ package spark.components
             // auto-sizing, need to remeasure, so the layout manager leaves the
             // correct amount of space for the component.
             invalidateSize();
+            
+            // Need to make sure the container is updated after the text is re-composed 
+            // to measure it.
+            remeasuringText = true;
             
             return true;            
         }
@@ -3536,7 +3984,7 @@ package spark.components
             {
                 var value:Object = getStyle("lineHeight");     
                 var lineHeight:Number =
-                    TextUtil.getNumberOrPercentOf(value, getStyle("fontSize"));
+                    RichEditableText.getNumberOrPercentOf(value, getStyle("fontSize"));
                 
                 // Default is 120%
                 if (isNaN(lineHeight))
@@ -3644,18 +4092,32 @@ package spark.components
             if (!hasConstraints && multiline)
                 return;
             
+            // Make sure the clipboard has something to paste.
+            if (op.textScrap == null || op.textScrap.textFlow == null)
+                return;
+            
             // If copied/cut from displayAsPassword field the pastedText
             // is '*' characters but this is correct.
-            var pastedText:String = TextUtil.extractText(op.textScrap.textFlow);
+            var pastedText:String = staticPlainTextExporter.export(
+                op.textScrap.textFlow, ConversionType.STRING_TYPE) as String;
             
             // If there are no constraints and no newlines there is nothing
             // more to do.
             if (!hasConstraints && pastedText.indexOf("\n") == -1)
                 return;
-
+            
             // Save this in case we modify the pasted text.  We need to know
             // how much text to delete.
             var textLength:int = pastedText.length;
+            
+            // Keep _text in sync with the text flow.  If there was a selection
+            // for the paste, delete that text, then insert the pasted
+            // text.
+            if (_displayAsPassword)
+            {
+                _text = splice(_text, op.absoluteStart, op.absoluteEnd, "");
+                _text = splice(_text, op.absoluteStart, op.absoluteStart, pastedText);
+            }
             
             // If multiline is false, strip newlines out of pasted text
             // This will not strip newlines out of displayAsPassword fields
@@ -3672,16 +4134,11 @@ package spark.components
             // of the paste.
             dispatchChangeAndChangingEvents = false;
             
-            var selectionState:SelectionState = new SelectionState(
-                op.textFlow, op.absoluteStart, 
-                op.absoluteStart + textLength);             
-            editManager.deleteText(selectionState);
-            
-            // Insert the same text, the same place where the paste was done.
+            // Replace the same text, the same place where the paste was done.
             // This will go thru the InsertPasteOperation and do the right
-            // things with restrict, maxChars and displayAsPassword.
-            selectionState = new SelectionState(
-                op.textFlow, op.absoluteStart, op.absoluteStart);
+            // things with restrict, maxChars, displayAsPassword and _text.
+            var selectionState:SelectionState = new SelectionState(
+                  op.textFlow, op.absoluteStart, op.absoluteStart + textLength);
             editManager.insertText(pastedText, selectionState);        
             
             // All done with the edit manager.
@@ -3794,22 +4251,16 @@ package spark.components
                     // set to anything other than unknown(English)      
                     try
                     {
-                        if (!errorCaught &&
-                            IME.conversionMode != IMEConversionMode.UNKNOWN)
+                        if (IME.conversionMode != IMEConversionMode.UNKNOWN)
                         {
                             IME.conversionMode = _imeMode;
                         }
-                        errorCaught = false;
                     }
                     catch(e:Error)
                     {
-                        // Once an error is thrown, focusIn is called 
-                        // again after the Alert is closed, throw error 
-                        // only the first time.
-                        errorCaught = true;
-                        var message:String = ResourceManager.getInstance().getString(
-                            "controls", "unsupportedMode", [ _imeMode ]);          
-                        throw new Error(message);
+                        // on Windows, setting a Japanese IME mode when in
+                        // english throws an error (on Mac it doesn't)
+                        // so ignore errors we get.
                     }
                 }            
             }
@@ -3851,9 +4302,8 @@ package spark.components
             if (editingMode != EditingMode.READ_WRITE)
                 return;
             
-            // We always handle the 'enter' key since we would have to recreate
-            // the container manager to change the configuration if multiline 
-            // changes.            
+            // Handle the ENTER key here, if multiline text is not allowed or
+            // if there isn't enough room for more characters to be added.
             if (event.keyCode == Keyboard.ENTER)
             {        
                 if (!multiline)
@@ -3868,17 +4318,12 @@ package spark.components
                 {
                     event.preventDefault();
                     return;
-                }
-                
-                var editManager:IEditManager = 
-                    EditManager(_textContainerManager.beginInteraction());
-                
-                if (editManager.hasSelection())
-                    editManager.splitParagraph();
-                
-                _textContainerManager.endInteraction();
-                
-                event.preventDefault();
+                }                
+
+                // Let the TLF EditManager handle the ENTER key.  If editing
+                // a list, depending on the position, it will either add a new
+                // list item or close off the list.  Otherwise it will split
+                // the paragraph.
             }
         }
         
@@ -3912,6 +4357,18 @@ package spark.components
         
         /**
          *  @private
+         *  call a TLF method so we don't leak
+         */
+        private function removedFromStageHandler(event:Event):void
+        {
+            if (event.target == this)
+            {
+                TextContainerManager.releaseReferences();
+            }    
+        }
+        
+        /**
+         *  @private
          *  If the textFlow hasn't changed the generation remains the same.
          *  Changing the composition width and/or height does not change the
          *  generation.  The bounds can change as a result of different
@@ -3933,7 +4390,8 @@ package spark.components
          *           should grow or stay the same.
          *
          *  toFit
-         *      width       height      
+         *      width       height
+         *      
          *      smaller     smaller     height pinned to old height
          *      smaller     larger      ok
          *      larger      larger      ok
@@ -3952,8 +4410,8 @@ package spark.components
             // the text flow so we have to be careful to mantain consistency
             // for the scroller.
             if (_textFlow.generation == lastContentBoundsGeneration)
-            {            
-                if (bounds.width < _contentWidth)
+            {          
+                if (bounds.width <= _contentWidth)
                 {
                     if (_textContainerManager.hostFormat.lineBreak == "toFit")
                     {
@@ -3988,6 +4446,14 @@ package spark.components
             
             var newContentBounds:Rectangle = 
                 _textContainerManager.getContentBounds();
+            
+            // If x and/or y are not 0, adjust for what is visible.  For example, if there is an 
+            // image which is wider than the composeWidth and float="right", x will be negative
+            // and the part of the image between x and 0 will not be visible so it should
+            // not be included in the reported width.  This will avoid a scrollbar that does
+            // nothing.
+            newContentBounds.width += newContentBounds.x;
+            newContentBounds.height += newContentBounds.y;
             
             // Try to prevent the scroller from getting into a loop while
             // adding/removing scroll bars.
@@ -4032,6 +4498,9 @@ package spark.components
             if (event.damageLength == 0)
                 return;
             
+            if (inUpdateDLMethod)
+                return;
+            
             // Text that is being measured is damaged so update the display.
             if (inMeasureMethod)
             {
@@ -4066,14 +4535,12 @@ package spark.components
             // In this case we always maintain _text with the underlying text and
             // display the appropriate number of passwordChars.  If there are any
             // interactive editing operations _text is updated during the operation.
-            if (displayAsPassword)
-                return;
+            if (!displayAsPassword)
+                _text = null;
             
-            // Invalidate _text and _content.
-            _text = null;
             _content = null;        
             _textFlow = _textContainerManager.getTextFlow();
-            
+                        
             lastGeneration = _textFlow.generation;
             
             // We don't need to call invalidateProperties()
@@ -4218,19 +4685,31 @@ package spark.components
                     if (delLen > 0)
                     {
                         _text = splice(_text, delSelOp.absoluteStart, 
-                            delSelOp.absoluteEnd, "");                                    
+                                       delSelOp.absoluteEnd, "");                                    
                     }
                     
                     // Add in the inserted text.
-                    _text = splice(_text, insertTextOperation.absoluteStart,
-                        insertTextOperation.absoluteEnd, textToInsert);
-                    
-                    // Display the passwordChar rather than the actual text.
-                    textToInsert = StringUtil.repeat(passwordChar,
-                        textToInsert.length);
+                    if (textToInsert.length > 0)
+                    {
+                        _text = splice(_text, insertTextOperation.absoluteStart,
+                            insertTextOperation.absoluteStart, textToInsert);
+                        
+                        // Display the passwordChar rather than the actual text.
+                        textToInsert = StringUtil.repeat(passwordChar,
+                            textToInsert.length);
+                    }
                 }
                 
                 insertTextOperation.text = textToInsert;
+            }
+            else if (op is CopyOperation)
+            {
+                if (_displayAsPassword)
+                {
+                    // For security, don't allow passwords to be copied.
+                    event.preventDefault();
+                    return;
+                }
             }
             else if (op is PasteOperation)
             {
@@ -4257,8 +4736,17 @@ package spark.components
                 
                 if (_displayAsPassword)
                 {
-                    _text = splice(_text, flowTextOperation.absoluteStart,
-                        flowTextOperation.absoluteEnd, "");
+                    if (op is DeleteTextOperation)
+                    {
+                        _text = splice(_text, flowTextOperation.absoluteStart,
+                            flowTextOperation.absoluteEnd, "");
+                    }
+                    else
+                    {
+                        // For security, don't allow passwords to be cut.
+                        event.preventDefault();
+                        return;
+                    }
                 }
             }
             
@@ -4323,32 +4811,34 @@ package spark.components
         
         /**
          *  @private
-         *  Called when a InlineGraphicElement is resized due to having width or 
-         *  height as auto or percent and the graphic has finished loading.  The
-         *  size of the graphic is now known.
+         *  Called when an InlineGraphicElement is asynchronously loaded.
+         *  The event status could be "sizePending", "loaded" or "error". 
+         *  Must call updateAllContainers() to cause transition to the next
+         *  graphic status.
          */
         private function textContainerManager_inlineGraphicStatusChangeHandler (
             event:StatusChangeEvent):void
-        {
-            if (event.status == InlineGraphicElementStatus.SIZE_PENDING &&
-                event.element is InlineGraphicElement)
-            {
-                // Force InlineGraphicElement.applyDelayedElementUpdate to
-                // execute and finish loading the graphic.  This is a workaround
-                // for the case when the image is in a compiled text flow.
-                InlineGraphicElement(event.element).updateForMustUseComposer(
-                    _textContainerManager.getTextFlow());
-            }
-            else if (event.status == InlineGraphicElementStatus.READY)
+        {            
+            if (event.status == InlineGraphicElementStatus.READY)
             {
                 // Now that the actual size of the graphic is available need to
                 // optionally remeasure and updateContainer.
                 if (autoSize)
-                    invalidateSize();
-                
-                invalidateDisplayList();
+                    invalidateSize();                
             }
+
+            // Call updateAllContainers().
+            invalidateDisplayList();
         }    
+        
+        /**
+         *  @private
+         *  release the textline as it is temporary.
+         */
+        private function tossTextLine(textLine:DisplayObject):void
+        {
+            TextUtil.recycleTextLine(textLine as TextLine);
+        }
     }
-    
+
 }

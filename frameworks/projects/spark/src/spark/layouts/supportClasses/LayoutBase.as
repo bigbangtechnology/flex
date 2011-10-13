@@ -19,6 +19,8 @@ import flash.geom.Rectangle;
 import flash.utils.Timer;
 
 import mx.core.ILayoutElement;
+import mx.core.IVisualElement;
+import mx.core.UIComponent;
 import mx.core.UIComponentGlobals;
 import mx.core.mx_internal;
 import mx.events.DragEvent;
@@ -162,8 +164,8 @@ public class LayoutBase extends OnDemandEventDispatcher
      *  
      *  <p>To configure a container to use virtual layout, set the <code>useVirtualLayout</code> property 
      *  to <code>true</code> for the layout associated with the container. 
-     *  Only the DataGroup or SkinnableDataContainer with the VerticalLayout, 
-     *  HorizontalLayout, and TileLayout supports virtual layout. 
+     *  Only DataGroup or SkinnableDataContainer with layout set to VerticalLayout, 
+     *  HorizontalLayout, or TileLayout supports virtual layout. 
      *  Layout subclasses that do not support virtualization must prevent changing
      *  this property.</p>
      *
@@ -225,7 +227,7 @@ public class LayoutBase extends OnDemandEventDispatcher
         _useVirtualLayout = value;
         if (target)
             target.invalidateDisplayList();
-    }     
+    }
     
     /**
      *  When <code>useVirtualLayout</code> is <code>true</code>, 
@@ -249,6 +251,16 @@ public class LayoutBase extends OnDemandEventDispatcher
      */ 
     public function clearVirtualLayoutCache():void
     {
+    }
+    
+    /**
+     *  Specifies whether this layout supports virtual layout.
+     *  
+     *  @default true
+     */ 
+    mx_internal function get virtualLayoutSupported():Boolean
+    {
+        return true;
     }
     
     //----------------------------------
@@ -821,13 +833,106 @@ public class LayoutBase extends OnDemandEventDispatcher
             
          var elt:ILayoutElement = g.getElementAt(index);
          if (!elt || !elt.includeInLayout)
-            return null;
+             return null;
             
          var eltX:Number = elt.getLayoutBoundsX();
          var eltY:Number = elt.getLayoutBoundsY();
          var eltW:Number = elt.getLayoutBoundsWidth();
          var eltH:Number = elt.getLayoutBoundsHeight();
          return new Rectangle(eltX, eltY, eltW, eltH);
+    }
+    
+    /**
+     *  @private 
+     *  Given any descendant element of the target, return its bounds in the 
+     *  target's coordinate space.
+     */ 
+    mx_internal function getChildElementBounds(element:IVisualElement):Rectangle
+    {
+        // use localToContent
+        if (!element)
+            return new Rectangle(0,0,0,0);
+        
+        var parentUIC:UIComponent = element.parent as UIComponent;
+        
+        // Note that we don't check that the element is a descendant of the target
+        // since it can be expensive to calculae. 
+        if (parentUIC)
+        {
+            var g:GroupBase = target;
+            // Get the position in local coordinate
+            var posPointStart:Point = new Point(element.getLayoutBoundsX(), element.getLayoutBoundsY());
+            var sizePoint:Point = new Point(element.getLayoutBoundsWidth(), element.getLayoutBoundsHeight());
+            
+            // Convert from local to global coordinate space
+            var posPoint:Point = parentUIC.localToGlobal(posPointStart);
+            // Convert from global to target's local coordinate space
+            posPoint = g.globalToLocal(posPoint);
+                        
+            return new Rectangle(posPoint.x, posPoint.y, sizePoint.x, sizePoint.y);
+        }
+        
+        return new Rectangle(0,0,0,0);
+    }
+    
+    /**
+     *  @private 
+     *  Convert the localBounds of a descendant element into the target's coordinate system
+     */ 
+    private function convertLocalToTarget(element:IVisualElement, elementLocalBounds:Rectangle):Rectangle
+    {
+        // use localToContent
+        if (!element)
+            return new Rectangle(0,0,0,0);
+        
+        var parentUIC:UIComponent = element.parent as UIComponent;
+        
+        // Note that we don't check that the element is a descendant of the target
+        // since it can be expensive to calculae. 
+        if (parentUIC)
+        {
+            var g:GroupBase = target;
+            // Get the position in local coordinate
+            var posPointStart:Point = new Point(element.getLayoutBoundsX() + elementLocalBounds.x, 
+                                                element.getLayoutBoundsY() + elementLocalBounds.y);
+            
+            // Convert from local to global coordinate space
+            var posPoint:Point = parentUIC.localToGlobal(posPointStart);
+            // Convert from global to target's local coordinate space
+            posPoint = g.globalToLocal(posPoint);
+            
+            return new Rectangle(posPoint.x, posPoint.y, elementLocalBounds.width, elementLocalBounds.height);
+        }
+        
+        return new Rectangle(0,0,0,0);
+    }
+     
+    /**
+     *  @private
+     *  Return true if the specified element's layout bounds fall within the
+     *  scrollRect, or if scrollRect is null.
+     */
+    mx_internal function isElementVisible(elt:ILayoutElement):Boolean
+    {
+        if (!elt || !elt.includeInLayout)
+            return false;
+        
+        var g:GroupBase = target;
+        if (!g || !g.clipAndEnableScrolling)
+            return true; 
+        
+        const vsp:Number = g.verticalScrollPosition;
+        const hsp:Number = g.horizontalScrollPosition;
+        const targetW:Number = g.width;
+        const targetH:Number = g.height;
+        
+        const eltX:Number = elt.getLayoutBoundsX();
+        const eltY:Number = elt.getLayoutBoundsY();
+        const eltW:Number = elt.getLayoutBoundsWidth();
+        const eltH:Number = elt.getLayoutBoundsHeight();
+        
+        return (eltX < (hsp + targetW)) && ((eltX + eltW) > hsp) &&
+               (eltY < (vsp + targetH)) && ((eltY + eltH) > vsp);             
     }
 
     /**
@@ -1036,10 +1141,12 @@ public class LayoutBase extends OnDemandEventDispatcher
      *
      *  </ul>
      * 
-     *  The implementation calls <code>getElementBoundsLeftOfScrollRect()</code> and
+     *  <p>The implementation calls <code>getElementBoundsLeftOfScrollRect()</code> and
      *  <code>getElementBoundsRightOfScrollRect()</code> to determine the bounds of
      *  the elements.  Layout classes usually override those methods instead of
-     *  getHorizontalScrollPositionDelta(). 
+     *  the <code>getHorizontalScrollPositionDelta()</code> method.</p>
+     *
+     *  @return The change to the horizontal scroll position.
      * 
      *  @see spark.core.NavigationUnit
      *  @see #getElementBoundsLeftOfScrollRect
@@ -1147,7 +1254,7 @@ public class LayoutBase extends OnDemandEventDispatcher
     }
     
     /**
-     *  Returns the change to the horizontal scroll position to handle 
+     *  Returns the change to the vertical scroll position to handle 
      *  different scrolling options. 
      *  These options are defined by the NavigationUnit class:
      *  <code>DOWN</code>,  <code>END</code>, <code>HOME</code>, 
@@ -1197,10 +1304,12 @@ public class LayoutBase extends OnDemandEventDispatcher
      *
      *  </ul>
      * 
-     *  The implementation calls <code>getElementBoundsAboveScrollRect()</code> and
+     *  <p>The implementation calls <code>getElementBoundsAboveScrollRect()</code> and
      *  <code>getElementBoundsBelowScrollRect()</code> to determine the bounds of
-     *  the elements.  Layout classes usually override those methods instead of
-     *  getVerticalScrollPositionDelta(). 
+     *  the elements. Layout classes usually override those methods instead of
+     *  the <code>getVerticalScrollPositionDelta()</code> method. </p>
+     *
+     *  @return The change to the vertical scroll position.
      * 
      *  @see spark.core.NavigationUnit
      *  @see #getElementBoundsAboveScrollRect
@@ -1359,12 +1468,44 @@ public class LayoutBase extends OnDemandEventDispatcher
      *  @param leftOffset Number of pixels to position the element to the right of the left edge.
      *  @param rightOffset Number of pixels to position the element to the left of the right edge.
      */ 
-    mx_internal function getScrollPositionDeltaToElementHelper(index:int, topOffset:Number = NaN, 
+    mx_internal function getScrollPositionDeltaToElementHelper(index:int, 
+                                                               topOffset:Number = NaN, 
                                                                bottomOffset:Number = NaN, 
                                                                leftOffset:Number = NaN,
                                                                rightOffset:Number = NaN):Point
     {
         var elementR:Rectangle = getElementBounds(index);
+        return getScrollPositionDeltaToElementHelperHelper(
+                                                elementR, null, true,
+                                                topOffset, bottomOffset, 
+                                                leftOffset, rightOffset);
+    }
+    
+    /**
+     *  @private 
+     *  This takes an element rather than an index so it can be used for
+     *  DataGrid which has rows and columns.
+     * 
+     *  For the offset properties, a value of NaN means don't offset from that edge. A value
+     *  of 0 means to put the element flush against that edge.
+     * 
+     *  @param elementR The bounds of the element to position
+     *  @param elementLocalBounds The bounds inside of the element to position
+     *  @param entireElementVisible If true, position the entire element in the viewable area
+     *  @param topOffset Number of pixels to position the element below the top edge.
+     *  @param bottomOffset Number of pixels to position the element above the bottom edge.
+     *  @param leftOffset Number of pixels to position the element to the right of the left edge.
+     *  @param rightOffset Number of pixels to position the element to the left of the right edge.
+     */ 
+    protected function getScrollPositionDeltaToElementHelperHelper(
+                                    elementR:Rectangle,
+                                    elementLocalBounds:Rectangle,
+                                    entireElementVisible:Boolean = true,
+                                    topOffset:Number = NaN, 
+                                    bottomOffset:Number = NaN, 
+                                    leftOffset:Number = NaN,
+                                    rightOffset:Number = NaN):Point
+    {
         if (!elementR)
             return null;
         
@@ -1373,42 +1514,93 @@ public class LayoutBase extends OnDemandEventDispatcher
             return null;
         
         if (isNaN(topOffset) && isNaN(bottomOffset) && isNaN(leftOffset) && isNaN(rightOffset) &&
-            (scrollR.containsRect(elementR) || elementR.containsRect(scrollR)))
+            (scrollR.containsRect(elementR) || (!elementLocalBounds && elementR.containsRect(scrollR))))
             return null;
         
-        var dxl:Number = elementR.left - scrollR.left;     // left justify element
-        var dxr:Number = elementR.right - scrollR.right;   // right justify element
-        var dyt:Number = elementR.top - scrollR.top;       // top justify element
-        var dyb:Number = elementR.bottom - scrollR.bottom; // bottom justify element
+        var dx:Number = 0;
+        var dy:Number = 0;
         
-        // minimize the scroll
-        var dx:Number = (Math.abs(dxl) < Math.abs(dxr)) ? dxl : dxr;
-        var dy:Number = (Math.abs(dyt) < Math.abs(dyb)) ? dyt : dyb;
+        if (entireElementVisible)
+        {
+            var dxl:Number = elementR.left - scrollR.left;     // left justify element
+            var dxr:Number = elementR.right - scrollR.right;   // right justify element
+            var dyt:Number = elementR.top - scrollR.top;       // top justify element
+            var dyb:Number = elementR.bottom - scrollR.bottom; // bottom justify element
+            
+            // minimize the scroll
+            dx = (Math.abs(dxl) < Math.abs(dxr)) ? dxl : dxr;
+            dy = (Math.abs(dyt) < Math.abs(dyb)) ? dyt : dyb;
+            
+            if (!isNaN(topOffset))
+                dy = dyt + topOffset;
+            else if (!isNaN(bottomOffset))
+                dy = dyb - bottomOffset;
+            
+            if (!isNaN(leftOffset))
+                dx = dxl + leftOffset;
+            else if (!isNaN(rightOffset))
+                dx = dxr - rightOffset;
+            
+            // scrollR "contains"  elementR in just one dimension
+            if ((elementR.left >= scrollR.left) && (elementR.right <= scrollR.right))
+                dx = 0;
+            else if ((elementR.bottom <= scrollR.bottom) && (elementR.top >= scrollR.top))
+                dy = 0;
+            
+            // elementR "contains" scrollR in just one dimension
+            if ((elementR.left <= scrollR.left) && (elementR.right >= scrollR.right))
+                dx = 0;
+            else if ((elementR.bottom >= scrollR.bottom) && (elementR.top <= scrollR.top))
+                dy = 0;
+        }
         
-        if (!isNaN(topOffset))
-            dy = dyt + topOffset;
-        else if (!isNaN(bottomOffset))
-            dy = dyb - bottomOffset;
-        
-        if (!isNaN(leftOffset))
-            dx = dxl + leftOffset;
-        else if (!isNaN(rightOffset))
-            dx = dxr - rightOffset;
-        
-        // scrollR "contains"  elementR in just one dimension
-        if ((elementR.left >= scrollR.left) && (elementR.right <= scrollR.right))
-            dx = 0;
-        else if ((elementR.bottom <= scrollR.bottom) && (elementR.top >= scrollR.top))
-            dy = 0;
-        
-        // elementR "contains" scrollR in just one dimension
-        if ((elementR.left <= scrollR.left) && (elementR.right >= scrollR.right))
-            dx = 0;
-        else if ((elementR.bottom >= scrollR.bottom) && (elementR.top <= scrollR.top))
-            dy = 0;
+        if (elementLocalBounds)
+        {
+            // Only adjust for local bounds if the element is wider than the scroll width
+            if (elementR.width > scrollR.width || !entireElementVisible)
+            {
+                if (elementLocalBounds.left < scrollR.left)
+                    dx = elementLocalBounds.left - scrollR.left;
+                else if (elementLocalBounds.right > scrollR.right)
+                    dx = elementLocalBounds.right - scrollR.right;
+            }
+            
+            // Only adjust for local bounds if the element is taller than the scroll height
+            if (elementR.height > scrollR.height || !entireElementVisible)
+            {
+                if (elementLocalBounds.bottom > scrollR.bottom) 
+                    dy = elementLocalBounds.bottom - scrollR.bottom;
+                else if (elementLocalBounds.top <= scrollR.top)
+                    dy = elementLocalBounds.top - scrollR.top;
+            }
+        }
         
         return new Point(dx, dy);
     }
+    
+    /**
+     *  @private
+     */  
+    mx_internal function getScrollPositionDeltaToAnyElement(element:IVisualElement, 
+                                                            elementLocalBounds:Rectangle = null, 
+                                                            entireElementVisible:Boolean = true,
+                                                            topOffset:Number = NaN,
+                                                            bottomOffset:Number = NaN,
+                                                            leftOffset:Number = NaN,
+                                                            rightOffset:Number = NaN):Point
+    {
+        
+        var elementR:Rectangle = getChildElementBounds(element);
+        
+        if (elementLocalBounds)
+            elementLocalBounds = convertLocalToTarget(element, elementLocalBounds);
+        return getScrollPositionDeltaToElementHelperHelper(
+            elementR, elementLocalBounds, entireElementVisible,
+            topOffset, bottomOffset, 
+            leftOffset, rightOffset);
+        
+    }
+    
     //--------------------------------------------------------------------------
     //
     //  Drop methods

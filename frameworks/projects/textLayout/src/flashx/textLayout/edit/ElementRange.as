@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit
 {
 
@@ -26,14 +26,18 @@ package flashx.textLayout.edit
  */	
 public class ElementRange
 {
-	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.compose.IFlowComposer;
 	import flashx.textLayout.container.ContainerController;
+	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.elements.ContainerFormattedElement;
 	import flashx.textLayout.elements.FlowLeafElement;
 	import flashx.textLayout.elements.ParagraphElement;
-	import flashx.textLayout.elements.SubParagraphGroupElement;
+	import flashx.textLayout.elements.SubParagraphGroupElementBase;
 	import flashx.textLayout.elements.TextFlow;
+	import flashx.textLayout.formats.Category;
+	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.TextLayoutFormat;
+	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 	
 	use namespace tlf_internal;
@@ -192,14 +196,15 @@ public class ElementRange
 	public function get containerFormat():ITextLayoutFormat
 	{
 		// see NOTE above before changing!!
-		// This is just wrong - only shows the first container
 		var container:ContainerController;
-		var flowComposer:IFlowComposer = firstParagraph.getTextFlow().flowComposer;
-		if (flowComposer && flowComposer.numControllers > 0)
-			container = flowComposer.getControllerAt(0);
-		if (!container)
-			return ContainerFormattedElement(firstParagraph.getParentByType(ContainerFormattedElement)).computedFormat;
- 		return container.computedFormat;		
+		var flowComposer:IFlowComposer = _textFlow.flowComposer;
+		if (flowComposer)
+		{
+			var idx:int = flowComposer.findControllerIndexAtPosition(absoluteStart);
+			if (idx != -1)
+				container = flowComposer.getControllerAt(idx);
+		}
+		return container ? container.computedFormat : _textFlow.computedFormat;
 	}
 		
 	/** 
@@ -233,6 +238,98 @@ public class ElementRange
  		return firstLeaf.computedFormat;
 	}
 	
+	/**
+	 * Gets the character format attributes that are common to all characters in the text range or current selection.
+	 * 
+	 * <p>Format attributes that do not have the same value for all characters in the element range are set to 
+	 * <code>null</code> in the returned TextLayoutFormat instance.</p>
+	 * 
+	 * @return The common character style settings
+	 * 
+	 * @playerversion Flash 10
+	 * @playerversion AIR 1.5
+	 * @langversion 3.0
+	 */
+	public function getCommonCharacterFormat():TextLayoutFormat
+	{		
+		var leaf:FlowLeafElement = firstLeaf;
+		var attr:TextLayoutFormat = new TextLayoutFormat(leaf.computedFormat);
+		
+		for (;;)
+		{
+			if (leaf == lastLeaf)
+				break;
+			leaf = leaf.getNextLeaf();
+			attr.removeClashing(leaf.computedFormat);
+		}
+
+		return Property.extractInCategory(TextLayoutFormat, TextLayoutFormat.description, attr, Category.CHARACTER, false) as TextLayoutFormat;
+	}
+	
+	/**
+	 * Gets the paragraph format attributes that are common to all paragraphs in the element range.
+	 * 
+	 * <p>Format attributes that do not have the same value for all paragraphs in the element range are set to 
+	 * <code>null</code> in the returned TextLayoutFormat instance.</p>
+	 * 	 
+	 * @return The common paragraph style settings
+	 * 
+	 * @see flashx.textLayout.edit.ISelectionManager#getCommonParagraphFormat
+	 * 
+	 * @playerversion Flash 10
+	 * @playerversion AIR 1.5
+	 * @langversion 3.0
+	 */
+	public function getCommonParagraphFormat():TextLayoutFormat
+	{
+		var para:ParagraphElement = firstParagraph;
+		var attr:TextLayoutFormat = new TextLayoutFormat(para.computedFormat);
+		for (;;)
+		{
+			if (para == lastParagraph)
+				break;
+			para = _textFlow.findAbsoluteParagraph(para.getAbsoluteStart()+para.textLength);
+			attr.removeClashing(para.computedFormat);
+		}
+		return Property.extractInCategory(TextLayoutFormat,TextLayoutFormat.description,attr,Category.PARAGRAPH, false) as TextLayoutFormat;
+	}
+	
+	/**
+		 * Gets the container format attributes that are common to all containers in the element range.
+	 * 
+	 * <p>Format attributes that do not have the same value for all containers in the element range are set to 
+	 * <code>null</code> in the returned TextLayoutFormat instance.</p>
+	 * 	 
+	 * @return The common paragraph style settings
+	 * 
+	 * @see flashx.textLayout.edit.ISelectionManager#getCommonParagraphFormat	 * 
+		* @playerversion Flash 10
+	 * @playerversion AIR 1.5
+	 * @langversion 3.0
+	 */
+	public function getCommonContainerFormat():TextLayoutFormat
+	{	
+		var flowComposer:IFlowComposer = _textFlow.flowComposer;
+		if (!flowComposer)
+			return null;
+
+		var index:int = flowComposer.findControllerIndexAtPosition(this.absoluteStart);
+		if (index == -1)
+			return null;
+		var controller:ContainerController = flowComposer.getControllerAt(index);
+		var attr:TextLayoutFormat = new TextLayoutFormat(controller.computedFormat);
+		while (controller.absoluteStart+controller.textLength < absoluteEnd)
+		{
+			index++;
+			if (index == flowComposer.numControllers)
+				break;
+			controller = flowComposer.getControllerAt(index);
+			attr.removeClashing(controller.computedFormat);
+		}
+		
+		return Property.extractInCategory(TextLayoutFormat,TextLayoutFormat.description,attr,Category.CONTAINER, false) as TextLayoutFormat;
+	}
+	
 	/** 
 	 * Creates an ElementRange object.
 	 * 
@@ -250,10 +347,12 @@ public class ElementRange
 		if (absoluteStart == absoluteEnd)
 		{
 			rslt.absoluteStart = rslt.absoluteEnd = absoluteStart;
-			rslt.firstLeaf = rslt.lastLeaf = textFlow.findLeaf(rslt.absoluteStart);
-			rslt.firstParagraph = rslt.lastParagraph = rslt.firstLeaf.getParagraph();
+			rslt.firstLeaf = textFlow.findLeaf(rslt.absoluteStart);
+			rslt.firstParagraph = rslt.firstLeaf.getParagraph();
 	//		rslt.begContainer = rslt.endContainer = selState.textFlow.findAbsoluteContainer(rslt.begElemIdx);
 			adjustForLeanLeft(rslt);
+			rslt.lastLeaf = rslt.firstLeaf;
+			rslt.lastParagraph = rslt.firstParagraph;
 		}
 		else
 		{
@@ -308,8 +407,8 @@ public class ElementRange
 			var previousNode:FlowLeafElement = rslt.firstLeaf.getPreviousLeaf(rslt.firstParagraph);
 			if (previousNode && previousNode.getParagraph() == rslt.firstLeaf.getParagraph())
 			{
-				if((!(previousNode.parent is SubParagraphGroupElement) || (previousNode.parent as SubParagraphGroupElement).acceptTextAfter())
-					&& (!(rslt.firstLeaf.parent is SubParagraphGroupElement) || previousNode.parent === rslt.firstLeaf.parent))
+				if((!(previousNode.parent is SubParagraphGroupElementBase) || (previousNode.parent as SubParagraphGroupElementBase).acceptTextAfter())
+					&& (!(rslt.firstLeaf.parent is SubParagraphGroupElementBase) || previousNode.parent === rslt.firstLeaf.parent))
 					rslt.firstLeaf = previousNode;
 			}
 				

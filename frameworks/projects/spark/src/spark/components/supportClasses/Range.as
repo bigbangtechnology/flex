@@ -11,7 +11,7 @@
 
 package spark.components.supportClasses
 {
-    
+
 import mx.events.FlexEvent;
 
 /**
@@ -57,13 +57,13 @@ import mx.events.FlexEvent;
 public class Range extends SkinnableComponent
 {
     include "../../core/Version.as";
-
+    
     //--------------------------------------------------------------------------
     //
     //  Constructor
     //
     //--------------------------------------------------------------------------
-
+    
     /**
      *  Constructor. 
      *  
@@ -76,7 +76,7 @@ public class Range extends SkinnableComponent
     {
         super();
     }
-
+    
     //--------------------------------------------------------------------------
     //
     //  Properties
@@ -90,6 +90,8 @@ public class Range extends SkinnableComponent
     private var _maximum:Number = 100;
     
     private var maxChanged:Boolean = false;
+    
+    [Inspectable(category="General", defaultValue="100.0")]
     
     /**
      *  The maximum valid <code>value</code>.
@@ -110,15 +112,15 @@ public class Range extends SkinnableComponent
     {
         return _maximum;
     }
-
+    
     public function set maximum(value:Number):void
     {
         if (value == _maximum)
             return;
-
+        
         _maximum = value;
         maxChanged = true;
-
+        
         invalidateProperties();
     }
     
@@ -129,6 +131,8 @@ public class Range extends SkinnableComponent
     private var _minimum:Number = 0;
     
     private var minChanged:Boolean = false;
+    
+    [Inspectable(category="General", defaultValue="0.0")]
     
     /**
      *  The minimum valid <code>value</code>.
@@ -160,7 +164,7 @@ public class Range extends SkinnableComponent
         
         invalidateProperties();
     }
-
+    
     //---------------------------------
     // stepSize
     //---------------------------------    
@@ -169,8 +173,8 @@ public class Range extends SkinnableComponent
     
     private var stepSizeChanged:Boolean = false;
     
-    [Inspectable(minValue="0.0")]
-
+    [Inspectable(category="General", defaultValue="1.0", minValue="0.0")]
+    
     /**
      *  The amount that the <code>value</code> property 
      *  changes when the <code>changeValueByStep()</code> method is called. It must
@@ -191,28 +195,29 @@ public class Range extends SkinnableComponent
     {
         return _stepSize;
     }
-
+    
     public function set stepSize(value:Number):void
     {
         if (value == _stepSize)
             return;
-            
+        
         _stepSize = value;
         stepSizeChanged = true;
         
         invalidateProperties();       
     }
-
+    
     //---------------------------------
     // value
     //---------------------------------   
-     
+    
     private var _value:Number = 0;
     private var _changedValue:Number = 0;
     private var valueChanged:Boolean = false;
     
     [Bindable(event="valueCommit")]
-
+    [Inspectable(category="General", defaultValue="0.0")]
+    
     /**
      *  The current value for this range.
      *  
@@ -235,8 +240,8 @@ public class Range extends SkinnableComponent
     {
         return (valueChanged) ? _changedValue : _value;
     }
-
-
+    
+    
     /**
      *  @private
      *  Implementation note: we temporarily store the new value in
@@ -257,17 +262,22 @@ public class Range extends SkinnableComponent
     //---------------------------------
     // snapInterval
     //---------------------------------   
-     
+    
     private var _snapInterval:Number = 1;
-
+    
     private var snapIntervalChanged:Boolean = false;
     private var _explicitSnapInterval:Boolean = false;
     
-    [Inspectable(minValue="0.0")]    
-
+    [Inspectable(category="General", defaultValue="1.0", minValue="0.0")]
+    
     /**
-     *  If nonzero, valid values are the sum of the minimum with integer multiples
-     *  of this property and less than or equal to the maximum.
+     *  The snapInterval property controls the valid values of the <code>value</code> property.
+     * 
+     *  If nonzero, valid values are the sum of the <code>minimum</code> and integer multiples
+     *  of this property, for all sums that are less than or equal to the <code>maximum</code>.
+     * 
+     *  <p>For example, if <code>minimum</code> is 10, <code>maximum</code> is 20, and this property is 3, then the
+     *  valid values of this Range are 10, 13, 16, 19, and 20.</p>
      *  
      *  <p>If the value of this property is zero, then valid values are only constrained
      *  to be between minimum and maximum inclusive.</p>
@@ -288,7 +298,7 @@ public class Range extends SkinnableComponent
     {
         return _snapInterval;
     }
-
+    
     public function set snapInterval(value:Number):void
     {
         // snapInterval defaults to stepSize if snapInterval is not
@@ -297,7 +307,7 @@ public class Range extends SkinnableComponent
         
         if (value == _snapInterval)
             return;
-
+        
         // NaN effectively clears the snapInterval and resets it to 1.
         if (isNaN(value))
         {
@@ -314,58 +324,60 @@ public class Range extends SkinnableComponent
         
         invalidateProperties();
     }
-
+    
     //--------------------------------------------------------------------------
     //
     //  Methods
     //
     //--------------------------------------------------------------------------
-
+    
     /**
      *  @private
      */
     override protected function commitProperties():void
     {
         super.commitProperties();
-
+        
+        // Check min <= max
         if (minimum > maximum)
         {
-            // Check min <= max
             if (!maxChanged)
                 _minimum = _maximum;
             else
                 _maximum = _minimum;
         }
-
-        if (valueChanged || maxChanged || minChanged || snapIntervalChanged)
+        
+        // determine which takes priority, stepSize or snapInterval, based
+        // on whether either or both have been set
+        if (stepSizeChanged || snapIntervalChanged)
+        {
+            if (_explicitSnapInterval)
+            {
+                // If snapInterval was explicitly set, stepSize always conforms to match
+                _stepSize = nearestValidSize(_stepSize);
+                stepSizeChanged = true; // technically not necessary
+            }
+            else
+            {
+                // Otherwise, snapInterval defaults to stepSize
+                _snapInterval = _stepSize;
+                snapIntervalChanged = true; // technically not necessary
+            }
+        }
+        
+        // if anything has changed, re-evaluate value
+        if (valueChanged || maxChanged || minChanged || stepSizeChanged || snapIntervalChanged)
         {
             var currentValue:Number = (valueChanged) ? _changedValue : _value;
             valueChanged = false;
             maxChanged = false;
             minChanged = false;
+            stepSizeChanged = false;
             snapIntervalChanged = false;
             setValue(nearestValidValue(currentValue, snapInterval));
         }
-        
-        if (stepSizeChanged)
-        {
-            // Only modify stepSize if snapInterval was explicitly set.
-            // Otherwise, snapInterval defaults to stepSize and we set
-            // the value to respect the new snapInterval.
-            if (_explicitSnapInterval)
-            {
-                _stepSize = nearestValidSize(_stepSize);
-            }
-            else
-            {
-                _snapInterval = _stepSize;
-                setValue(nearestValidValue(_value, snapInterval));
-            }
-            
-            stepSizeChanged = false;
-        }
     }
-
+    
     /**
      *  @private
      *  Returns the integer multiple of snapInterval that's closest to size.
@@ -458,7 +470,7 @@ public class Range extends SkinnableComponent
         
         return (validValue / scale) + minimum;
     }
-        
+    
     /**
      *  Sets the backing store for the <code>value</code> property and 
      *  dispatches a <code>valueCommit</code> event if the property changes.  
@@ -501,7 +513,7 @@ public class Range extends SkinnableComponent
     {
         if (stepSize == 0)
             return;
-
+        
         var newValue:Number = (increase) ? value + stepSize : value - stepSize;
         setValue(nearestValidValue(newValue, snapInterval));
     }

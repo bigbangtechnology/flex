@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
 	import flash.text.engine.GroupElement;
@@ -21,7 +21,6 @@ package flashx.textLayout.elements
 	import flashx.textLayout.formats.FormatValue;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
 	import flashx.textLayout.formats.WhiteSpaceCollapse;
 	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
@@ -61,7 +60,7 @@ package flashx.textLayout.elements
 	 	* @langversion 3.0
 	 	*/
 	 	
-		public function SpanElement():void
+		public function SpanElement()
 		{
 			super();
 		}
@@ -73,27 +72,11 @@ package flashx.textLayout.elements
 				return;
 			
 			computedFormat;	// BEFORE creating the element
-			_blockElement = new TextElement(null,null);			
-			CONFIG::debug { Debugging.traceFTECall(_blockElement,null,"new TextElement",null,null); }
-			TextElement(_blockElement).replaceText(0, 0, _text);
-			CONFIG::debug { Debugging.traceFTECall(null,_blockElement,"replaceText",0,0,_text); }
-			_text = null;
+			_blockElement = new TextElement(_text,null);			
+			CONFIG::debug { Debugging.traceFTECall(_blockElement,null,"new TextElement()"); }
+			CONFIG::debug { Debugging.traceFTEAssign(_blockElement, "text", _text); }
 			super.createContentElement();
 		}
-		/** @private */
-		override tlf_internal function releaseContentElement():void
-		{
-			if (_blockElement == null || !canReleaseContentElement())
-				return;
-			
-			CONFIG::debug { assert(_text == null, "_text already has content -- out of date?");	}
-			_text = _blockElement.rawText;
-			super.releaseContentElement();
-		}
-		
-		/** @private */
-		private function getTextElement():TextElement
-		{ return TextElement(_blockElement); }
 		
 		/** @private */
 		public override function shallowCopy(startPos:int = 0, endPos:int = -1):FlowElement
@@ -116,33 +99,32 @@ package flashx.textLayout.elements
 			if (leafElStartPos > leafElEndPos)
 				throw RangeError(GlobalSettings.resourceStringFunction("badShallowCopyRange"));
 			
-			var spanText:String = _blockElement ? _blockElement.rawText : _text;
-			if (((leafElStartPos != endSpan) && CharacterUtil.isLowSurrogate(spanText.charCodeAt(leafElStartPos))) ||
-				((leafElEndPos != 0) && CharacterUtil.isHighSurrogate(spanText.charCodeAt(leafElEndPos-1))))
+			if (((leafElStartPos != endSpan) && CharacterUtil.isLowSurrogate(_text.charCodeAt(leafElStartPos))) ||
+				((leafElEndPos != 0) && CharacterUtil.isHighSurrogate(_text.charCodeAt(leafElEndPos-1))))
 					throw RangeError(GlobalSettings.resourceStringFunction("badSurrogatePairCopy"));
 			
-			retFlow.replaceText(0, retFlow.textLength,  String(spanText).substring(leafElStartPos, leafElEndPos));
+			if (leafElStartPos != leafElEndPos)
+				retFlow.replaceText(0, retFlow.textLength,  _text.substring(leafElStartPos, leafElEndPos));
 			
 			return retFlow;
 		}	
 	
 		/** @private */
 		override protected function get abstract():Boolean
-		{
-			return false;
-		}		
+		{ return false; }		
+		
+		/** @private */
+		tlf_internal override function get defaultTypeName():String
+		{ return "span"; }
 
 		/** @private */
 		public override function get text():String
 		{
-			// Get the text from the blockElement is there is one, otherwise grab it from the text property
-			var textValue:String = _blockElement ? _blockElement.rawText : _text;
-			
 			// test textLength cause this is a property and the debugger may run this calculation in intermediate states
-			if (textLength && hasParagraphTerminator)
-				return textValue.substr(0,textLength-1);
-				
-			return textValue != null ? textValue : "";
+			if (textLength == 0)
+				return "";
+			
+			return hasParagraphTerminator ? _text.substr(0,textLength-1) : _text;
 		}
 		/** 
 		 * Receives the String of text that this SpanElement object holds.
@@ -164,21 +146,22 @@ package flashx.textLayout.elements
 		/** @private */
 		public override function getText(relativeStart:int=0, relativeEnd:int=-1, paragraphSeparator:String="\n"):String
 		{
-			// Get the text from the blockElement is there is one, otherwise grab it from the text property
-			var textValue:String = _blockElement ? _blockElement.rawText : _text;
-
+			if (relativeEnd == -1)
+				relativeEnd = textLength;
+			
 			if (textLength && relativeEnd == textLength && hasParagraphTerminator)
 				--relativeEnd;		// don't include terminator
-			return textValue ? textValue.substring(relativeStart, relativeEnd) : "";
+			return _text ? _text.substring(relativeStart, relativeEnd) : "";
 		}
 
 		[RichTextContent]
 		/** 
 		 * Sets text based on content within span tags; always deletes existing children.
-		 * This property is intended for use during mxml compiled import. When TLF markup elements have other
+		 * This property is intended for use during MXML compiled import in Flex. Flash Professional ignores this property.
+         * When TLF markup elements have other
 		 * TLF markup elements as children, the children are assigned to this property.
 		 *
-		 * @throws TypeError if array element is not a SpecialCharacterElement or a String
+		 * @throws TypeError If array element is not a SpecialCharacterElement or a String.
 		 * @param array - an array of elements within span tags. Each element of array must be a SpecialCharacterElement or a String.
 		 *
 		 * @playerversion Flash 10
@@ -210,7 +193,7 @@ package flashx.textLayout.elements
 					str += String.fromCharCode(0xE000); 
 				}	
 				else if (elem != null)
-					throw new TypeError(GlobalSettings.resourceStringFunction("badMXMLChildrenArgument",[ getQualifiedClassName(elem) ]));
+					throw new TypeError(GlobalSettings.resourceStringFunction("badMXMLChildrenArgument",[ getQualifiedClassName(elem) ]));	// NO PMD
 					
 			}
 			replaceText(0,textLength, str); 
@@ -233,8 +216,7 @@ package flashx.textLayout.elements
 		/** @private */
 		CONFIG::debug tlf_internal function verifyParagraphTerminator():void
 		{
-			var str:String = _blockElement ? _blockElement.rawText : _text;
-			assert(str && str.length && str.charAt(str.length-1) == SpanElement.kParagraphTerminator,
+			assert(_text && _text.length && _text.charAt(_text.length-1) == SpanElement.kParagraphTerminator,
 				"attempting to remove para terminator when it doesn't exist");
 		}
 		
@@ -261,12 +243,13 @@ package flashx.textLayout.elements
 		 /** @private */
 		tlf_internal override function applyWhiteSpaceCollapse(collapse:String):void
 		{
-			var ffc:TextLayoutFormatValueHolder = this.formatForCascade;
+			var ffc:ITextLayoutFormat = this.formatForCascade;
 			var wsc:* = ffc ? ffc.whiteSpaceCollapse : undefined;
 			if (wsc !== undefined && wsc != FormatValue.INHERIT)
 				collapse = wsc;
 				
-			var tempTxt:String = text;
+			var origTxt:String = text;
+			var tempTxt:String = origTxt;
 				
 			if (!collapse /* null == default value == COLLAPSE */ || collapse == WhiteSpaceCollapse.COLLAPSE)
 			{
@@ -291,10 +274,12 @@ package flashx.textLayout.elements
 
 				// Replace sequences of 2 or more whitespace characters with single space
 				tempTxt = tempTxt.replace(_dblSpacePattern, " ");
-				}
+			}
 			
 			// Replace tab placeholders (used for tabs that are expected to survive whitespace collapse) with '\t'
-			replaceText(0, textLength, tempTxt.replace(_tabPlaceholderPattern, '\t'));
+			tempTxt = tempTxt.replace(_tabPlaceholderPattern, '\t')
+			if (tempTxt != origTxt)
+				replaceText(0, textLength, tempTxt);
 
 			super.applyWhiteSpaceCollapse(collapse);
 		}
@@ -331,9 +316,8 @@ package flashx.textLayout.elements
 				throw RangeError(GlobalSettings.resourceStringFunction("invalidReplaceTextPositions"));	
 
 
-			var spanText:String = _blockElement ? _blockElement.rawText : _text;
-			if ((relativeStartPosition != 0 && relativeStartPosition != textLength && CharacterUtil.isLowSurrogate(spanText.charCodeAt(relativeStartPosition))) ||
-				(relativeEndPosition != 0 && relativeEndPosition != textLength && CharacterUtil.isHighSurrogate(spanText.charCodeAt(relativeEndPosition-1))))
+			if ((relativeStartPosition != 0 && relativeStartPosition != textLength && CharacterUtil.isLowSurrogate(_text.charCodeAt(relativeStartPosition))) ||
+				(relativeEndPosition != 0 && relativeEndPosition != textLength && CharacterUtil.isHighSurrogate(_text.charCodeAt(relativeEndPosition-1))))
 					throw RangeError (GlobalSettings.resourceStringFunction("invalidSurrogatePairSplit"));
 				
 			if (hasParagraphTerminator)
@@ -346,12 +330,12 @@ package flashx.textLayout.elements
 			}
 			
 			if (relativeEndPosition != relativeStartPosition)
-				modelChanged(ModelChange.TEXT_DELETED,relativeStartPosition,relativeEndPosition-relativeStartPosition);
+				modelChanged(ModelChange.TEXT_DELETED,this,relativeStartPosition,relativeEndPosition-relativeStartPosition);
 			
 			replaceTextInternal(relativeStartPosition,relativeEndPosition,textValue);
 			
 			if (textValue && textValue.length)
-				modelChanged(ModelChange.TEXT_INSERTED,relativeStartPosition,textValue.length);
+				modelChanged(ModelChange.TEXT_INSERTED,this,relativeStartPosition,textValue.length);
 		}
 		private function replaceTextInternal(startPos:int, endPos:int, textValue:String):void
 		{			
@@ -360,8 +344,9 @@ package flashx.textLayout.elements
 			var deltaChars:int =  textValueLength - deleteTotal;
 			if (_blockElement)
 			{
-				TextElement(_blockElement).replaceText(startPos,endPos,textValue);
-				CONFIG::debug { Debugging.traceFTECall(null,TextElement(_blockElement),"replaceText",startPos,endPos,textValue); }
+				(_blockElement as TextElement).replaceText(startPos,endPos,textValue);
+				_text = _blockElement.rawText;
+				CONFIG::debug { Debugging.traceFTECall(null,_blockElement as TextElement,"replaceText",startPos,endPos,textValue); }
 			}
 			else if (_text)
 			{
@@ -387,13 +372,13 @@ package flashx.textLayout.elements
 			}
 
 			CONFIG::debug { 
-				var debugText:String = _blockElement == null ? _text : _blockElement.rawText;
-				assert(textLength == (debugText ? debugText.length : 0),"span textLength doesn't match the length of the text property, text property length is " + debugText.length.toString() + " textLength property is " + textLength.toString());
+				assert(textLength == (_text ? _text.length : 0),"span textLength doesn't match the length of the text property, text property length is " + _text.length.toString() + " textLength property is " + textLength.toString());
+				assert(_blockElement == null || _blockElement.rawText == _text,"mismatched text");
 			}
 		}
 	
 		/** @private */
-		tlf_internal override function addParaTerminator():void
+		tlf_internal function addParaTerminator():void
 		{
 			CONFIG::debug 
 			{ 
@@ -411,19 +396,18 @@ package flashx.textLayout.elements
 					assert(_blockElement.rawText.charAt(_blockElement.rawText.length-1) == SpanElement.kParagraphTerminator,"adding para terminator failed");
 			}			
 			
-			modelChanged(ModelChange.TEXT_INSERTED,textLength-1,1);
+			modelChanged(ModelChange.TEXT_INSERTED,this,textLength-1,1);
 		}
 		/** @private */
-		tlf_internal override function removeParaTerminator():void
+		tlf_internal function removeParaTerminator():void
 		{
 			CONFIG::debug 
 			{ 
-				var str:String = _blockElement ? _blockElement.rawText : _text;
-				assert(str && str.length && str.charAt(str.length-1) == SpanElement.kParagraphTerminator,
+				assert(_text && _text.length && _text.charAt(_text.length-1) == SpanElement.kParagraphTerminator,
 					"attempting to remove para terminator when it doesn't exist");
 			}
 			replaceTextInternal(textLength-1,textLength,"");
-			modelChanged(ModelChange.TEXT_DELETED,textLength > 0 ? textLength-1 : 0,1);
+			modelChanged(ModelChange.TEXT_DELETED,this,textLength > 0 ? textLength-1 : 0,1);
 		}
 		// **************************************** 
 		// Begin tree modification support code
@@ -462,7 +446,7 @@ package flashx.textLayout.elements
 			var newSpan:SpanElement = new SpanElement();
 			// clone styling information
 			newSpan.id = this.id;
-			newSpan.styleName = this.styleName;			
+			newSpan.typeName = this.typeName;			
 			
 			if (parent)
 			{
@@ -470,7 +454,7 @@ package flashx.textLayout.elements
 				var newSpanLength:int = textLength - relativePosition;
 				if (_blockElement)
 				{
-				// optimized version leverages player APIs
+					// optimized version leverages player APIs
 					// TODO: Jeff to add split on TextElement so we don't have to go find a group every time
 					var group:GroupElement = parent.createContentAsGroup();
 					
@@ -489,6 +473,7 @@ package flashx.textLayout.elements
 					
 					// no guarantee on how the split works
 					_blockElement = group.getElementAt(elementIndex);
+					_text = _blockElement.rawText;
 					CONFIG::debug { Debugging.traceFTECall(_blockElement,group,"getElementAt",elementIndex); }
 					newBlockElement = group.getElementAt(elementIndex+1) as TextElement;
 					CONFIG::debug { Debugging.traceFTECall(newBlockElement,group,"getElementAt",elementIndex+1); }
@@ -500,14 +485,18 @@ package flashx.textLayout.elements
 				}
 
 				// Split this span at the offset, into two equivalent spans
-				modelChanged(ModelChange.TEXT_DELETED,relativePosition,newSpanLength);
-				newSpan.quickInitializeForSplit(this, newSpanLength,newBlockElement);
+				modelChanged(ModelChange.TEXT_DELETED,this,relativePosition,newSpanLength);
+				newSpan.quickInitializeForSplit(this, newSpanLength, newBlockElement);
 
 				setTextLength(relativePosition);
 			
 				// slices it in, sets the parent and the start
 				parent.addChildAfterInternal(this,newSpan);	
-				newSpan.modelChanged(ModelChange.ELEMENT_ADDED,0,newSpan.textLength);
+				
+				var p:ParagraphElement = this.getParagraph();
+				p.updateTerminatorSpan(this,newSpan);
+				
+				parent.modelChanged(ModelChange.ELEMENT_ADDED,newSpan,newSpan.parentRelativeStart,newSpan.textLength);
 			}
 			else
 			{
@@ -525,10 +514,10 @@ package flashx.textLayout.elements
 			return newSpan;
 		}
 		
-		/** private */
+		/** @private */
 		tlf_internal override function normalizeRange(normalizeStart:uint,normalizeEnd:uint):void
 		{
-			if (this.textLength == 1)
+			if (this.textLength == 1 && !bindableElement)
 			{
 				var p:ParagraphElement = getParagraph();
 				if (p && p.getLastLeaf() == this)
@@ -536,8 +525,8 @@ package flashx.textLayout.elements
 					var prevLeaf:FlowLeafElement = getPreviousLeaf(p);
 					if (prevLeaf)
 					{
-						this.format = prevLeaf.format;
-						this.userStyles = prevLeaf.userStyles ? Property.shallowCopy(prevLeaf.userStyles) : null;
+						if (!TextLayoutFormat.isEqual(this.format, prevLeaf.format))
+							this.format = prevLeaf.format;
 					}
 				}
 			}
@@ -547,23 +536,52 @@ package flashx.textLayout.elements
 		/** @private */
 		tlf_internal override function mergeToPreviousIfPossible():Boolean
 		{
-			// if canReleaseContentElement is false than the contentElement has something special (like an eventMirror) and the span can't be merged
-			if (parent && !bindableElement && canReleaseContentElement())
+			if (parent && !bindableElement)
 			{
 				var myidx:int = parent.getChildIndex(this);
 				if (myidx != 0)
 				{
 					var sib:SpanElement = parent.getChildAt(myidx-1) as SpanElement;
-					if (sib != null && sib.canReleaseContentElement() && 
-						(equalStylesForMerge(sib) || (this.textLength == 1 && this.hasParagraphTerminator)))
+					
+					// If the element we're checking for merge has only the terminator, and the previous element
+					// is not a Span, then we always merge with the previous span (NOT the previous sib). 
+					// We just remove this span, and add the terminator to the previous span.
+					if (!sib && this.textLength == 1 && this.hasParagraphTerminator)
+					{
+						var p:ParagraphElement = getParagraph();
+						if (p)
+						{
+							var prevLeaf:FlowLeafElement = getPreviousLeaf(p) as SpanElement;
+							if (prevLeaf)
+							{
+								parent.removeChildAt(myidx);
+								return true;
+							}
+						}
+					}
+
+					if (sib == null)
+						return false;
+					
+					
+					// If this has an active event mirror do not merge
+					if (this.hasActiveEventMirror())
+						return false;
+					var thisIsSimpleTerminator:Boolean = textLength == 1 && hasParagraphTerminator;
+					// if sib has an active event mirror still merge if this is a simple terminator span
+					if (sib.hasActiveEventMirror() && !thisIsSimpleTerminator)
+						return false;
+					
+					// always merge if this is just a terminator
+					if (thisIsSimpleTerminator || equalStylesForMerge(sib))
 					{
 						CONFIG::debug { assert(this.parent == sib.parent, "Should never merge two spans with different parents!"); }
 						CONFIG::debug { assert(TextLayoutFormat.isEqual(this.formatForCascade,sib.formatForCascade) || (this.textLength == 1 && this.hasParagraphTerminator), "Bad merge!"); }
-						
-						// Merge them in the Player's TextBlock structure
+
+						// Merge the spans
 						var siblingInsertPosition:int = sib.textLength;
 						sib.replaceText(siblingInsertPosition, siblingInsertPosition, this.text);
-						parent.replaceChildren(myidx,myidx+1,null);
+						parent.removeChildAt(myidx);
 						return true;
 					}
 				}
@@ -582,13 +600,13 @@ package flashx.textLayout.elements
 			
 			var rslt:int = super.debugCheckFlowElement(depth,"text:"+String(text).substr(0,32)+" "+extraData);
 
-			var textValue:String = _blockElement ? _blockElement.rawText : _text;
+			assert(_blockElement == null || _blockElement.rawText == _text,"debugCheckFlowElement: mismatched text");
 			var textLen:int = textLength;
-			if (textValue)
-				rslt += assert(textLen == textValue.length,"span is different than its textElement, span text length is " + textValue.length.toString() + " expecting " + textLen.toString());
+			if (_text)
+				rslt += assert(textLen == _text.length,"span is different than its textElement, span text length is " + _text.length.toString() + " expecting " + textLen.toString());
 			else	
 				rslt += assert(textLen == 0,"span is different than its textElement, span text length is null expecting " + textLen.toString());
-			rslt += assert(this != getParagraph().getLastLeaf() || (textValue.length >= 1 && textValue.substr(textValue.length-1,1) == SpanElement.kParagraphTerminator),"last span in paragraph must end with terminator");
+			rslt += assert(this != getParagraph().getLastLeaf() || (_text.length >= 1 && _text.substr(_text.length-1,1) == SpanElement.kParagraphTerminator),"last span in paragraph must end with terminator");
 			return rslt;
 		}
 	}

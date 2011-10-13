@@ -30,9 +30,12 @@ import flash.text.engine.TextBaseline;
 import flash.text.engine.TextBlock;
 import flash.text.engine.TextElement;
 import flash.text.engine.TextLine;
+import flash.text.engine.TypographicCase;
 
 import flashx.textLayout.compose.ISWFContext;
 import flashx.textLayout.compose.TextLineRecycler;
+import flashx.textLayout.formats.BaselineShift;
+import flashx.textLayout.formats.TLFTypographicCase;
 
 import mx.core.IEmbeddedFontRegistry;
 import mx.core.IFlexModuleFactory;
@@ -200,7 +203,7 @@ include "../styles/metadata/BasicNonInheritingTextStyles.as"
  *    ligatureLevel="common"
  *    lineBreak="toFit"
  *    lineHeight="120%"
- *    lineThrough="false%"
+ *    lineThrough="false"
  *    locale="en"
  *    paddingBottom="0"
  *    paddingLeft="0"
@@ -474,12 +477,15 @@ public class Label extends TextBase
         var allLinesComposed:Boolean = createTextLines(elementFormat);
         
         // Need truncation if all the following are true
+        // - there is text (even if there is no text there is may be padding
+        //       which may not fit and the text would be reported as truncated)
         // - truncation options exist (0=no trunc, -1=fill up bounds then trunc,
         //      n=n lines then trunc)
         // - compose width is specified
         // - content doesn't fit
         var lb:String = getStyle("lineBreak");
-        if (maxDisplayedLines &&
+        if (text != null && text.length > 0 &&
+            maxDisplayedLines &&
             !doesComposedTextFit(height, width, allLinesComposed, maxDisplayedLines, lb))
         {
             truncateText(width, height, lb);
@@ -586,20 +592,17 @@ public class Label extends TextBase
         
         var elementFormat:ElementFormat = new ElementFormat();
         
+        // Out of order so it can be used by baselineShift.
+        elementFormat.fontSize = getStyle("fontSize");
+        
         s = getStyle("alignmentBaseline");
         if (s != null)
             elementFormat.alignmentBaseline = s;
             
         elementFormat.alpha = getStyle("textAlpha");
             
-        elementFormat.baselineShift = -getStyle("baselineShift");
-            // Note: The negative sign is because, as in TLF,
-            // we want a positive number to shift the baseline up,
-            // whereas FTE does it the opposite way.
-            // In FTE, a positive baselineShift increases
-            // the y coordinate of the baseline, which is
-            // mathematically appropriate, but unintuitive.
-            
+        setBaselineShift(elementFormat);
+        
         // Note: Label doesn't support a breakOpportunity style,
         // so we leave elementFormat.breakOpportunity with its
         // default value of "auto".
@@ -642,10 +645,8 @@ public class Label extends TextBase
             
         elementFormat.fontDescription = fontDescription;
         
-        elementFormat.fontSize = getStyle("fontSize");
-        
         setKerning(elementFormat);
-        
+
         s = getStyle("ligatureLevel");
         if (s != null)
             elementFormat.ligatureLevel = s;
@@ -655,12 +656,56 @@ public class Label extends TextBase
             elementFormat.locale = s;
         
         setTracking(elementFormat);
-        
-        s = getStyle("typographicCase");
-        if (s != null)
-            elementFormat.typographicCase = s;
 
+        setTypographicCase(elementFormat);
+        
         return elementFormat;
+    }
+
+    /**
+     *  @private
+     */
+    private function setBaselineShift(elementFormat:ElementFormat):void
+    {
+        var baselineShift:* = getStyle("baselineShift");
+        var fontSize:Number = elementFormat.fontSize;
+        
+        if (baselineShift == BaselineShift.SUPERSCRIPT || 
+            baselineShift == BaselineShift.SUBSCRIPT)
+        {
+            var fontMetrics:FontMetrics;
+            if (embeddedFontContext)
+                fontMetrics = embeddedFontContext.callInContext(elementFormat.getFontMetrics, elementFormat, null);
+            else
+                fontMetrics = elementFormat.getFontMetrics();
+            if (baselineShift == BaselineShift.SUPERSCRIPT)
+            {
+                elementFormat.baselineShift = 
+                    fontMetrics.superscriptOffset * fontSize;
+                elementFormat.fontSize = fontMetrics.superscriptScale * fontSize;
+            }
+            else // it's subscript
+            {
+                elementFormat.baselineShift = 
+                    fontMetrics.subscriptOffset * fontSize;
+                elementFormat.fontSize = fontMetrics.subscriptScale * fontSize;
+            }
+        }			
+        else
+        {
+            // TLF will throw a range error if percentage not between
+            // -1000% and 1000%.  Label does not.
+            baselineShift = 
+                getNumberOrPercentOf(baselineShift, fontSize);
+            if (!isNaN(baselineShift))
+                elementFormat.baselineShift = -baselineShift;
+                    // Note: The negative sign is because, as in TLF,
+                    // we want a positive number to shift the baseline up,
+                    // whereas FTE does it the opposite way.
+                    // In FTE, a positive baselineShift increases
+                    // the y coordinate of the baseline, which is
+                    // mathematically appropriate, but unintuitive.    
+        }
     }
     
     /**
@@ -723,6 +768,38 @@ public class Label extends TextBase
             elementFormat.trackingRight = value;
     }
 
+    /**
+     *  @private
+     */
+    private function setTypographicCase(elementFormat:ElementFormat):void
+    {
+        var s:String = getStyle("typographicCase");
+        if (s != null)
+        {
+            switch (s)
+            {
+                case TLFTypographicCase.LOWERCASE_TO_SMALL_CAPS:
+                {
+                    elementFormat.typographicCase = 
+                        TypographicCase.CAPS_AND_SMALL_CAPS;
+                    break;
+                }
+                case TLFTypographicCase.CAPS_TO_SMALL_CAPS:
+                {
+                    elementFormat.typographicCase = TypographicCase.SMALL_CAPS;
+                    break;
+                }
+                default:
+                {
+                    // Others map directly so handle it in the default case.
+                    elementFormat.typographicCase = s;
+                    break;
+                }
+            }
+        }        
+    }
+
+    
     /**
      *  @private
      *  Stuffs the specified text and formatting info into a TextBlock
@@ -842,11 +919,11 @@ public class Label extends TextBase
 
         var innerWidth:Number = bounds.width - paddingLeft - paddingRight;
         var innerHeight:Number = bounds.height - paddingTop - paddingBottom;
-        
+                
         var measureWidth:Boolean = isNaN(innerWidth);
         if (measureWidth)
             innerWidth = maxWidth;
-
+        
         var maxLineWidth:Number = lineBreak == "explicit" ?
                                   TextLine.MAX_LINE_WIDTH :
                                   innerWidth;
@@ -1018,6 +1095,10 @@ public class Label extends TextBase
         if (isNaN(bounds.height))
             innerHeight = textLine.y + textLine.descent;
         
+        // Ensure we snap for consistent results.
+        innerWidth = Math.ceil(innerWidth);
+        innerHeight = Math.ceil(innerHeight);
+        
         var leftAligned:Boolean = 
             textAlign == "start" && direction == "ltr" ||
             textAlign == "end" && direction == "rtl" ||
@@ -1082,8 +1163,8 @@ public class Label extends TextBase
             else if (centerAligned)
                 textLine.x = centerOffset - textLine.textWidth / 2;
             else if (rightAligned)
-                textLine.x = rightOffset - textLine.textWidth;
-
+                textLine.x = rightOffset - textLine.textWidth;            
+            
             if (verticalAlign == "top" || !createdAllLines || clipping)
             {
                 textLine.y += topOffset;
@@ -1169,8 +1250,10 @@ public class Label extends TextBase
                 return false;
         }
 
-        // No lines or no height restriction.
-        if (!textLines.length || isNaN(height))
+        // No lines or one line or no height restriction.  We don't truncate away
+        // the one and only line just because height is too small.  Clipping
+        // will take care of it later
+        if (textLines.length <= 1 || isNaN(height))
             return true;
                                              
         // Does the bottom of the last line fall within the bounds?                                                    
@@ -1228,17 +1311,17 @@ public class Label extends TextBase
                 new Vector.<DisplayObject>();
             var indicatorBounds:Rectangle = new Rectangle(0, 0, width, NaN);
     
-            createTextLinesFromTextBlock(staticTextBlock, 
-                                         indicatorLines, 
-                                         indicatorBounds);
+            var indicatorFits:Boolean = createTextLinesFromTextBlock(staticTextBlock, 
+                                                                     indicatorLines, 
+                                                                     indicatorBounds);
                                                
             releaseLinesFromTextBlock();
                                                                                                          
             // 2. Move target line for truncation higher by as many lines 
             // as the number of full lines taken by the truncation 
-            // indicator.
+            // indicator. Indicator should also be able to fit.
             truncLineIndex -= (indicatorLines.length - 1);
-            if (truncLineIndex >= 0)
+            if (truncLineIndex >= 0 && indicatorFits)
             {
                 // 3. Calculate allowed width (width left over from the 
                 // last line of the truncation indicator).
@@ -1470,9 +1553,7 @@ public class Label extends TextBase
 
             charPosition = line.getAtomTextBlockEndIndex(atomIndex);
         }
-        
-        line.flushAtomData();
-        
+                
         return charPosition;
     }
         
@@ -1535,9 +1616,7 @@ public class Label extends TextBase
         // 4. Get the char index for this atom index
         var nextTruncationPosition:int = 
                         line.getAtomTextBlockBeginIndex(atomIndex);
-        
-        line.flushAtomData();
-        
+                
         return nextTruncationPosition;
     }
     

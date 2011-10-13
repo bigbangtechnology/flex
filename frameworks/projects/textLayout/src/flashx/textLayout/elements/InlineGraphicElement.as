@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements 
 {
 	import flash.display.DisplayObject;
@@ -23,12 +23,16 @@ package flashx.textLayout.elements
 	import flash.geom.Rectangle;
 	import flash.net.URLRequest;
 	import flash.system.Capabilities;
+	import flash.text.engine.ContentElement;
+	import flash.text.engine.ElementFormat;
 	import flash.text.engine.FontMetrics;
 	import flash.text.engine.GraphicElement;
 	import flash.text.engine.TextBaseline;
 	import flash.text.engine.TextLine;
 	import flash.text.engine.TextRotation;
 	
+	import flashx.textLayout.compose.IFlowComposer;
+	import flashx.textLayout.compose.ISWFContext;
 	import flashx.textLayout.compose.TextFlowLine;
 	import flashx.textLayout.debug.Debugging;
 	import flashx.textLayout.debug.assert;
@@ -37,9 +41,10 @@ package flashx.textLayout.elements
 	import flashx.textLayout.formats.BlockProgression;
 	import flashx.textLayout.formats.Float;
 	import flashx.textLayout.formats.FormatValue;
+	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.JustificationRule;
-	import flashx.textLayout.property.EnumStringProperty;
-	import flashx.textLayout.property.NumberOrPercentOrEnumProperty;
+	import flashx.textLayout.formats.TextLayoutFormat;
+	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 	
 	use namespace tlf_internal;
@@ -107,6 +112,7 @@ package flashx.textLayout.elements
 		private var _source:Object;
 		
 		private var _graphic:DisplayObject;
+		private var _placeholderGraphic:Sprite;		// a fake DisplayObject we put in the TextLine so it generates an atom
 		
 		private var _elementWidth:Number;
 		private var _elementHeight:Number;
@@ -125,6 +131,8 @@ package flashx.textLayout.elements
 		private var _measuredHeight:Number;
 		
 		private var _float:*;
+		
+		static private const graphicElementText:String = String.fromCharCode(ContentElement.GRAPHIC_ELEMENT);
 
 		/** Constructor - create new InlineGraphicElement object
 		 *
@@ -133,7 +141,7 @@ package flashx.textLayout.elements
 	 	 * @langversion 3.0
 		 */
 		 
-		public function InlineGraphicElement():void
+		public function InlineGraphicElement()
 		{
 			super();
 			// The width/height on the FE.fe don't actually take until the InlineGraphicElement is loaded.
@@ -142,10 +150,9 @@ package flashx.textLayout.elements
 			_measuredHeight = 0;
 			internalSetWidth(undefined);
 			internalSetHeight(undefined);
-			_float = floatPropertyDefinition.defaultValue;
 			_graphicStatus = InlineGraphicElementStatus.LOAD_PENDING;
 			setTextLength(1);
-			_text = String.fromCharCode(0xFDEF);
+			_text = graphicElementText;		// echo text property we get from FTE
 		}
 		
 		/** @private */
@@ -158,32 +165,83 @@ package flashx.textLayout.elements
 			var graphicElement:GraphicElement = new GraphicElement();			
 			_blockElement = graphicElement;
 			CONFIG::debug { Debugging.traceFTECall(_blockElement,null,"new GraphicElement()"); }
-			_blockElement.textRotation = String(rotationPropertyDefinition.defaultValue)
-			CONFIG::debug { Debugging.traceFTEAssign(_blockElement,"textRotation",String(rotationPropertyDefinition.defaultValue)); }
-			graphicElement.elementHeight = (_float != Float.NONE) ? 0 : elementHeight;
-			CONFIG::debug { Debugging.traceFTEAssign(_blockElement,"elementHeight",graphicElement.elementHeight); }
-			graphicElement.elementWidth = (_float != Float.NONE) ? 0 : elementWidth;
-			CONFIG::debug { Debugging.traceFTEAssign(_blockElement,"elementWidth",graphicElement.elementWidth); }
-			graphicElement.graphic = (_float != Float.NONE) ? new Sprite() : graphic;
-			CONFIG::debug { Debugging.traceFTEAssign(graphicElement,"graphic",graphic); }	// needs float fix
+			
+			updateContentElement();
+
 			super.createContentElement();
-	//		trace("text is ", _blockElement.rawText.charCodeAt(0), "length", _blockElement.rawText.length);
-			_text = null;
+		}
+		
+		private function updateContentElement():void
+		{
+			var graphicElement:GraphicElement = _blockElement as GraphicElement;			
+			// Setting textRotation throws if any of the parent GroupElements have textRotation other than ROTATE_0
+			CONFIG::debug { assert(_blockElement.textRotation == TextRotation.ROTATE_0,"invalid text Rotation in ILG"); }
+			// CONFIG::debug { Debugging.traceFTEAssign(_blockElement,"textRotation",String(rotationPropertyDefinition.defaultValue)); }
+
+			//we need to keep a place holder in the ge.graphic in order to be able to navigate
+			//to the element.  Without it, the FTE model will remove the atom and selection will not be
+			//possible. - gak 12.12.08
+			if (!_placeholderGraphic)
+				_placeholderGraphic = new Sprite();
+			graphicElement.graphic = _placeholderGraphic;
+
+			if (effectiveFloat != Float.NONE)
+			{
+				if (graphicElement.elementHeight != 0)
+					graphicElement.elementHeight = 0 ;
+				if (graphicElement.elementWidth != 0)
+					graphicElement.elementWidth = 0;
+			}
+			else
+			{
+				var height:Number = elementHeightWithMarginsAndPadding();
+				if (graphicElement.elementHeight != height)
+					graphicElement.elementHeight = height;
+				var width:Number = elementWidthWithMarginsAndPadding();
+				if (graphicElement.elementWidth != width)
+					graphicElement.elementWidth = width;
+			}
+			CONFIG::debug { Debugging.traceFTEAssign(_blockElement,"elementHeight",graphicElement.elementHeight); }
+			CONFIG::debug { Debugging.traceFTEAssign(_blockElement,"elementWidth",graphicElement.elementWidth); }
+			CONFIG::debug { Debugging.traceFTEAssign(graphicElement,"graphic",graphic); }	// needs float fix
+		}
+		
+		// Recalculate graphicElement width & height after a format change
+		/** @private */
+		public override function get computedFormat():ITextLayoutFormat
+		{
+			var updateGraphicElement:Boolean = _computedFormat == null;
+			super.computedFormat;
+			if (updateGraphicElement && _blockElement)
+				updateContentElement();
+
+			return _computedFormat;
 		}
 		
 		/** @private */
-		override tlf_internal function canReleaseContentElement():Boolean
+		tlf_internal function elementWidthWithMarginsAndPadding():Number
 		{
-			return false;
+			// no textflow is no padding
+			var textFlow:TextFlow = getTextFlow();
+			if (!textFlow)
+				return elementWidth;
+			var paddingAmount:Number = textFlow.computedFormat.blockProgression == BlockProgression.RL ? 
+				getEffectivePaddingTop()  + getEffectivePaddingBottom() :
+				getEffectivePaddingLeft() + getEffectivePaddingRight();
+			return elementWidth + paddingAmount;
 		}
 		
 		/** @private */
-		override tlf_internal function releaseContentElement():void
+		tlf_internal function elementHeightWithMarginsAndPadding():Number
 		{
-			if (_blockElement == null || !canReleaseContentElement())
-				return;
-			_text = String.fromCharCode(0xFDEF);		// echo text property we get from FTE
-			super.releaseContentElement();
+			// no textflow is no padding
+			var textFlow:TextFlow = getTextFlow();
+			if (!textFlow)
+				return elementWidth;
+			var paddingAmount:Number = textFlow.computedFormat.blockProgression == BlockProgression.RL ? 
+				getEffectivePaddingLeft() + getEffectivePaddingRight() :
+				getEffectivePaddingTop() + getEffectivePaddingBottom();
+			return elementHeight + paddingAmount;
 		}
 		
 		// internal values for _graphicStatus.  It can also be an error code.
@@ -201,13 +259,6 @@ package flashx.textLayout.elements
 		static private const NULL_GRAPHIC:String = "nullGraphic";
 		
 		
-		private function getGraphicElement():GraphicElement
-		{ 
-			if (!_blockElement)
-				createContentElement();
-			return GraphicElement(_blockElement); 
-		}
-		
 		private static var isMac:Boolean = (Capabilities.os.search("Mac OS") > -1);				
 		
 		/** The embedded graphic. 
@@ -223,21 +274,18 @@ package flashx.textLayout.elements
 		}
 		private function setGraphic(value:DisplayObject):void
 		{
-			if (_blockElement)
-			{
-				// Update the graphicElement to match the new graphic value. If it's a float,
-				// we set it to a placeholder in the ge.graphic in order to be able to navigate
-				// to the element.  Without it, the FTE model will remove the atom and selection will not be
-				// possible. - gak 12.12.08
-				GraphicElement(_blockElement).graphic = (_float != Float.NONE) ? new Sprite() : value;
-				CONFIG::debug { Debugging.traceFTEAssign(_blockElement,"graphic",GraphicElement(_blockElement).graphic); }
-			}
-
 			_graphic = value;
 		// I think this should do a model change. But it will break paste because when we paste we do a reimport,
 		// which will cause a delayed update, which will bump the generation number *after* the command. Which 
 		// will cause undo of the command not to work.
 		//	modelChanged(ModelChange.ELEMENT_MODIFIED,0,textLength);
+		}
+		
+		
+		/** @private */
+		tlf_internal function get placeholderGraphic():Sprite
+		{
+			return _placeholderGraphic;
 		}
 		
 		/** Width used by composition for laying out text around the graphic. @private */
@@ -248,15 +296,16 @@ package flashx.textLayout.elements
 		/** Width used by composition for laying out text around the graphic. @private */
 		tlf_internal function set elementWidth(value:Number):void
 		{
+			_elementWidth = value;
+
 			if (_blockElement)
 			{
-				GraphicElement(_blockElement).elementWidth = (_float != Float.NONE) ? 0 : value;
-				CONFIG::debug { Debugging.traceFTEAssign(GraphicElement(_blockElement),"elementWidth",GraphicElement(_blockElement).elementWidth); }
+				(_blockElement as GraphicElement).elementWidth = (effectiveFloat != Float.NONE) ? 0 : elementWidthWithMarginsAndPadding();
+				CONFIG::debug { Debugging.traceFTEAssign(GraphicElement(_blockElement as GraphicElement),"elementWidth",GraphicElement(_blockElement).elementWidth); }
 				
 			}
 
-			 _elementWidth = value;
-			modelChanged(ModelChange.ELEMENT_MODIFIED,0,textLength,true,false);
+			modelChanged(ModelChange.ELEMENT_MODIFIED,this,0,textLength,true,false);
 		}
 		
 		/** Height used by composition for laying out text around the graphic. @private */
@@ -267,28 +316,29 @@ package flashx.textLayout.elements
 		/** Height used by composition for laying out text around the graphic. @private */
 		tlf_internal function set elementHeight(value:Number):void
 		{
+			_elementHeight = value;
+
 			if (_blockElement)
 			{
-				GraphicElement(_blockElement).elementHeight = (_float != Float.NONE) ? 0 : value;	
-				CONFIG::debug { Debugging.traceFTEAssign(GraphicElement(_blockElement),"elementHeight",GraphicElement(_blockElement).elementHeight); }
+				(_blockElement as GraphicElement).elementHeight = (effectiveFloat != Float.NONE) ? 0 : elementHeightWithMarginsAndPadding();	
+				CONFIG::debug { Debugging.traceFTEAssign((_blockElement as GraphicElement),"elementHeight",GraphicElement(_blockElement).elementHeight); }
 			}
-			_elementHeight = value;
-			modelChanged(ModelChange.ELEMENT_MODIFIED,0,textLength,true,false);
+			modelChanged(ModelChange.ELEMENT_MODIFIED,this,0,textLength,true,false);
 		}
 		
 		/** Definition of the height property @private */
-		static tlf_internal const heightPropertyDefinition:NumberOrPercentOrEnumProperty = new NumberOrPercentOrEnumProperty("height", FormatValue.AUTO, false, null, 0, 32000, "0%", "1000000%", FormatValue.AUTO );
+		static tlf_internal const heightPropertyDefinition:Property = Property.NewNumberOrPercentOrEnumProperty("height", FormatValue.AUTO, false, null, 0, 32000, "0%", "1000000%", FormatValue.AUTO );
 		
 		/** Definition of the width property @private */
-		static tlf_internal const widthPropertyDefinition:NumberOrPercentOrEnumProperty = new NumberOrPercentOrEnumProperty("width", FormatValue.AUTO, false, null, 0, 32000, "0%", "1000000%", FormatValue.AUTO );
+		static tlf_internal const widthPropertyDefinition:Property = Property.NewNumberOrPercentOrEnumProperty("width", FormatValue.AUTO, false, null, 0, 32000, "0%", "1000000%", FormatValue.AUTO );
 		
 		/** Disabled due to player bug.  @private */
-		static tlf_internal const rotationPropertyDefinition:EnumStringProperty = new EnumStringProperty("rotation", TextRotation.ROTATE_0, false, null, 
+		static tlf_internal const rotationPropertyDefinition:Property = Property.NewEnumStringProperty("rotation", TextRotation.ROTATE_0, false, null, 
 			TextRotation.ROTATE_0, TextRotation.ROTATE_90, TextRotation.ROTATE_180, TextRotation.ROTATE_270);		
 		
 		/** Definition of the float property @private */
-		static tlf_internal const floatPropertyDefinition:EnumStringProperty = new EnumStringProperty("float", Float.NONE, false, null, 
-			 Float.NONE, Float.LEFT, Float.RIGHT);
+		static tlf_internal const floatPropertyDefinition:Property = Property.NewEnumStringProperty("float", Float.NONE, false, null, 
+			 Float.NONE, Float.LEFT, Float.RIGHT, Float.START, Float.END);
 			
 		/** The current status of the image. On each status change the owning TextFlow sends a StatusChangeEvent.
 		 *
@@ -360,7 +410,7 @@ package flashx.textLayout.elements
 		public function set width(w:*):void
 		{ 
 			internalSetWidth(w);
-			modelChanged(ModelChange.ELEMENT_MODIFIED,0,textLength);
+			modelChanged(ModelChange.ELEMENT_MODIFIED,this,0,textLength);
 		}
 		
 		/** The natural width of the graphic. This is the width of the graphic at load time.
@@ -478,49 +528,64 @@ package flashx.textLayout.elements
 		public function set height(h:*):void
 		{
 			internalSetHeight(h);
-			modelChanged(ModelChange.ELEMENT_MODIFIED,0,textLength);
+			modelChanged(ModelChange.ELEMENT_MODIFIED,this,0,textLength);
 		}
 		
 		private function get internalHeight():Object
 		{ return _height === undefined ? heightPropertyDefinition.defaultValue : _height; }
 		
-		/** @private - prototype phase only */
-		tlf_internal function get float():*
+		/** @private */
+		tlf_internal function get computedFloat():*
+		{
+			if (_float === undefined)
+				return floatPropertyDefinition.defaultValue;
+			return _float;
+		}
+		
+		private var _effectiveFloat:String;		// how it was last composed
+		/** @private */
+		tlf_internal function get effectiveFloat():*
+		{
+			return _effectiveFloat ? _effectiveFloat : computedFloat;
+		}
+		/** @private */
+		tlf_internal function setEffectiveFloat(floatValue:String):void
+		{
+			if (_effectiveFloat != floatValue)
+			{
+				_effectiveFloat = floatValue;
+				if (_blockElement)
+					updateContentElement();
+			}
+		}
+		
+		[Inspectable(enumeration="none,left,right,start,end")]
+		/** Controls the placement of the graphic relative to the text. It can be part of the line, or can be beside the line with the text 
+		 * wrapped around it. 
+		 * <p>Legal values are flashx.textLayout.formats.Float.NONE, flashx.textLayout.formats.Float.LEFT, flashx.textLayout.formats.Float.RIGHT, flashx.textLayout.formats.Float.START, flashx.textLayout.formats.Float.END.</p>
+		 * <p>Default value is undefined indicating not set.</p>
+		 * <p>If undefined will be treated as Float.NONE.</p>
+		 * 
+		 * @throws RangeError when set value is not within range for this property
+		 * 
+		 * @see flashx.textLayout.formats.Float
+		 * @playerversion Flash 10
+		 * @playerversion AIR 2.0
+		 * @langversion 3.0
+		 */
+		public function get float():*
 		{
 			return _float;
 		}
-		/** @private - prototype phase only */
-		tlf_internal function set float(value:*):*
+		public function set float(value:*):*
 		{
-			if (value === undefined)
-				value = floatPropertyDefinition.defaultValue;
 			value = floatPropertyDefinition.setHelper(float, value) as String;
 			if (_float != value)
 			{
-				var origWasInline:Boolean = _float == Float.NONE;
 				_float = value;
-				
-				if (_float != Float.NONE)		// it's float; move variables from fte back to floating so fte won't see them
-				{
-					//only apply the graphicElement width and height if the original graphicElement was not a placeHolder
-					//failure to do so will result in a 0 width/height element.
-					if(origWasInline && _blockElement)
-					{
-						var graphicElement:GraphicElement = GraphicElement(_blockElement);
-						setGraphic(graphicElement.graphic);
-						elementWidth = graphicElement.elementWidth;
-						elementHeight = graphicElement.elementHeight;
-					}
-				}
-				else 	// it's inline: move varibles back from floating to where fte will see them
-				{
-					_graphic.x = 0;		// clear out whatever repositioning was done by floats code
-					_graphic.y = 0;
-					setGraphic (_graphic);
-					elementWidth = _elementWidth;
-					elementHeight = _elementHeight;					
-				}
-				modelChanged(ModelChange.ELEMENT_MODIFIED,0,textLength);
+				if (_blockElement)
+					updateContentElement();
+				modelChanged(ModelChange.ELEMENT_MODIFIED,this,0,textLength);
 			}					
 		}
 		
@@ -615,7 +680,7 @@ package flashx.textLayout.elements
 		private function loadCompleteHandler(e:Event):void
 		{			
 			CONFIG::debug { Debugging.traceFTECall(null,null,"loadCompleteHandler",this); }
-			removeDefaultLoadHandlers();
+			removeDefaultLoadHandlers(graphic as Loader);
 			CONFIG::debug { assert(okToUpdateHeightAndWidth == false,"invalid call to loadCompleteHandler"); }
 			okToUpdateHeightAndWidth = true;
 			
@@ -658,9 +723,8 @@ package flashx.textLayout.elements
 			CONFIG::debug { Debugging.traceFTECall(null,loaderInfo,"addEventListener",IOErrorEvent.IO_ERROR, "loadCompleteHandler", false, 0, true); }
 		}
 		
-		private function removeDefaultLoadHandlers():void
+		private function removeDefaultLoadHandlers(loader:Loader):void
 		{
-			var loader:Loader = Loader(graphic);
 			CONFIG::debug{ assert(loader != null,"bad call to removeDefaultLoadHandlers"); }
 			loader.contentLoaderInfo.removeEventListener(Event.OPEN, openHandler);
 			loader.contentLoaderInfo.removeEventListener(Event.COMPLETE, loadCompleteHandler);
@@ -689,13 +753,22 @@ package flashx.textLayout.elements
 		{
 			stop(true);
 			_source = value;
-			modelChanged(ModelChange.ELEMENT_MODIFIED,0,textLength);
 			changeGraphicStatus(InlineGraphicElementStatus.LOAD_PENDING);
+			modelChanged(ModelChange.ELEMENT_MODIFIED,this,0,textLength);
 		}
 	
-		/** @private */
+		/** @private This method starts and stops ILGs.  Generally TLF delays starting an ILG until the first compose.  It shuts them down when they
+		 * are deleted from the TextFlow or the TextFlow has its flowComposer removed.  Some cases are ambigious, for example removeAllControllers doesn't stop ILGs
+		 * but the client may desire it too.  In cases where ILGs don't get stopped or started there are two tlf_internal functions on TextFlow:
+		 * unloadGraphics - unloads and stops all ILGs
+		 * prepareGraphicsForLoad - puts all ILGs that are not loaded in a list so that they are loaded on the next compose.
+		 * This function is also called when an auto-size or percentage sized graphic is loaded.  In that case the same list as prepareGraphicsForLoad is used.
+		 * */
 		tlf_internal override function applyDelayedElementUpdate(textFlow:TextFlow,okToUnloadGraphics:Boolean,hasController:Boolean):void
 		{
+			if (textFlow != this.getTextFlow())
+				hasController = false;
+			
 			CONFIG::debug { assert(textFlow != null,"ILG:applyDelayedElementUpdate: null textFlow"); }		
 			if (_graphicStatus == InlineGraphicElementStatus.LOAD_PENDING)
 			{
@@ -718,34 +791,45 @@ package flashx.textLayout.elements
 						CONFIG::debug { Debugging.traceFTECall(loader,null,"new Loader()"); }
 
 						// set the width/height on COMPLETE or IOError
-						addDefaultLoadHandlers(loader);
-						if (source is String)
+						try
 						{
- 							var myPattern:RegExp = /\\/g;  							
-							var src:String = source as String;
-							src = src.replace(myPattern, "/");
-							//workaround for Watson bug 1896186.  FlashPlayer requres that file
-							//names be encoded on Macintosh, but not on Windows.  Grouped this
-							//bug with FlashPlayer Watson bug 1899687
-							var pictURLReq:URLRequest;
-							if (isMac)
+							addDefaultLoadHandlers(loader);
+							if (source is String)
 							{
-								pictURLReq = new URLRequest(encodeURI(src));
-								CONFIG::debug { Debugging.traceFTECall(pictURLReq,null,"new URLRequest",encodeURI(src)); }
+	 							var myPattern:RegExp = /\\/g;  							
+								var src:String = source as String;
+								src = src.replace(myPattern, "/");
+								//workaround for Watson bug 1896186.  FlashPlayer requres that file
+								//names be encoded on Macintosh, but not on Windows.  Grouped this
+								//bug with FlashPlayer Watson bug 1899687
+								var pictURLReq:URLRequest;
+								if (isMac)
+								{
+									pictURLReq = new URLRequest(encodeURI(src));
+									CONFIG::debug { Debugging.traceFTECall(pictURLReq,null,"new URLRequest",encodeURI(src)); }
+								}
+								else
+								{
+									pictURLReq = new URLRequest(src);	
+									CONFIG::debug { Debugging.traceFTECall(pictURLReq,null,"new URLRequest",src); }									
+								}
+								
+								loader.load(pictURLReq);
+								CONFIG::debug { Debugging.traceFTECall(null,loader,"load",pictURLReq); }									
 							}
 							else
-							{
-								pictURLReq = new URLRequest(src);	
-								CONFIG::debug { Debugging.traceFTECall(pictURLReq,null,"new URLRequest",src); }									
-							}					
-							loader.load(pictURLReq);
-							CONFIG::debug { Debugging.traceFTECall(null,loader,"load",pictURLReq); }									
+								loader.load(URLRequest(source));
+									
+							setGraphic(loader);		
+							changeGraphicStatus(LOAD_INITIATED);
 						}
-						else
-							loader.load(URLRequest(source));
-								
-						setGraphic(loader);		
-						changeGraphicStatus(LOAD_INITIATED);
+						catch(e:Error)
+						{
+							// the load didn't initiate
+							removeDefaultLoadHandlers(loader);
+							elem = new Shape();
+							changeGraphicStatus(NULL_GRAPHIC);
+						}
 					}
 					else if (source is Class)	// value is class --> it is an Embed
 					{
@@ -834,45 +918,35 @@ package flashx.textLayout.elements
 		/** This function updates the size of the graphic element when the size is expressed as a percentage of the graphic's actual size. */
 		private function updateAutoSizes():void
 		{
-			// some discussion about making this function public.  the idea is that if the graphic
-			// changes size the client can force it to recompute.  however the measuredWidth and measuredHeight
-			// of the graphic doesn't really exist anywhere.
-			
-			// when public can only call ths for certain values of _graphicStatus
-			// if (_graphicStatus == NULL_GRAPHIC || _graphicStatus == LOAD_INITIATED || _graphicStatus == OPEN_RECEIVED)
-			//	return;
-				
-			// if (widthIsComputed() || heightIsComputed())	
+			if (widthIsComputed())
 			{
-				if (widthIsComputed())
-				{
-					elementWidth = computeWidth();
-					graphic.width = elementWidth;
-				}
-				if (heightIsComputed())
-				{
-					elementHeight = computeHeight();
-					graphic.height = elementHeight;
-				}
+				elementWidth = computeWidth();
+				graphic.width = elementWidth;
+			}
+			if (heightIsComputed())
+			{
+				elementHeight = computeHeight();
+				graphic.height = elementHeight;
 			}
 		}
 		
 		
-		/** stop if its a movieclip */
-		private function stop(okToUnloadGraphics:Boolean):Boolean
+		/** @private Stop this inlinegraphicelement - if its a movieclip will stop noise and playing - if a load is in process it cancels the load */
+		tlf_internal function stop(okToUnloadGraphics:Boolean):Boolean
 		{
 			
 			// watch for changing the source while we've got an event listener on the current graphic
 			// if so cancel the load and remove the listeners
 			if (_graphicStatus == OPEN_RECEIVED || _graphicStatus == LOAD_INITIATED)
 			{
+				var loader:Loader = graphic as Loader;
 				try
 				{
-					Loader(graphic).close();	// cancels in process load
+					loader.close();	// cancels in process load
 				}
 				catch (e:Error)
 				{ /* ignore */ }
-				removeDefaultLoadHandlers();
+				removeDefaultLoadHandlers(loader);
 			}
 
 			// shutdown any running movieclips - this graphic will no longer be referenced
@@ -917,28 +991,27 @@ package flashx.textLayout.elements
 		/** @private */
 		tlf_internal override function getEffectiveFontSize():Number
 		{
-			if (float != Float.NONE)
+			if (effectiveFloat != Float.NONE)
 				return 0;
 			var defaultLeading:Number = super.getEffectiveFontSize();
-			return Math.max(defaultLeading, elementHeight);
+			return Math.max(defaultLeading, elementHeightWithMarginsAndPadding());
 		}
 		
-		/** Returns the actual ascent of the image. Used for computing baselines when they are ascent.  @private */
-		tlf_internal function getEffectiveAscent():Number
+		/** Returns the calculated lineHeight from this element's properties.  @private */
+		tlf_internal override function getEffectiveLineHeight(blockProgression:String):Number
 		{
-			if (float != Float.NONE)
+			if (effectiveFloat != Float.NONE)
 				return 0;
-				
-			return elementHeight + GraphicElement(_blockElement).elementFormat.baselineShift;
+			return super.getEffectiveLineHeight(blockProgression);
 		}
 		
 		/** Returns the typographic ascent of the image (i.e. relative to the line's Roman baseline). @private */
 		tlf_internal function getTypographicAscent(textLine:TextLine):Number
 		{
-			if (float != Float.NONE)
+			if (effectiveFloat != Float.NONE)
 				return 0;
 				
-			var effectiveHeight:Number = elementHeight;
+			var effectiveHeight:Number = elementHeightWithMarginsAndPadding();
 			
 			var dominantBaselineString:String;
 			if(this._computedFormat.dominantBaseline != FormatValue.AUTO)
@@ -950,8 +1023,8 @@ package flashx.textLayout.elements
 				dominantBaselineString = this.getParagraph().getEffectiveDominantBaseline();
 			}
 			
-			var graphicElement:GraphicElement = GraphicElement(_blockElement);
-			var alignmentBaseline:String = (graphicElement.elementFormat.alignmentBaseline == flash.text.engine.TextBaseline.USE_DOMINANT_BASELINE ? dominantBaselineString : graphicElement.elementFormat.alignmentBaseline);
+			var elementFormat:ElementFormat = _blockElement ? _blockElement.elementFormat : computeElementFormat();
+			var alignmentBaseline:String = (elementFormat.alignmentBaseline == flash.text.engine.TextBaseline.USE_DOMINANT_BASELINE ? dominantBaselineString : elementFormat.alignmentBaseline);
 				
 			var top:Number=0;
 
@@ -965,9 +1038,46 @@ package flashx.textLayout.elements
 			top += textLine.getBaselinePosition(flash.text.engine.TextBaseline.ROMAN) - textLine.getBaselinePosition(alignmentBaseline);
 			
 			// finally, account for baseline shift
-			top += graphicElement.elementFormat.baselineShift; 
+			top += elementFormat.baselineShift; 
 			
 			return top;
+		}
+		
+		/** @private 
+		 * Get the "inline box" for the element as defined by the CSS visual formatting model (http://www.w3.org/TR/CSS2/visuren.html)
+		 * For an inline graphic, lineHeight is ignored. The box dimensions are governed by the element height with padding. 
+		 * Alignment relative to the baseline (using baselineShift, dominantBaseline, alignmentBaseline) is taken into account.
+		 * @return Null if the element is not "inline" (i.e., is a float). Otherwise, a rectangle representing the inline box. 
+		 * Top and Bottom are relative to the line's Roman baseline. Left and Right are ignored.
+		 */
+		override tlf_internal function getCSSInlineBox(blockProgression:String, textLine:TextLine, para:ParagraphElement=null, swfContext:ISWFContext=null):Rectangle
+		{
+			if (effectiveFloat != Float.NONE)
+				return null;
+			
+			var inlineBox:Rectangle = new Rectangle();
+			inlineBox.top = -(getTypographicAscent(textLine));
+			inlineBox.height = elementHeightWithMarginsAndPadding();
+			inlineBox.width = elementWidth;
+			
+			return inlineBox;
+		}
+		
+		/** @private */
+		override tlf_internal function updateIMEAdornments(tLine:TextLine, blockProgression:String, imeStatus:String):void
+		{
+			// Don't underline for floats
+			if (effectiveFloat == Float.NONE)
+				super.updateIMEAdornments(tLine, blockProgression, imeStatus);
+		}
+		
+		/** @private */
+		override tlf_internal function updateAdornments(tLine:TextLine, blockProgression:String):int
+		{
+			// Don't underline for floats
+			if (effectiveFloat == Float.NONE)
+				return super.updateAdornments(tLine, blockProgression);
+			return 0;
 		}
 		
 		/** @private */
@@ -985,16 +1095,23 @@ package flashx.textLayout.elements
 			return retFlow;
 		}
 
-		/** @private */
-		override protected function get abstract():Boolean
-		{
-			return false;
-		}		
+		 /** @private */
+		 override protected function get abstract():Boolean
+		 { return false; }
+		 
+		 /** @private */
+		 tlf_internal override function get defaultTypeName():String
+		 { return "img"; }		
 		
 		/** @private */
-		tlf_internal override function appendElementsForDelayedUpdate(tf:TextFlow):void
+		tlf_internal override function appendElementsForDelayedUpdate(tf:TextFlow,changeType:String):void
 		{ 
-			if (_graphicStatus == InlineGraphicElementStatus.LOAD_PENDING || _graphicStatus == InlineGraphicElementStatus.SIZE_PENDING || !tf.flowComposer || tf.flowComposer.numControllers == 0)
+			if (changeType == ModelChange.ELEMENT_ADDED)
+				tf.incGraphicObjectCount();
+			else if (changeType == ModelChange.ELEMENT_REMOVAL)
+				tf.decGraphicObjectCount();
+			
+			if (status != InlineGraphicElementStatus.READY || changeType == ModelChange.ELEMENT_REMOVAL)
 				tf.appendOneElementForUpdate(this);
 		}
 		
@@ -1005,42 +1122,53 @@ package flashx.textLayout.elements
 				return super.calculateStrikeThrough(tLine,blockProgression,metrics);
 				
 			var stOffset:Number = 0;
-		//	trace(spanBounds.y);
-		//	trace(this.graphic.getBounds(tLine));
-			var myBounds:Rectangle = this.graphic.getBounds(tLine);
-			
-			if(blockProgression != BlockProgression.RL)
+			var inlineHolder:DisplayObjectContainer = _placeholderGraphic.parent;
+			if (inlineHolder)
 			{
-				stOffset = myBounds.y + this.elementHeight/2;
-			}
-			else
-			{
-				var line:TextFlowLine = tLine.userData as TextFlowLine;
-				var elemIdx:int = this.getAbsoluteStart() - line.absoluteStart;
-				if(tLine.getAtomTextRotation(elemIdx) != TextRotation.ROTATE_0)
-					stOffset = myBounds.x + this.elementHeight/2;
+				if(blockProgression != BlockProgression.RL)
+					stOffset = placeholderGraphic.parent.y + (this.elementHeight/2 + Number(getEffectivePaddingTop()));
 				else
-					stOffset = myBounds.x + this.elementWidth/2;
+				{
+					var paddingRight:Number = getEffectivePaddingRight();
+					var line:TextFlowLine = tLine.userData as TextFlowLine;
+					var elemIdx:int = this.getAbsoluteStart() - line.absoluteStart;
+					if(tLine.getAtomTextRotation(elemIdx) != TextRotation.ROTATE_0)
+						stOffset = _placeholderGraphic.parent.x - (this.elementHeight/2 + paddingRight);
+					else
+						stOffset = _placeholderGraphic.parent.x - (this.elementWidth/2 + paddingRight);
+				}
 			}
 			
 			return blockProgression == BlockProgression.TB ? stOffset : -stOffset;
 		}
-		
+	
 		/** @private */
 		tlf_internal override function calculateUnderlineOffset(stOffset:Number, blockProgression:String, metrics:FontMetrics, tLine:TextLine):Number
 		{
 			if (!this.graphic || status != InlineGraphicElementStatus.READY)
 				return super.calculateUnderlineOffset(stOffset,blockProgression,metrics,tLine);
 				
+			var para:ParagraphElement = this.getParagraph();
 			var ulOffset:Number = 0;
-			if(blockProgression == BlockProgression.TB)
-				ulOffset = this.graphic.getBounds(tLine).bottom;
-			else
-				ulOffset = this.graphic.getBounds(tLine).right;
-				
+			var inlineHolder:DisplayObjectContainer = _placeholderGraphic.parent;
+			if (inlineHolder)
+			{
+				if(blockProgression == BlockProgression.TB)
+					ulOffset = inlineHolder.y + elementHeightWithMarginsAndPadding();
+				else
+				{					
+					if (para.computedFormat.locale.toLowerCase().indexOf("zh") == 0)
+					{
+						ulOffset = inlineHolder.x - elementHeightWithMarginsAndPadding();
+						ulOffset -= metrics.underlineOffset + (metrics.underlineThickness/2);
+						return ulOffset;
+					}
+					else
+						ulOffset = inlineHolder.x - getEffectivePaddingLeft();
+				}
+			}	
 			ulOffset += metrics.underlineOffset + (metrics.underlineThickness/2);
 			
-			var para:ParagraphElement = this.getParagraph();
 			var justRule:String = para.getEffectiveJustificationRule();
 			if(justRule == JustificationRule.EAST_ASIAN)
 				ulOffset += 1;
@@ -1065,7 +1193,7 @@ package flashx.textLayout.elements
 			var rslt:int = super.debugCheckFlowElement(depth,extraData+" url:"+source);
 
 			if (_blockElement)
-				rslt += assert(textLength == GraphicElement(_blockElement).rawText.length,"image is different than its textElement");
+				rslt += assert(textLength == (_blockElement as GraphicElement).rawText.length,"image is different than its textElement");
 			rslt += assert(this != getParagraph().getLastLeaf(),"last Leaf in paragraph cannot be image");
 
 			return rslt;

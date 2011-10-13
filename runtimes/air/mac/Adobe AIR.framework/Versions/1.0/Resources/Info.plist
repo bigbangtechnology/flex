@@ -17,8 +17,8 @@
 	<key>CFBundlePackageType</key>
 	<string>FMWK</string>
 	<key>CFBundleVersion</key>
-	<string>2.0.2.12610</string>
+	<string>2.6.0.19120</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2007-2010 Adobe Systems Inc.</string>
+	<string>Copyright © 2007-2011 Adobe Systems Inc.</string>
 </dict>
 </plist>

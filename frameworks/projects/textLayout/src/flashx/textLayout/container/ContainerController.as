@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.container 
 {
 	import flash.display.BlendMode;
@@ -24,14 +24,18 @@ package flashx.textLayout.container
 	import flash.events.MouseEvent;
 	import flash.events.TextEvent;
 	import flash.events.TimerEvent;
+	import flash.geom.Matrix;
 	import flash.geom.Point;
 	import flash.geom.Rectangle;
+	import flash.text.engine.TextBlock;
 	import flash.text.engine.TextLine;
 	import flash.text.engine.TextLineValidity;
 	import flash.ui.ContextMenu;
 	import flash.ui.ContextMenuClipboardItems;
 	import flash.utils.Timer;
 	
+	import flashx.textLayout.compose.FloatCompositionData;
+	import flashx.textLayout.compose.FlowComposerBase;
 	import flashx.textLayout.compose.FlowDamageType;
 	import flashx.textLayout.compose.IFlowComposer;
 	import flashx.textLayout.compose.TextFlowLine;
@@ -43,13 +47,20 @@ package flashx.textLayout.container
 	import flashx.textLayout.edit.ISelectionManager;
 	import flashx.textLayout.edit.SelectionFormat;
 	import flashx.textLayout.elements.BackgroundManager;
+	import flashx.textLayout.elements.Configuration;
 	import flashx.textLayout.elements.ContainerFormattedElement;
 	import flashx.textLayout.elements.FlowElement;
 	import flashx.textLayout.elements.FlowLeafElement;
 	import flashx.textLayout.elements.FlowValueHolder;
 	import flashx.textLayout.elements.InlineGraphicElement;
+	import flashx.textLayout.elements.LinkElement;
 	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.elements.TextFlow;
+	import flashx.textLayout.events.FlowElementMouseEvent;
+	import flashx.textLayout.events.FlowElementMouseEventManager;
+	import flashx.textLayout.events.ModelChange;
+	import flashx.textLayout.events.ScrollEvent;
+	import flashx.textLayout.events.ScrollEventDirection;
 	import flashx.textLayout.events.TextLayoutEvent;
 	import flashx.textLayout.events.UpdateCompleteEvent;
 	import flashx.textLayout.formats.BlockProgression;
@@ -57,7 +68,6 @@ package flashx.textLayout.container
 	import flashx.textLayout.formats.FormatValue;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
 	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 	import flashx.textLayout.utils.Twips;
@@ -65,7 +75,7 @@ package flashx.textLayout.container
 	use namespace tlf_internal;
 	
 	/** 
-	 * The  ContainerController class defines the relationship between a TextFlow object and a container.
+	 * The ContainerController class defines the relationship between a TextFlow object and a container.
 	 * A TextFlow may have one or more rectangular areas that can hold text; the text is said to be flowing
 	 * through the containers. Each container is a Sprite that is the parent DisplayObject for the TextLines.
 	 * Each container has a ContainerController that manages the container; the controller holds the target 
@@ -88,7 +98,7 @@ package flashx.textLayout.container
 	 *
 	 * @see flashx.textLayout.compose.IFlowComposer
 	 * @see flashx.textLayout.elements.TextFlow
-	 * @see flashx.textLayout.container.TextContainerController
+	 * @see flash.text.engine.TextLine
 	 */
 	public class ContainerController implements IInteractionEventHandler, ITextLayoutFormat, ISandboxSupport
 	{		
@@ -99,10 +109,11 @@ package flashx.textLayout.container
 		private var _textLength:int;
 		
 		private var _container:Sprite;
+		private var _mouseEventManager:FlowElementMouseEventManager;
 		
 		// note must be protected - subclass sets or gets this variable but can't be public
 		/** computed container attributes.  @private */
-		protected var _computedFormat:TextLayoutFormatValueHolder;
+		protected var _computedFormat:TextLayoutFormat;
 		
 		// Generated column information
 		// Generated column information
@@ -120,7 +131,8 @@ package flashx.textLayout.container
 		private var _contentWidth:Number;
 		private var _contentHeight:Number;
 		
-		private var _composeCompleteRatio:Number;	// 1 if composition was complete when contentHeight, etc registered, greater than one otherwise
+		private var _uncomposedTextLength:int;	// 0 if composition was complete when contentHeight, etc registered, greater than one otherwise
+		private var _finalParcelStart:int;
 		
 		// Scroll policy -- determines whether scrolling is enabled or not
 		private var _horizontalScrollPolicy:String;
@@ -134,6 +146,7 @@ package flashx.textLayout.container
 		private var _minListenersAttached:Boolean = false;
 		private var _allListenersAttached:Boolean = false;
 		private var _selectListenersAttached:Boolean = false;
+		tlf_internal var _mouseWheelListenerAttached:Boolean = false;
 		
 		/** @private */
 		tlf_internal function get allListenersAttached():Boolean
@@ -150,6 +163,12 @@ package flashx.textLayout.container
 		 * @private use this boolean to determine if container.scrollRect is set.  Accessing scrollRect when null changes the rendering behavior of flash player.	
 		 */
 		protected var _hasScrollRect:Boolean;
+		
+		private var _linesInView:Array;	// lines that were in view according to the previous compose(). Empty if the lines have already been posted to the display list.
+		private var _updateStart:int;
+		
+		private var _composedFloats:Array;  // floats that were composed into the controller -- array of FloatCompositionData
+		private var _floatsInContainer:Array;  // floats are currently in view -- array of DisplayObject
 		
 		/** 
 		 * @private
@@ -170,7 +189,7 @@ package flashx.textLayout.container
 		
 		private var _shapeChildren:Array;
 		
-		private var _formatValueHolder:FlowValueHolder;
+		private var _format:FlowValueHolder;
 		
 		private var _containerRoot:DisplayObject;
 		
@@ -209,12 +228,11 @@ package flashx.textLayout.container
 			//_visibleRect = new Rectangle();
 			_xScroll = _yScroll = 0;
 			_contentWidth = _contentHeight = 0;
-			_composeCompleteRatio = 1;
+			_uncomposedTextLength = 0;
 			
 			// We have to set the flag so that we will get double click events. This
 			// is a change to the container we are given, but a minor one.
-			if (_container is InteractiveObject)
-				InteractiveObject(_container).doubleClickEnabled = true;
+			_container.doubleClickEnabled = true;
 			
 			_horizontalScrollPolicy = _verticalScrollPolicy = String(ScrollPolicy.scrollPolicyPropertyDefinition.defaultValue);
 			_hasScrollRect = false;
@@ -222,6 +240,7 @@ package flashx.textLayout.container
 			CONFIG::debug { id = contCount.toString(); ++contCount; }
 			
 			_shapeChildren = [ ];
+			_linesInView = [ ];
 			
 			setCompositionSize(compositionWidth, compositionHeight);
 			format = _containerControllerInitialFormat;
@@ -350,12 +369,20 @@ package flashx.textLayout.container
 		{ return _measureHeight; }
 		
 		/** 
-		 * Sets the width and height allowed for text in the container. 
+		 * Sets the width and height allowed for text in the container. Width and height can be specified in pixels or <code>NaN</code> can be used for either value.  <code>NaN</code> indicates measure that value. 
+		 * This can be used to find the widest line and/or the total height of all the content.  When NaN is specified as the width lines are broken with a maximum width of <code>TextLine.MAX_LINE_WIDTH</code>. 
+		 * When <code>NaN</code> is specified as the height the container is assumed to have unlimited height.  The actual measured values can be ready back in <code>getContentBounds</code>.  
+		 * When the computed <code>blockProgression</code> property of <code>TextFlow</code>
+		 * is <code>BlockProgression.RL</code> the meanings of width and height are exchanged.
 		 *
-		 * @param w The width in pixels that's available for text in the container.
-		 * @param h The height in pixels that's available for text in the container.
+		 * @param w The width in pixels that's available for text in the container.  <code>NaN</code> indicates no specified width.  
+		 * @param h The height in pixels that's available for text in the container.   <code>NaN</code> indicates no specified height.  
 		 *
 		 * @includeExample examples\ContainerController_setCompositionSizeExample.as -noswf
+		 * 
+		 * @see flash.text.engine.TextLine#MAX_LINE_WIDTH
+		 * @see flashx.textLayout.formats.BlockProgression
+		 * @see #getContentBounds()
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
@@ -364,6 +391,8 @@ package flashx.textLayout.container
 		
 		public function setCompositionSize(w:Number,h:Number):void
 		{
+		//	trace("setCompositionSize(" + w + ", " + h + ")");
+			
 			// note: NaN == NaN is always false
 			var widthChanged:Boolean  =  !(_compositionWidth == w || (isNaN(_compositionWidth) && isNaN(w)));
 			var heightChanged:Boolean =  !(_compositionHeight == h || (isNaN(_compositionHeight) && isNaN(h)));
@@ -377,7 +406,14 @@ package flashx.textLayout.container
 				// otherwise the reset will happen when the cascade is done
 				if (_computedFormat)
 					resetColumnState();
-				invalidateContents();
+				// Invalidate all the lines, forcing FTE rebuild if they changed in the logical width direction
+				if (effectiveBlockProgression == BlockProgression.TB ? widthChanged : heightChanged)
+				{
+					if (textFlow && _textLength)
+						textFlow.damage(absoluteStart, _textLength, TextLineValidity.INVALID, false);
+				}
+				else
+					invalidateContents();		 // don't need to rebuild FTE lines, just reflow them
 				attachTransparentBackgroundForHit(false);
 			}
 		}
@@ -390,11 +426,10 @@ package flashx.textLayout.container
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 * 
-		 * @see flashx.textLayout.elements#TextFlow TextFlow
-		 */
-		
+	 	 * @langversion 3.0
+	 	 * 
+	 	 * @see flashx.textLayout.elements.TextFlow TextFlow
+	 	 */		 
 		public function get textFlow():TextFlow
 		{ 
 			if (!_textFlowCache && _rootElement)
@@ -429,6 +464,20 @@ package flashx.textLayout.container
 		{
 			if (_rootElement != value)
 			{
+				if (_mouseEventManager)
+					_mouseEventManager.stopHitTests();
+				if (!value)
+					_mouseEventManager = null;
+				else if (!_mouseEventManager)
+				{
+					// Currently, the manager listens to all events itself.
+					// TODO: forward at least mouseOver and mouseDown events without
+					// causing side effects
+					_mouseEventManager = new FlowElementMouseEventManager(container, null);
+					//				[MouseEvent.MOUSE_DOWN, MouseEvent.MOUSE_UP, MouseEvent.MOUSE_MOVE, MouseEvent.MOUSE_DOWN, MouseEvent.MOUSE_OUT,
+					//				 KeyboardEvent.KEY_DOWN, KeyboardEvent.KEY_UP]);
+				}
+
 				clearCompositionResults();
 				detachContainer();
 				_rootElement = value;
@@ -438,6 +487,9 @@ package flashx.textLayout.container
 				attachContainer();
 				if (_rootElement)
 					formatChanged();
+
+				if (_container && Configuration.playerEnablesSpicyFeatures)
+					_container["needsSoftKeyboard"] = (interactionManager && interactionManager.editingMode == EditingMode.READ_WRITE);
 			}
 		}
 		
@@ -455,6 +507,19 @@ package flashx.textLayout.container
 		{
 			return textFlow ? textFlow.interactionManager : null;
 		}
+		
+		
+		/** @private */
+		tlf_internal function get uncomposedTextLength():int
+		{ return _uncomposedTextLength; }
+
+		/** @private */
+		tlf_internal function get finalParcelStart():int
+		{ return _finalParcelStart; }
+		
+		/** @private */
+		tlf_internal function set finalParcelStart(val:int):void
+		{ _finalParcelStart = val; }
 		
 		//--------------------------------------------------------------------------
 		//
@@ -514,6 +579,7 @@ package flashx.textLayout.container
 			if (_textLength != numChars)
 			{
 				_textLength = numChars; 
+				_uncomposedTextLength = 0;
 				// all following containers must have absoluteStart invalidated
 				if (_absoluteStart != -1)
 				{
@@ -527,6 +593,7 @@ package flashx.textLayout.container
 							if (controller._absoluteStart == -1)
 								break;
 							controller._absoluteStart = -1;
+							controller._uncomposedTextLength = 0;
 						}
 					}
 				}
@@ -539,7 +606,7 @@ package flashx.textLayout.container
 			CONFIG::debug { assert(numChars >= 0,"bad set textLength"); }
 			
 			// If its a scrollable container, and it is the last one, then it gets all the characters even though we might not have composed them all
-			_composeCompleteRatio = 1;
+			var uncomposedTextLength:int = 0;
 			if (textFlow)
 			{
 				var verticalText:Boolean = effectiveBlockProgression == BlockProgression.RL;
@@ -550,7 +617,7 @@ package flashx.textLayout.container
 				{
 					var containerAbsoluteStart:int = absoluteStart;
 					CONFIG::debug { assert(textFlow.textLength >= containerAbsoluteStart,"ContainerController.setTextLength bad absoluteStart"); }
-					_composeCompleteRatio = (textFlow.textLength-containerAbsoluteStart) / numChars;
+					uncomposedTextLength = textFlow.textLength-(numChars+containerAbsoluteStart);
 					// _composeCompleteRatio = (textFlow.textLength-containerAbsoluteStart) == numChars ? 1 : 1.1;
 					// var scaledContentHeight:Number = _composeCompleteRatio * _contentHeight;
 					// trace("composeCompleteRatio:",_composeCompleteRatio,"composedContentHeight",_contentHeight,"scaledContentHeight",scaledContentHeight,"textLength",textFlow.textLength,"numChars",numChars);
@@ -559,7 +626,10 @@ package flashx.textLayout.container
 				}
 			}
 			
-			setTextLengthOnly(numChars); 
+			// this call clears uncomposedTextLength - set it immediately afterwards
+			setTextLengthOnly(numChars); 	
+			_uncomposedTextLength = uncomposedTextLength;
+
 			CONFIG::debug
 			{
 				if (Debugging.debugOn && textFlow)
@@ -606,47 +676,38 @@ package flashx.textLayout.container
 			invalidateContents();
 		}
 		
-		/**
-		 *  Removes inlines that should no longer be on the display list and
-		 *  adds inlines that are new to the display list.
-		 *  @private
-		 */
-		
-		tlf_internal function updateInlineChildren():void
+		/** This gets called when an element has changed its style selection related attributes. This may happen because an
+		 * ancestor element changed it attributes.
+		 * @private 
+		 */		
+		tlf_internal function styleSelectorChanged():void
 		{
+			modelChanged(ModelChange.STYLE_SELECTOR_CHANGED,this,0,this._textLength);
+			_computedFormat = null;
 		}
 		
-		/** determines the shapechildren in the container and applies VJ. @private */
-		protected function fillShapeChildren(sc:Array,tempSprite:Sprite):void
-		{ 
-			if (_textLength == 0)
-				return;	// none				
-			
-			var flowComposer:IFlowComposer = this.flowComposer;
-			var wmode:String = effectiveBlockProgression;
-			
+		/** @private */
+		tlf_internal function modelChanged(changeType:String, element:ContainerController, changeStart:int, changeLen:int, needNormalize:Boolean = true, bumpGeneration:Boolean = true):void
+		{
+			var tf:TextFlow = _rootElement.getTextFlow();
+			if (tf)
+				tf.processModelChanged(changeType, element, absoluteStart+changeStart, changeLen, needNormalize, bumpGeneration);
+		}
+		
+		private function gatherVisibleLines(wmode:String, createShape:Boolean):void
+		{
+			// Similar computations also done in BaseCompose.getControllerVisibleBounds
 			var width:Number = _measureWidth ? _contentWidth : _compositionWidth;
 			var height:Number = _measureHeight ? _contentHeight : _compositionHeight;
-			var scrollAdjustXTW:int;
-			var scrollAdjustYTW:int;
-			var scrollAdjustWidthTW:int;
-			var scrollAdjustHeightTW:int;
 			var adjustX:Number = (wmode == BlockProgression.RL) ? _xScroll - width : _xScroll;
 			var adjustY:Number = _yScroll;
-			scrollAdjustXTW = Twips.round(adjustX);
-			scrollAdjustYTW = Twips.round(adjustY);
-			scrollAdjustWidthTW = Twips.to(width);
-			scrollAdjustHeightTW = Twips.to(height);
+			var scrollAdjustXTW:int = Twips.roundTo(adjustX);
+			var scrollAdjustYTW:int = Twips.roundTo(adjustY);
+			var scrollAdjustWidthTW:int = Twips.to(width);
+			var scrollAdjustHeightTW:int = Twips.to(height);
 			
-			// If scrolling is turned off, and flow is vertical, then we need to adjust the positions of all the lines. With
-			// scrolling turned on, we don't need to do this because the adjustment is done in the Player when the scrollRect
-			// is set up correctly. But with the scrollRect, we also get clipping, and if scrolling is turned off we want to
-			// have the clipping turned off as well. So in this case we do the adjustment manually so the scrollRect can be null.
-			// NOTE: similar adjustments are made in TextContainerManager
-			var adjustLines:Boolean = (wmode == BlockProgression.RL) &&
-				(_horizontalScrollPolicy == ScrollPolicy.OFF && 
-					_verticalScrollPolicy == ScrollPolicy.OFF);
-			
+			var flowComposer:IFlowComposer = this.flowComposer;
+
 			// Iterate over the lines in the container, setting the x and y positions and 
 			// adding them to the list to go into the container. Keep track of the width 
 			// and height of the actual text in the container.
@@ -661,27 +722,65 @@ package flashx.textLayout.container
 				if (curLine == null || curLine.controller != this)
 					continue;
 				
-				var textLine:TextLine = lineIsVisible(wmode, scrollAdjustXTW, scrollAdjustYTW, scrollAdjustWidthTW, scrollAdjustHeightTW, curLine);
-				if (!textLine)
-					continue;
-				
-				CONFIG::debug { assert(textLine == curLine.peekTextLine(),"Bad textLine in fillShapeChildren "+Debugging.getIdentity(textLine)+" "+Debugging.getIdentity(curLine)); }
-				
-				if (adjustLines)
+				var textLine:TextLine = isLineVisible(wmode, scrollAdjustXTW, scrollAdjustYTW, scrollAdjustWidthTW, scrollAdjustHeightTW, curLine, null);
+				if (textLine)
 				{
-					textLine.x -= adjustX;
-					textLine.y -= adjustY;
+					if (createShape)
+						curLine.createShape(wmode, textLine);
+					_linesInView.push(textLine);
 				}
-				sc.push(textLine);
-				if (textLine.parent == null)
-					tempSprite.addChild(textLine);
 			}
+			_updateStart = absoluteStart;	// we collected all lines from the start of the container
+		}
+		
+		/** determines the shapechildren in the container and applies VJ. @private */
+		tlf_internal function fillShapeChildren():void
+		{ 
+			if (_textLength == 0)
+				return;	// none				
+			
+			var wmode:String = effectiveBlockProgression;
+			
+			if (_linesInView.length == 0)		// no preexisting concpetion of what lines are in view: recalculate
+				gatherVisibleLines(wmode, true);
+			
+			// If scrolling is turned off, and flow is vertical, then we need to adjust the positions of all the lines. With
+			// scrolling turned on, we don't need to do this because the adjustment is done in the Player when the scrollRect
+			// is set up correctly. But with the scrollRect, we also get clipping, and if scrolling is turned off we want to
+			// have the clipping turned off as well. So in this case we do the adjustment manually so the scrollRect can be null.
+			// NOTE: similar adjustments are made in TextContainerManager
+			var adjustLines:Boolean = (wmode == BlockProgression.RL) &&
+				(_horizontalScrollPolicy == ScrollPolicy.OFF && 
+					_verticalScrollPolicy == ScrollPolicy.OFF);
 			
 			if (adjustLines)
-			{
-				_contentLeft -= adjustX;
-				_contentTop  -= adjustY;
+			{			
+				var width:Number = _measureWidth ? _contentWidth : _compositionWidth;
+				var height:Number = _measureHeight ? _contentHeight : _compositionHeight;
+				var adjustX:Number = _xScroll - width;		// vertical text: blockProgression is rl
+				var adjustY:Number = _yScroll;
+				
+				// Iterate over the lines in the container, setting the x and y positions. Keep track of the width 
+				// and height of the actual text in the container.
+				if (adjustX != 0 || adjustY != 0)
+				{
+					for each (var textLine:TextLine in _linesInView)
+					{
+						if (!textLine)
+							continue;
+						
+						if (adjustLines)
+						{
+							textLine.x -= adjustX;
+							textLine.y -= adjustY;
+						}
+					}
+					_contentLeft -= adjustX;
+					_contentTop  -= adjustY;
+				}
 			}
+			
+			
 		}
 		
 		//--------------------------------------------------------------------------
@@ -716,6 +815,44 @@ package flashx.textLayout.container
 					horizontalScrollPosition = 0;
 				formatChanged();	// scroll policy affects composition
 			}
+		}
+		
+		/** @private */
+		tlf_internal function checkScrollBounds():void
+		{
+			var newHeight:Number;
+			var visibleHeight:Number;
+			var measuring:Boolean;
+			
+			// If we've either grown the content past the composition bounds in the logical vertical direction, 
+			// or shrunk it down under the composition bounds, signal a scrolling change
+			// If we're measuring we never scroll.
+			if (effectiveBlockProgression == BlockProgression.RL)
+			{
+				newHeight = _contentWidth;
+				visibleHeight = compositionWidth;
+				measuring = _measureWidth;
+			}
+			else
+			{
+				newHeight = _contentHeight;
+				visibleHeight = compositionHeight;
+				measuring = _measureHeight;
+			}
+
+			// Called when the bounds have changed and they now exceed the composition area, to see if we need to attach a mouse wheel listener for scrolling
+			if (textFlow && _container && !_minListenersAttached)
+			{
+				var needToScroll:Boolean = !measuring && newHeight > visibleHeight;
+				if (needToScroll != _mouseWheelListenerAttached)
+				{
+					if (_mouseWheelListenerAttached)
+						removeMouseWheelListener();
+					else
+						addMouseWheelListener();
+				}
+			}
+			
 		}
 		
 		/** Specifies the vertical scrolling policy, which you can set by assigning one of the constants of the ScrollPolicy
@@ -774,7 +911,7 @@ package flashx.textLayout.container
 			{	
 				_shapesInvalid = true;
 				_xScroll = newScroll;
-				updateForScroll();
+				updateForScroll(ScrollEventDirection.HORIZONTAL, newScroll - oldScroll);
 			}
 		}
 		
@@ -797,7 +934,7 @@ package flashx.textLayout.container
 				if (wmode == BlockProgression.RL)
 				{
 					newScroll = pinValue(x, _contentLeft + _compositionWidth, _contentLeft + curEstimatedWidth);
-					if (okToCompose && _composeCompleteRatio != 1 && newScroll != _xScroll)
+					if (okToCompose && _uncomposedTextLength != 0 && newScroll != _xScroll)
 					{
 						// in order to compose have to set _xScroll
 						_xScroll = x;
@@ -845,7 +982,7 @@ package flashx.textLayout.container
 			{			
 				_shapesInvalid = true;
 				_yScroll = newScroll;
-				updateForScroll();
+				updateForScroll(ScrollEventDirection.VERTICAL, newScroll - oldScroll);
 			}
 		}	
 		
@@ -863,7 +1000,7 @@ package flashx.textLayout.container
 				
 				// if we're not composed to the end, compose further so we can scroll to it. Sets the scroll position and then 
 				// recomposes the container, which will compose through the end of the screenfull that starts at the requested position.
-				if (okToCompose && _composeCompleteRatio != 1 && wmode == BlockProgression.TB)
+				if (okToCompose && _uncomposedTextLength != 0 && wmode == BlockProgression.TB)
 				{
 					_yScroll = y;
 					if (_yScroll < _contentTop)
@@ -913,6 +1050,16 @@ package flashx.textLayout.container
 			return _contentTop;
 		}
 		
+		/** @private */
+		tlf_internal function computeScaledContentMeasure(measure:Number):Number
+		{
+			CONFIG::debug { assert(_finalParcelStart != -1 && _finalParcelStart >= this.absoluteStart && _finalParcelStart <= textFlow.textLength-_uncomposedTextLength,"computeScaledContentMeasure bad _finalParcelStart"); }
+			var charsInFinalParcel:int = textFlow.textLength-_finalParcelStart;
+			var composeCompleteRatio:Number = charsInFinalParcel / (charsInFinalParcel-_uncomposedTextLength);
+			// trace(measure*composeCompleteRatio,charsInFinalParcel,_uncomposedTextLength,measure,composeCompleteRatio);
+			return measure * composeCompleteRatio;
+		}
+		
 		/** 
 		 * @private
 		 *
@@ -929,7 +1076,9 @@ package flashx.textLayout.container
 		
 		tlf_internal function get contentHeight():Number
 		{
-			return (effectiveBlockProgression == BlockProgression.TB) ? _contentHeight * _composeCompleteRatio : _contentHeight;
+			if (_uncomposedTextLength == 0 || effectiveBlockProgression != BlockProgression.TB)
+				return _contentHeight;
+			return computeScaledContentMeasure(_contentHeight);
 		}
 		
 		/** 
@@ -948,7 +1097,9 @@ package flashx.textLayout.container
 		
 		tlf_internal function get contentWidth():Number
 		{			
-			return (effectiveBlockProgression == BlockProgression.RL) ? _contentWidth * _composeCompleteRatio : _contentWidth;
+			if (_uncomposedTextLength == 0 || effectiveBlockProgression != BlockProgression.RL)
+				return _contentWidth;
+			return computeScaledContentMeasure(_contentWidth);
 		}
 		
 		/** @private */
@@ -958,10 +1109,12 @@ package flashx.textLayout.container
 			_contentHeight = contentHeight;
 			_contentLeft = contentLeft;
 			_contentTop = contentTop;
+			checkScrollBounds();
 		}
 		
-		private function updateForScroll():void
+		private function updateForScroll(direction:String, delta:Number):void
 		{
+			_linesInView.length = 0;		// zero out array of previously gathered up lines; its invalid because we've changed the visible area
 			var flowComposer:IFlowComposer = textFlow.flowComposer;
 			flowComposer.updateToController(flowComposer.getControllerIndex(this));
 			
@@ -969,73 +1122,58 @@ package flashx.textLayout.container
 			
 			// notify client that we scrolled.
 			if (textFlow.hasEventListener(TextLayoutEvent.SCROLL))
-				textFlow.dispatchEvent(new TextLayoutEvent(TextLayoutEvent.SCROLL));
+				textFlow.dispatchEvent(new ScrollEvent(TextLayoutEvent.SCROLL, false, false, direction, delta));
 			
 			//	trace("contentHeight", contentHeight, "contentWidth", contentWidth);
 			//	trace("contentHeight", contentHeight, "contentWidth", contentWidth);
 		}
 		
+		/** @private */
 		CONFIG::debug tlf_internal function validateLines():void
 		{
 			if (!Debugging.containerLineValidation)
 				return;
 			
-			var flowComposer:IFlowComposer = textFlow.flowComposer;
-			var textLine:TextLine;
+			// Optimally we would recalculate which lines are in view and make sure they are parented
+			// to the container... but that causes side-effects (like creating TextLines) that affect
+			// regular execution. So we don't try that.
 			
-			/*for (var ii:int = 0; ii < flowComposer.numLines; ii++)
+			// Check all the children of the container. Verify that adornments go before or after lines, that lines are at the expected z-order position
+			// And that extraneous lines are not parented to the container.
+			var firstLineIndex:int = -1;
+			var lastLineIndex:int = -1;
+			var numChildren:int = _container.numChildren;
+			for (var childIndex:int = 0; childIndex < numChildren; ++childIndex)
 			{
-			textLine = flowComposer.getLineAt(ii).peekTextLine()
-			trace("    // flowComposer",ii,textLine ? Debugging.getIdentity(textLine) : "null");
-			}*/
-			
-			// find first textline
-			var numContainerChildren:int = _container.numChildren;
-			for (var containerIndex:int = 0; containerIndex < numContainerChildren; containerIndex++)
-			{
-				textLine = _container.getChildAt(containerIndex) as TextLine;
-				if (textLine)
-					break;
-			}	
-			
-			if (textLine == null)
-				return;	// no lines in this container
-			
-			// Given the TextLine, find the index of the corresponding TextFlowLine.
-			var textFlowLine:TextFlowLine = textLine.userData as TextFlowLine;
-			var flowComposerIndex:int = flowComposer.findLineIndexAtPosition(textFlowLine.absoluteStart);			
-			assert(flowComposerIndex != flowComposer.numLines,"BAD FIRST LINE IN CONTAINER");
-			
-			var columnIndex:int = -1;  // force the TextFlowLine position to reset
-			while (containerIndex < numContainerChildren)
-			{
-				textLine = _container.getChildAt(containerIndex) as TextLine;
-				if (textLine == null)
+				var child:DisplayObject = _container.getChildAt(childIndex);
+				if (_shapeChildren.indexOf(child) < 0 && (!_floatsInContainer || _floatsInContainer.indexOf(child) < 0))
 				{
 					// the very last thing can be the selection sprite
-					assert(containerIndex == numContainerChildren-1,"Wrong location for selectionsprite");
-					assert(_container.getChildAt(containerIndex) == getSelectionSprite(false),"expected selectionsprite but not found");
-					break;
+					if (childIndex == numChildren - 1)
+						assert(child == getSelectionSprite(false),"expected selectionsprite but not found");
+					
+					assert(firstLineIndex == -1 || lastLineIndex == childIndex - 1, "Found adornment in the middle of TextLine children");
+					continue;		// it's an adornment: skip
 				}
-				textFlowLine = flowComposer.getLineAt(flowComposerIndex);
-				if (textFlowLine.columnIndex != columnIndex)
+				else 
 				{
-					// find the index of the first visible line in the column
-					// Scrolling in multiple columns may mean that the line after the last visible text line in column 1 is not the first visible line in column 2.
-					// Skip over lines that are "scrolled out" on the last column
-					while (textLine != textFlowLine.peekTextLine())
-					{
-						++flowComposerIndex;
-						textFlowLine = flowComposer.getLineAt(flowComposerIndex);
-					}
-					columnIndex = textFlowLine.columnIndex;
+					if (firstLineIndex == -1)
+						firstLineIndex = childIndex;
+					lastLineIndex = childIndex;
 				}
-				var peekLine:TextLine = textFlowLine.peekTextLine();
-				assert(textLine == peekLine,"BAD TEXTLINE IN TEXTFLOWLINE");
-				containerIndex++;
-				flowComposerIndex++;
+				if (_floatsInContainer && _floatsInContainer.indexOf(child) >= 0)	// it's a float
+					continue;
+				assert(child is TextLine, "Expected child to be a TextLine");
+				
+				// Check that the line comes after previous lines, in z-order
+				var lineIndex:int = _shapeChildren.indexOf(child);
+				if (lineIndex > 0)
+					assert(_container.getChildIndex(_shapeChildren[lineIndex - 1]) < childIndex, "Line is visible but not at expected z-order position: earlier line is later in z-order");
+				else if (lineIndex < 0)
+					assert(false, "Found line that should not be in the container (its not considered visible)");
 			}
-		}	
+		}
+		
 		private function get containerScrollRectLeft():Number
 		{
 			var rslt:Number;
@@ -1060,7 +1198,7 @@ package flashx.textLayout.container
 			if (horizontalScrollPolicy == ScrollPolicy.OFF && verticalScrollPolicy == ScrollPolicy.OFF)
 				rslt = 0;
 			else
-				rslt = verticalScrollPosition;;
+				rslt = verticalScrollPosition;
 			//CONFIG::debug { assert(container.scrollRect == null && rslt == 0 || int(rslt) == container.scrollRect.top,"Bad containerScrollRectTop"); }
 			return rslt;
 		}
@@ -1106,138 +1244,165 @@ package flashx.textLayout.container
 			var begLineIndex:int = flowComposer.findLineIndexAtPosition(begPos,(begPos == textFlow.textLength));
 			var endLineIndex:int = flowComposer.findLineIndexAtPosition(endPos,(endPos == textFlow.textLength));
 			
-			// no scrolling if any part of the selection is in view
-			var prevLine:TextFlowLine = begLineIndex == 0 ? null : flowComposer.getLineAt(begLineIndex-1);
-			var currLine:TextFlowLine = flowComposer.getLineAt(begLineIndex);
-			var accumulatedIntersection:int = 0;
-			
+			// no scrolling if any part of the selection is in view			
 			var scrollRectLeft:Number = containerScrollRectLeft;
 			var scrollRectTop:Number  = containerScrollRectTop;
 			var scrollRectRight:Number = containerScrollRectRight;
 			var scrollRectBottom:Number = containerScrollRectBottom;
-			var scrollRect:Rectangle = new Rectangle(scrollRectLeft, scrollRectTop, scrollRectRight-scrollRectLeft, scrollRectBottom-scrollRectTop);
 			
-			for (var lineIndex:int = begLineIndex; lineIndex <= endLineIndex; lineIndex++)
+			if (flowComposer.damageAbsoluteStart <= endPos)
 			{
-				var nextLine:TextFlowLine = lineIndex+1 == flowComposer.numLines ? null : flowComposer.getLineAt(lineIndex+1);
-				var lineEnd:int = currLine.absoluteStart+currLine.textLength;
-				if (currLine.controller == this)
-				{
-					accumulatedIntersection += currLine.selectionWillIntersectScrollRect(scrollRect,begPos,Math.min(lineEnd,endPos),prevLine,nextLine);
-					if (accumulatedIntersection >= 2)
-						return;	// dont scroll
-				}
-				if (lineIndex == endLineIndex)
-					break;
-				prevLine = currLine;
-				currLine = nextLine;
-				begPos = lineEnd;
+				endPos = Math.min(begPos + 100, endPos + 1);
+				flowComposer.composeToPosition(endPos);
+				begLineIndex = flowComposer.findLineIndexAtPosition(begPos,(begPos == textFlow.textLength));
+				endLineIndex = flowComposer.findLineIndexAtPosition(endPos,(endPos == textFlow.textLength));
 			}
-			
-			var rect:Rectangle = posToRectangle(activePosition);
-			if (!rect)
-			{
-				flowComposer.composeToPosition(activePosition);
-				rect = posToRectangle(activePosition);
-			} 
+			var rect:Rectangle = rangeToRectangle(begPos, endPos, begLineIndex, endLineIndex);
 			if (rect) 
 			{
 				var lastVisibleLine:TextFlowLine;
+				var horizontalScrollOK:Boolean;
+				var verticalScrollOK:Boolean;
 				
 				// vertical scroll
-				if (rect.top < scrollRectTop)
-					verticalScrollPosition = rect.top;
 				if (verticalText) {					
 					// horizontal scroll
-					if (rect.left < scrollRectLeft)
-						horizontalScrollPosition = rect.left + _compositionWidth;
-					if (rect.right > scrollRectRight)
-						horizontalScrollPosition = rect.right;
-					// set the rect to the previous character for the test on the bottom of the scrollRect.
-					// Note, when dealing with the "bottommost" character (t-to-b), we actually need to position
-					// pos at pos-1 because pos is looking at the character following the insertion point.
-					// However, we can only look at the previous character if we're not on the first character in
-					// a line.
-					// This tests for pos being the first char on a line. If not, reset rect.
-					if (flowComposer.findLineAtPosition(activePosition).absoluteStart != activePosition)
-						rect = posToRectangle(activePosition-1);
+					horizontalScrollOK = (rect.left < scrollRectLeft || rect.right > scrollRectLeft);
+					if (horizontalScrollOK)
+					{
+						if (rect.left < scrollRectLeft)
+							horizontalScrollPosition = rect.left + _compositionWidth;
+						if (rect.right > scrollRectRight)
+							horizontalScrollPosition = rect.right;
+					}
+					
 					// If we're showing a blinking insertion point, we need to scroll far enough that
 					// we can see the insertion point, and it comes just after the character.
+					if (rect.top < scrollRectTop)
+						verticalScrollPosition = rect.top;
 					if (activePosition == anchorPosition)
 						rect.bottom += 2;							
 					// vertical scroll
-					if (rect && rect.bottom > scrollRectBottom)
+					if (rect.bottom > scrollRectBottom)
 						verticalScrollPosition = rect.bottom - _compositionHeight;
-					// now, we need to determine if the scrollRect is full or only partially full.
-					// A partially full scrollRect can happen when you're deleting text at the end of the
-					// container. When that happens, the bottomExtreme line in the scrollRect has space between
-					// it and the left edge of the scrollRect. So, if it's partially full, then we need to scroll
-					// to bring more of the Flow into view.
-					lastVisibleLine = getLastVisibleLine();
-					if (lastVisibleLine && lastVisibleLine.x - lastVisibleLine.descent - lastVisibleLine.spaceAfter > scrollRectLeft)
-						horizontalScrollPosition = lastVisibleLine.x - lastVisibleLine.descent + _compositionWidth;
 				}
 				else 
 				{
 					// vertical scroll
-					if (rect.bottom > scrollRectBottom)
-						verticalScrollPosition = rect.bottom - _compositionHeight;
+					
+					// Don't scroll if the range extends both above and below
+					verticalScrollOK = (rect.top > scrollRectTop || rect.bottom < scrollRectBottom);
+					
+					// vertical scroll
+					if (verticalScrollOK)
+					{
+						if (rect.top < scrollRectTop)
+							verticalScrollPosition = rect.top;
+	
+						if (rect.bottom > scrollRectBottom)
+							verticalScrollPosition = rect.bottom - _compositionHeight;
+					}
+					
 					// horizontal scroll
-					if (rect.left < scrollRectLeft)
-						horizontalScrollPosition = rect.left;
-					// set the rect to the previous character for the test on the right side of the scrollRect.
-					// Note, when dealing with the "rightmost" character (l-to-r), we actually need to position
-					// pos at pos-1 because pos is looking at the character following the insertion point.
-					// However, we can only look at the previous character if we're not on the first character in
-					// a line.
-					// This tests for pos being the first char on a line. If not, reset rect.
-					if (flowComposer.findLineAtPosition(activePosition).absoluteStart != activePosition)
-						rect = posToRectangle(activePosition-1);
+
 					// If we're showing a blinking insertion point, we need to scroll far enough to see the
 					// insertion point, and it comes up to the right
 					if (activePosition == anchorPosition)
 						rect.right += 2;
-					if (rect && rect.right > scrollRectRight)
-						horizontalScrollPosition = rect.right - _compositionWidth;
-					// now, we need to determine if the scrollRect is full or only partially full.
-					// A partially full scrollRect can happen when you're deleting text at the end of the
-					// container. When that happens, the bottomExtreme line in the scrollRect has space between
-					// it and the bottom edge of the scrollRect. So, if it's partially full, then we need to scroll
-					// to bring more of the Flow into view.
-					lastVisibleLine = getLastVisibleLine();
-					if (rect.top > scrollRectTop && lastVisibleLine && lastVisibleLine.y + lastVisibleLine.height + lastVisibleLine.spaceAfter < scrollRectBottom)
-						verticalScrollPosition = lastVisibleLine.y + lastVisibleLine.height;
+
+					// Don't scroll if range extends both to the left and right
+					horizontalScrollOK = (rect.left > scrollRectLeft || rect.right < scrollRectRight);
+					if (horizontalScrollOK && rect.left < scrollRectLeft)
+						horizontalScrollPosition = rect.left - _compositionWidth / 2;
+					if (horizontalScrollOK && rect.right > scrollRectRight)
+						horizontalScrollPosition = rect.right - _compositionWidth / 2;
 				}
 			}
 		}		
 		
-		private function posToRectangle(pos:int):Rectangle
+		private function rangeToRectangle(start:int, end:int, startLineIndex:int, endLineIndex:int):Rectangle
 		{
-			var line:TextFlowLine = flowComposer.findLineAtPosition(pos);
-			// should the textLine ever be null? It is after some operations -- dunno why (rlw)
-			if (!line.textLineExists || line.isDamaged())
+			var bbox:Rectangle;
+			var blockProgression:String = effectiveBlockProgression;		
+			var flowComposer:IFlowComposer = textFlow.flowComposer;
+			
+			if (!container || !flowComposer)
 				return null;
 			
-			
-			var textLine:TextLine = line.getTextLine(true);
+			if (startLineIndex == endLineIndex)
+			{
+				var line:TextFlowLine = flowComposer.getLineAt(startLineIndex); 
+				if (line.isDamaged())
+					return null;
+				var textLine:TextLine = line.getTextLine(true);
+				var paragraphStart:int = line.paragraph.getAbsoluteStart();
+				
+				var isTCY:Boolean = false;
+				if (blockProgression == BlockProgression.RL)
+				{
+					var leafElement:FlowLeafElement = _rootElement.getTextFlow().findLeaf(start);
+					isTCY =  leafElement.getParentByType(flashx.textLayout.elements.TCYElement) != null;
+				}
+				
+				var minAtomIndex:int = textLine.atomCount;
+				var maxAtomIndex:int = 0;
+				if (start == end)
+				{
+					minAtomIndex = textLine.getAtomIndexAtCharIndex(start - paragraphStart);
+					maxAtomIndex = minAtomIndex;
+				}
+				else
+				{
+					var atomIndex:int;
+					var lastPosition:int = end - paragraphStart;
+					for (var pos:int = start - paragraphStart; pos < lastPosition; ++pos)
+					{
+						atomIndex = textLine.getAtomIndexAtCharIndex(pos);
+						if (atomIndex < minAtomIndex)
+							minAtomIndex = atomIndex;
+						if (atomIndex > maxAtomIndex)
+							maxAtomIndex = atomIndex;
+					}
+				}
+				bbox = atomToRectangle(minAtomIndex, line, textLine, blockProgression, isTCY);
+				if (minAtomIndex != maxAtomIndex)
+					bbox = bbox.union(atomToRectangle(maxAtomIndex, line, textLine, blockProgression, isTCY));
+			}
+			else
+			{
+				bbox = new Rectangle(_contentLeft, _contentTop, _contentWidth, _contentHeight);
+				var startLine:TextFlowLine = flowComposer.getLineAt(startLineIndex); 
+				var endLine:TextFlowLine = flowComposer.getLineAt(endLineIndex); 
+				if (blockProgression == BlockProgression.TB)
+				{
+					bbox.top = startLine.y;
+					bbox.bottom = endLine.y + endLine.textHeight;
+				}
+				else
+				{
+					bbox.right = startLine.x + startLine.textHeight;
+					bbox.left = endLine.x;
+				}
+			}
+			return bbox;
+		}
+		
+		
+		private function atomToRectangle(atomIdx:int, line:TextFlowLine, textLine:TextLine, blockProgression:String, isTCY:Boolean):Rectangle
+		{
 			var atomBounds:Rectangle;
-			var atomIdx:int = textLine.getAtomIndexAtCharIndex(pos-line.paragraph.getAbsoluteStart());
 			CONFIG::debug { assert(atomIdx > -1, "How'd we get here?"); }
 			if (atomIdx > -1) 
 				atomBounds = textLine.getAtomBounds(atomIdx);
 			
 			// special handling for TCY - no line height adjustments TCY is perpendicular to the height direction
-			if (effectiveBlockProgression == BlockProgression.RL)
+			if (blockProgression == BlockProgression.RL)
 			{
-				var leafElement:FlowLeafElement = _rootElement.getTextFlow().findLeaf(pos);
-				if (leafElement.getParentByType(flashx.textLayout.elements.TCYElement) != null)
-					return new Rectangle(line.x+atomBounds.x+line.y+atomBounds.y+atomBounds.width,atomBounds.height);
+				if (isTCY)
+					return new Rectangle(line.x+atomBounds.x,line.y+atomBounds.y,atomBounds.width,atomBounds.height);
+				return new Rectangle(line.x, line.y + atomBounds.y, line.height, atomBounds.height);
 			}
-			
-			return effectiveBlockProgression == BlockProgression.RL ? 
-				new Rectangle(line.x, line.y + atomBounds.y, line.height, atomBounds.height) :
-				new Rectangle(line.x + atomBounds.x, line.y-line.height+line.ascent, atomBounds.width, line.height+textLine.descent);
-			
+			return new Rectangle(line.x + atomBounds.x, line.y-line.height+line.ascent, atomBounds.width, line.height+textLine.descent);
 		}
 		
 		/**
@@ -1263,8 +1428,8 @@ package flashx.textLayout.container
 		
 		public function invalidateContents():void
 		{
-			if (textFlow && _textLength)
-				textFlow.damage(absoluteStart, _textLength, FlowDamageType.GEOMETRY, false);
+			if (textFlow)
+				textFlow.damage(absoluteStart, Math.min(_textLength, 1), FlowDamageType.GEOMETRY, false);
 		}
 		
 		/** @private */
@@ -1285,9 +1450,9 @@ package flashx.textLayout.container
 		
 		tlf_internal function attachTransparentBackgroundForHit(justClear:Boolean):void
 		{
-			if (_minListenersAttached && attachTransparentBackground)
+			if ((_minListenersAttached || _mouseWheelListenerAttached) && attachTransparentBackground)
 			{
-				var s:Sprite = _container as Sprite;
+				var s:Sprite = _container;
 				if (s)
 				{
 					if (justClear)
@@ -1331,10 +1496,21 @@ package flashx.textLayout.container
 		/** @private */
 		tlf_internal	function interactionManagerChanged(newInteractionManager:ISelectionManager):void
 		{
-			if (newInteractionManager)
-				attachContainer();
-			else
+			if (!newInteractionManager)
 				detachContainer();
+			attachContainer();
+			checkScrollBounds();
+			// Need to forward whether the Ctrl key is needed to have
+			// hit-tested FlowElements emit events
+			if (_mouseEventManager)
+				_mouseEventManager.needsCtrlKey	= 
+					(interactionManager != null && interactionManager.editingMode == EditingMode.READ_WRITE);
+
+			// We have to tell the Player to bring up the soft keyboard on a
+			// keyboard edit gesture. Note that needsSoftKeyboard is new with 10.2, so 
+			// have to check for it. This is a change to the container, but unavoidable
+			if (_container && Configuration.playerEnablesSpicyFeatures)
+				_container["needsSoftKeyboard"] = (interactionManager && interactionManager.editingMode == EditingMode.READ_WRITE);
 		}
 		
 		//--------------------------------------------------------------------------
@@ -1353,12 +1529,13 @@ package flashx.textLayout.container
 				{
 					_container.addEventListener(FocusEvent.FOCUS_IN, requiredFocusInHandler);
 					_container.addEventListener(MouseEvent.MOUSE_OVER, requiredMouseOverHandler);
-					
+
 					attachTransparentBackgroundForHit(false);
 					
 					// If the container already has focus, we have to attach all listeners
 					if (_container.stage && _container.stage.focus == _container)
 						attachAllListeners();
+					
 				}
 			}
 		}
@@ -1378,7 +1555,7 @@ package flashx.textLayout.container
 			_container.addEventListener(FocusEvent.KEY_FOCUS_CHANGE, receiver.focusChangeHandler);
 			_container.addEventListener(TextEvent.TEXT_INPUT, receiver.textInputHandler);
 			_container.addEventListener(MouseEvent.MOUSE_OUT, receiver.mouseOutHandler);
-			_container.addEventListener(MouseEvent.MOUSE_WHEEL, receiver.mouseWheelHandler);
+			addMouseWheelListener();
 			_container.addEventListener(Event.DEACTIVATE, receiver.deactivateHandler);
 			// attach by literal event name to avoid Argo dependency
 			// normally this would be IMEEvent.START_COMPOSITION
@@ -1406,7 +1583,7 @@ package flashx.textLayout.container
 			_container.removeEventListener(FocusEvent.KEY_FOCUS_CHANGE, receiver.focusChangeHandler);
 			_container.removeEventListener(TextEvent.TEXT_INPUT, receiver.textInputHandler);
 			_container.removeEventListener(MouseEvent.MOUSE_OUT, receiver.mouseOutHandler);
-			_container.removeEventListener(MouseEvent.MOUSE_WHEEL, receiver.mouseWheelHandler);
+			removeMouseWheelListener();
 			_container.removeEventListener(Event.DEACTIVATE, receiver.deactivateHandler);
 			//	_container.removeEventListener(IMEEvent.IME_START_COMPOSITION, receiver.imeStartCompositionHandler); 
 			// attach by literal event name to avoid Argo dependency
@@ -1424,7 +1601,7 @@ package flashx.textLayout.container
 		}
 		
 		/** @private */
-		tlf_internal function detachContainer():void
+		private function detachContainer():void
 		{
 			if (_minListenersAttached)
 			{
@@ -1436,7 +1613,7 @@ package flashx.textLayout.container
 					if(_allListenersAttached)
 					{
 						removeInteractionHandlers();				
-						_container.contextMenu = null;
+						removeContextMenu();
 						
 						attachTransparentBackgroundForHit(true);
 						_allListenersAttached = false;
@@ -1444,7 +1621,9 @@ package flashx.textLayout.container
 				}
 				_minListenersAttached = false;
 			}
+			removeMouseWheelListener();
 		}
+		
 		
 		private function attachAllListeners():void
 		{	
@@ -1454,11 +1633,40 @@ package flashx.textLayout.container
 				_allListenersAttached = true;
 				if (_container)
 				{
-					_container.contextMenu = createContextMenu();
+					attachContextMenu();
 					attachInteractionHandlers();
 				}
 			}
 		}
+		
+		/** @private */
+		tlf_internal function addMouseWheelListener():void
+		{
+			if (!_mouseWheelListenerAttached)
+			{
+				_container.addEventListener(MouseEvent.MOUSE_WHEEL, getInteractionHandler().mouseWheelHandler);
+				_mouseWheelListenerAttached = true;
+			}
+		}
+		
+		/** @private */
+		tlf_internal function removeMouseWheelListener():void
+		{
+			if (_mouseWheelListenerAttached)
+			{
+				_container.removeEventListener(MouseEvent.MOUSE_WHEEL, getInteractionHandler().mouseWheelHandler);
+				_mouseWheelListenerAttached = false;
+			}
+		}
+		
+		/** @private */
+		tlf_internal function attachContextMenu():void
+		{ _container.contextMenu = createContextMenu(); }
+		
+		/** @private */
+		tlf_internal function removeContextMenu():void
+		{ _container.contextMenu = null; }
+
 		
 		/** @private  
 		 *
@@ -1671,6 +1879,8 @@ package flashx.textLayout.container
 		
 		public function getScrollDelta(numLines:int):Number
 		{
+			var flowComposer:IFlowComposer = textFlow.flowComposer;
+			
 			if (flowComposer.numLines == 0)
 				return 0;
 			
@@ -1679,7 +1889,12 @@ package flashx.textLayout.container
 			// lines completely into view.
 			
 			var firstVisibleLine:TextFlowLine = getFirstVisibleLine();
+			if (!firstVisibleLine)
+				return 0;
+
 			var lastVisibleLine:TextFlowLine = getLastVisibleLine();
+			CONFIG::debug { assert(lastVisibleLine != null,"Expect lastVisibleLine when there is a firstVisibleLine"); }
+				
 			// trace("    // findFirstAndLastVisibleLine ",flowComposer.findLineIndexAtPosition(firstVisibleLine.absoluteStart),flowComposer.findLineIndexAtPosition(lastVisibleLine.absoluteStart));
 			
 			var newLineIndex:int;
@@ -1689,21 +1904,25 @@ package flashx.textLayout.container
 				lineIndex = flowComposer.findLineIndexAtPosition(lastVisibleLine.absoluteStart);
 				// If the last visible line is only partly visible, don't count it as visible. But make sure it overlaps by
 				// at least two pixels, otherwise it doesn't look like its clipped.
-				if (lastVisibleLine)
+
+				var lastTextLine:TextLine = lastVisibleLine.getTextLine(true);
+				if (effectiveBlockProgression == BlockProgression.TB)
 				{
-					var lastTextLine:TextLine = lastVisibleLine.getTextLine(true);
-					if (effectiveBlockProgression == BlockProgression.TB)
-					{
-						if ((lastTextLine.y + lastTextLine.descent) - containerScrollRectBottom > 2)
-							--lineIndex;
-					}
-					else if (containerScrollRectLeft - (lastTextLine.x - lastTextLine.descent)  > 2)
+					if ((lastTextLine.y + lastTextLine.descent) - containerScrollRectBottom > 2)
 						--lineIndex;
 				}
+				else if (containerScrollRectLeft - (lastTextLine.x - lastTextLine.descent)  > 2)
+					--lineIndex;
 				
 				// if we hit the end, force composition so that we get more lines - I picked a random amount to scroll forward, if its not enough, it will keep going
 				while (lineIndex + numLines > flowComposer.numLines - 1 && flowComposer.damageAbsoluteStart < textFlow.textLength)	
+				{
+					var previousDamageStart:int = flowComposer.damageAbsoluteStart;
 					flowComposer.composeToPosition(flowComposer.damageAbsoluteStart + 1000);
+					// if we've made no progress, abort
+					if (flowComposer.damageAbsoluteStart == previousDamageStart)
+						return 0;
+				}
 				newLineIndex = Math.min(flowComposer.numLines-1, lineIndex + numLines);
 			}
 			if (numLines < 0) 
@@ -1712,16 +1931,13 @@ package flashx.textLayout.container
 				
 				// If the first visible line is only partly visible, don't count it as visible. But make sure it overlaps by
 				// at least two pixels, otherwise it doesn't look like its clipped.
-				if (firstVisibleLine)
+				if (effectiveBlockProgression == BlockProgression.TB)
 				{
-					if (effectiveBlockProgression == BlockProgression.TB)
-					{
-						if (firstVisibleLine.y + 2 < containerScrollRectTop)
-							++lineIndex;
-					}
-					else if (firstVisibleLine.x + firstVisibleLine.ascent > containerScrollRectRight + 2)
+					if (firstVisibleLine.y + 2 < containerScrollRectTop)
 						++lineIndex;
-				} 
+				}
+				else if (firstVisibleLine.x + firstVisibleLine.ascent > containerScrollRectRight + 2)
+					++lineIndex;
 				
 				newLineIndex = Math.max(0, lineIndex + numLines);
 			}
@@ -1768,7 +1984,7 @@ package flashx.textLayout.container
 		
 		public function mouseOverHandler(event:MouseEvent):void
 		{
-			if (interactionManager)
+			if (interactionManager && !event.isDefaultPrevented())
 				interactionManager.mouseOverHandler(event);
 		}
 		
@@ -1791,7 +2007,7 @@ package flashx.textLayout.container
 		 */				
 		public function mouseOutHandler(event:MouseEvent):void
 		{
-			if (interactionManager)
+			if (interactionManager && !event.isDefaultPrevented())
 				interactionManager.mouseOutHandler(event);
 		}
 		
@@ -1807,6 +2023,9 @@ package flashx.textLayout.container
 		 */
 		public function mouseWheelHandler(event:MouseEvent):void
 		{
+			if (event.isDefaultPrevented())
+				return;
+			
 			// Do the scroll and call preventDefault only if the there is enough text to scroll. Otherwise
 			// we let the event bubble up and cause scrolling at the next level up in the client's container hierarchy.
 			var verticalText:Boolean = effectiveBlockProgression == BlockProgression.RL;
@@ -1839,7 +2058,7 @@ package flashx.textLayout.container
 		
 		public function mouseDownHandler(event:MouseEvent):void
 		{
-			if (interactionManager)
+			if (interactionManager && !event.isDefaultPrevented())
 			{
 				interactionManager.mouseDownHandler(event);
 				// grab the focus - alternative is to listen to keyevents on the Application
@@ -1883,7 +2102,7 @@ package flashx.textLayout.container
 		 */
 		public function mouseUpHandler(event:MouseEvent):void
 		{
-			if (interactionManager)
+			if (interactionManager && event && !event.isDefaultPrevented())
 			{
 				interactionManager.mouseUpHandler(event);
 			}
@@ -1999,7 +2218,7 @@ package flashx.textLayout.container
 		
 		public function mouseMoveHandler(event:MouseEvent):void
 		{
-			if (interactionManager)
+			if (interactionManager && !event.isDefaultPrevented())
 			{
 				// only autoscroll if we haven't hit something on the stage related to this particular TextFlow
 				if (event.buttonDown && !hitOnMyFlowExceptLastContainer(event))
@@ -2028,7 +2247,7 @@ package flashx.textLayout.container
 		 */
 		public function mouseDoubleClickHandler(event:MouseEvent):void
 		{
-			if (interactionManager)
+			if (interactionManager && !event.isDefaultPrevented())
 			{
 				interactionManager.mouseDoubleClickHandler(event);
 				// grab the focus - alternative is to listen to keyevents on the Application
@@ -2139,7 +2358,9 @@ package flashx.textLayout.container
 			// trace("ContainerController requiredFocusInHandler adding key handlers");
 			_container.addEventListener(KeyboardEvent.KEY_DOWN, getInteractionHandler().keyDownHandler);
 			_container.addEventListener(KeyboardEvent.KEY_UP,   getInteractionHandler().keyUpHandler);		
-			_container.addEventListener(FocusEvent.KEY_FOCUS_CHANGE,   getInteractionHandler().keyFocusChangeHandler);		
+			_container.addEventListener(FocusEvent.KEY_FOCUS_CHANGE,   getInteractionHandler().keyFocusChangeHandler);	
+			if (Configuration.playerEnablesSpicyFeatures && Configuration.hasTouchScreen)
+				_container.addEventListener("softKeyboardActivating", getInteractionHandler().softKeyboardActivatingHandler);
 			getInteractionHandler().focusInHandler(event);
 		}
 		
@@ -2172,6 +2393,8 @@ package flashx.textLayout.container
 			_container.removeEventListener(KeyboardEvent.KEY_DOWN, getInteractionHandler().keyDownHandler);
 			_container.removeEventListener(KeyboardEvent.KEY_UP,   getInteractionHandler().keyUpHandler);   			
 			_container.removeEventListener(FocusEvent.KEY_FOCUS_CHANGE,   getInteractionHandler().keyFocusChangeHandler);   			
+			if (Configuration.playerEnablesSpicyFeatures && Configuration.hasTouchScreen)
+				_container.removeEventListener("softKeyboardActivating", getInteractionHandler().softKeyboardActivatingHandler);
 			getInteractionHandler().focusOutHandler(event);
 		}
 		
@@ -2222,7 +2445,7 @@ package flashx.textLayout.container
 		 */
 		public function keyDownHandler(event:KeyboardEvent):void
 		{
-			if (interactionManager)
+			if (interactionManager && !event.isDefaultPrevented())
 				interactionManager.keyDownHandler(event);
 		}
 		
@@ -2241,7 +2464,7 @@ package flashx.textLayout.container
 		
 		public function keyUpHandler(event:KeyboardEvent):void
 		{
-			if (interactionManager)
+			if (interactionManager && !event.isDefaultPrevented())
 				interactionManager.keyUpHandler(event);
 		}
 		
@@ -2275,8 +2498,25 @@ package flashx.textLayout.container
 		
 		public function textInputHandler(event:TextEvent):void
 		{
-			if (interactionManager)
+			if (interactionManager && !event.isDefaultPrevented())
 				interactionManager.textInputHandler(event);
+		}
+		
+		/** Processes the <code>SoftKeyboardEvent.SOFT_KEYBOARD_ACTIVATING</code> event when the client manages events.
+		 *
+		 * @param event  The SoftKeyboardEvent object.
+		 *
+		 * @playerversion Flash 10.2
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 * @see flash.events.SoftKeyboardEvent#SOFT_KEYBOARD_ACTIVATING SoftKeyboardEvent.SOFT_KEYBOARD_ACTIVATING
+		 */
+		
+		public function softKeyboardActivatingHandler(event:Event):void
+		{
+			if (interactionManager)
+				interactionManager.softKeyboardActivatingHandler(event);
 		}
 		
 		/** Processes the <code>IMEEvent.IME_START_COMPOSITION</code> event when the client manages events.
@@ -2311,21 +2551,23 @@ package flashx.textLayout.container
 		 * @see flash.events.ContextMenuEvent#MENU_SELECT ContextMenuEvent.MENU_SELECT
 		 */						
 		public function menuSelectHandler(event:ContextMenuEvent):void
-		{
-			var tf:DisplayObjectContainer = _container as DisplayObjectContainer;
-			
+		{			
 			if (interactionManager)
 			{
 				interactionManager.menuSelectHandler(event);
 			}
 			else
 			{
-				var cbItems:ContextMenuClipboardItems = tf.contextMenu.clipboardItems
-				cbItems.copy = false;
-				cbItems.cut = false;
-				cbItems.paste = false;
-				cbItems.selectAll = false;
-				cbItems.clear = false;
+				var contextMenu:ContextMenu = _container.contextMenu;
+				if (contextMenu)
+				{
+					var cbItems:ContextMenuClipboardItems = contextMenu.clipboardItems;
+					cbItems.copy = false;
+					cbItems.cut = false;
+					cbItems.paste = false;
+					cbItems.selectAll = false;
+					cbItems.clear = false;
+				}
 			}
 		}
 		
@@ -2345,7 +2587,7 @@ package flashx.textLayout.container
 		
 		public function editHandler(event:Event):void
 		{
-			if (interactionManager)
+			if (interactionManager && !event.isDefaultPrevented())
 				interactionManager.editHandler(event);
 			
 			// re-enable context menu so following keyboard shortcuts will work
@@ -2459,11 +2701,6 @@ package flashx.textLayout.container
 		{
 			var selObj:Shape = new Shape();
 			
-			if (interactionManager.activePosition == interactionManager.anchorPosition)
-				selObj.graphics.beginFill(selFormat.pointColor)
-			else
-				selObj.graphics.beginFill(selFormat.rangeColor);
-			
 			// Oh, this is ugly. If we are in right aligned text, and there is no padding, and the scrollRect is set, 
 			// then in an empty line (or if the point is at the right edge of the line), the blinking cursor is not
 			// visible because it is clipped out. Move it in so we can see it. 
@@ -2474,15 +2711,17 @@ package flashx.textLayout.container
 					if (x >= containerScrollRectRight)
 						x -= w;
 				} 
-				else
-					if (y >= containerScrollRectBottom)
-						y -= h;
+				else if (y >= containerScrollRectBottom)
+					y -= h;
 			}
 			
+			CONFIG::debug { assert(interactionManager.activePosition == interactionManager.anchorPosition,"bad call to drawPointSelection"); }
+			selObj.graphics.beginFill(selFormat.pointColor);
+			// pixel snap - works for unscaled text - scaled text will have to accept fuzzy cursors
 			selObj.graphics.drawRect(int(x),int(y),w,h);
 			selObj.graphics.endFill();
 			
-			// make it blink
+			// make it blink.  But we never blink unless the text is r/w
 			if (selFormat.pointBlinkRate != 0 && interactionManager.editingMode == EditingMode.READ_WRITE)
 				startBlinkingCursor(selObj, selFormat.pointBlinkRate);
 			
@@ -2502,7 +2741,7 @@ package flashx.textLayout.container
 			{
 				// adjust selectionAbsoluteStart and selectionAbsoluteEnd to be within this controller
 				var absoluteControllerStart:int = this.absoluteStart;
-				var absoluteControllerEnd:int = this.absoluteStart+this._textLength;
+				var absoluteControllerEnd:int = this.absoluteStart+this.textLength;
 				
 				if (selectionAbsoluteStart < absoluteControllerStart)
 					selectionAbsoluteStart = absoluteControllerStart;
@@ -2533,7 +2772,7 @@ package flashx.textLayout.container
 				{
 					nextLine = idx != flowComposer.numLines - 1 ? flowComposer.getLineAt(idx+1) : null;
 					
-					line.hiliteBlockSelection(selObj, selFormat, DisplayObject(this._container),
+					line.hiliteBlockSelection(selObj, selFormat, this._container,
 						selectionAbsoluteStart < line.absoluteStart ? line.absoluteStart : selectionAbsoluteStart,
 						selectionAbsoluteEnd > line.absoluteStart+line.textLength ? line.absoluteStart+line.textLength : selectionAbsoluteEnd, prevLine, nextLine);
 					
@@ -2555,7 +2794,7 @@ package flashx.textLayout.container
 				{
 					prevLine = lineIdx != 0 ? flowComposer.getLineAt(lineIdx-1) : null;
 					nextLine = lineIdx != flowComposer.numLines-1 ? flowComposer.getLineAt(lineIdx+1) : null
-					flowComposer.getLineAt(lineIdx).hilitePointSelection(selFormat, selectionAbsoluteStart, DisplayObject(this._container), prevLine, nextLine);
+					flowComposer.getLineAt(lineIdx).hilitePointSelection(selFormat, selectionAbsoluteStart, this._container, prevLine, nextLine);
 				}
 			}
 		}
@@ -2627,52 +2866,61 @@ package flashx.textLayout.container
 			return _backgroundShape;
 		}
 		
-		CONFIG::debug private function containsFloats(textFlow:TextFlow):Boolean
+	/*	CONFIG::debug private function containsFloats(textFlow:TextFlow):Boolean
 		{
 			if (textFlow)
 				for (var leaf:FlowLeafElement = textFlow.getFirstLeaf(); leaf != null; leaf = leaf.getNextLeaf())
 					if (leaf is InlineGraphicElement && InlineGraphicElement(leaf).float != Float.NONE)
 						return true;
 			return false;
-		}
-		/**
-		 * @private
-		 */
-		tlf_internal function get effectivePaddingLeft():Number
-		{ return computedFormat.paddingLeft + (_rootElement ? _rootElement.computedFormat.paddingLeft : 0); }
-		/**
-		 * @private
-		 */
-		tlf_internal function get effectivePaddingRight():Number
-		{ return computedFormat.paddingRight + (_rootElement ? _rootElement.computedFormat.paddingRight : 0); }
-		/**
-		 * @private
-		 */
-		tlf_internal function get effectivePaddingTop():Number
-		{ return computedFormat.paddingTop + (_rootElement ? _rootElement.computedFormat.paddingTop : 0); }
-		/**
-		 * @private
-		 */
-		tlf_internal function get effectivePaddingBottom():Number
-		{ return computedFormat.paddingBottom + (_rootElement ? _rootElement.computedFormat.paddingBottom : 0); }
+		} */
+		
+		/** @private */
+		tlf_internal function getEffectivePaddingLeft():Number
+		{ return computedFormat.paddingLeft == FormatValue.AUTO ? 0 : computedFormat.paddingLeft; }
+		/** @private */
+		tlf_internal function getEffectivePaddingRight():Number
+		{ return computedFormat.paddingRight == FormatValue.AUTO ? 0 : computedFormat.paddingRight; }
+		/** @private */
+		tlf_internal function getEffectivePaddingTop():Number
+		{ return computedFormat.paddingTop == FormatValue.AUTO ? 0 : computedFormat.paddingTop; }
+		/** @private */
+		tlf_internal function getEffectivePaddingBottom():Number
+		{ return computedFormat.paddingBottom == FormatValue.AUTO ? 0 : computedFormat.paddingBottom; }
+		
+		/** @private */
+		tlf_internal function getTotalPaddingLeft():Number
+		{ return getEffectivePaddingLeft() + (_rootElement ? _rootElement.getEffectivePaddingLeft() : 0); }
+		/** @private */
+		tlf_internal function getTotalPaddingRight():Number
+		{ return getEffectivePaddingRight() + (_rootElement ? _rootElement.getEffectivePaddingRight() : 0); }
+		/** @private */
+		tlf_internal function getTotalPaddingTop():Number
+		{ return getEffectivePaddingTop() + (_rootElement ? _rootElement.getEffectivePaddingTop() : 0); }
+		/** @private */
+		tlf_internal function getTotalPaddingBottom():Number
+		{ return getEffectivePaddingBottom() + (_rootElement ? _rootElement.getEffectivePaddingBottom() : 0); }
 		
 		private var _selectionSprite:Sprite;
 		
 		/** @private */
-		tlf_internal function getSelectionSprite(createIfNull:Boolean):DisplayObjectContainer
+		tlf_internal function getSelectionSprite(createForDrawing:Boolean):DisplayObjectContainer
 		{
-			if (_selectionSprite == null && createIfNull)
+			if (createForDrawing)
 			{
-				_selectionSprite = new Sprite();
-				_selectionSprite.mouseEnabled = false;
-				_selectionSprite.mouseChildren = false;
+				if (_selectionSprite == null)
+				{
+					_selectionSprite = new Sprite();
+					_selectionSprite.mouseEnabled = false;
+					_selectionSprite.mouseChildren = false;
+				}
 			}
 			return _selectionSprite;
 		}
 		
 		static private function createContainerControllerInitialFormat():ITextLayoutFormat
 		{
-			var ccif:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder();
+			var ccif:TextLayoutFormat = new TextLayoutFormat();
 			ccif.columnCount = FormatValue.INHERIT;
 			ccif.columnGap = FormatValue.INHERIT;
 			ccif.columnWidth = FormatValue.INHERIT;
@@ -2683,18 +2931,18 @@ package flashx.textLayout.container
 		static private var _containerControllerInitialFormat:ITextLayoutFormat = createContainerControllerInitialFormat();
 		
 		/** 
-		 * @private
-		 * Specifies the initial format (ITextLayoutFormat instance) for a new ContainerController. The runtime
-		 * applies this to the format property of all new containers on creation.
-		 *
-		 * By default, sets the column format values to "inherit"; all other format values are inherited.
-		 *
-		 * @playerversion Flash 10
-		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 *
-		 * @see TextFlow
-		 */
+		* @private
+		* Specifies the initial format (ITextLayoutFormat instance) for a new ContainerController. The runtime
+		* applies this to the format property of all new containers on creation.
+		*
+		* By default, sets the column format values to "inherit"; all other format values are inherited.
+		*
+		* @playerversion Flash 10
+		* @playerversion AIR 1.5
+		* @langversion 3.0
+		*
+		* @see flashx.textLayout.elements.TextFlow TextFlow
+		*/
 		
 		static public function get containerControllerInitialFormat():ITextLayoutFormat
 		{ return _containerControllerInitialFormat; }
@@ -2717,12 +2965,15 @@ package flashx.textLayout.container
 				CONFIG::debug { Debugging.traceFTECall(null,_container,"removeTextLine",textLine); }
 			}
 			_shapeChildren.length = 0;
+			_linesInView.length = 0;
+			if (_floatsInContainer)
+				_floatsInContainer.length = 0;
+			if (_composedFloats)
+				_composedFloats.length = 0;
+		//	trace("clear composedFloats for container", flowComposer ? flowComposer.getControllerIndex(this) : 0);
 		}
 		
-		/** The TextLines being added to the array in fillShapeChildren are added to tempSprite because they are about to be displayed
-		 * and the TextFlowLine code needs to know that as it keeps all displayed lines in the TextFlowLine textLineCache.  This tells them that.
-		 */
-		static private var tempLineHolder:Sprite = new Sprite();
+		private static var scratchRectangle:Rectangle = new Rectangle();
 		
 		/** Add DisplayObjects that were created by composition to the container. @private */
 		tlf_internal function updateCompositionShapes():void
@@ -2733,24 +2984,49 @@ package flashx.textLayout.container
 			}			
 			
 			// reclamp vertical/horizontal scrollposition - addresses Watson 2380962
-			var scrolled:Boolean = false;	// true if scroll values were changed - we need to notify in this case
-			var tmp:Number = _yScroll;
+			var originalYScroll:Number = _yScroll;
 			if (verticalScrollPolicy != ScrollPolicy.OFF && !_measureHeight)
 				_yScroll = computeVerticalScrollPosition(_yScroll,false);
-			scrolled = (tmp != _yScroll);
-			tmp = _xScroll;
+			var originalXScroll:Number = _xScroll;
 			if (horizontalScrollPolicy != ScrollPolicy.OFF && !_measureWidth)
 				_xScroll = computeHorizontalScrollPosition(_xScroll,false);
-			scrolled = scrolled || (tmp != _xScroll);
+			var scrolled:Boolean = (originalYScroll != _yScroll || originalXScroll != _xScroll);	// true if scroll values were changed - we need to notify in this case
+			
+			// If we've scrolled, force all lines to be regathered since lines may now be in view that
+			// previously were not.
+			if (scrolled)
+				_linesInView.length = 0;
 			
 			// Post all the new TextLines to the display list, and remove any old TextLines left from last time. Do this
 			// in a non-destructive way so that lines that have not been changed are not touched. This reduces redraw time.
-			var newShapeChildren:Array = [ ];
-			fillShapeChildren(newShapeChildren,tempLineHolder);
+			fillShapeChildren();
+			var newShapeChildren:Array = _linesInView;
 			
 			var childIdx:int = getFirstTextLineChildIndex(); // index where the first text line must appear at in its container  
-			var oldIdx:int = 0;		// offset into shapeChildren
 			var newIdx:int = 0;		// offset into newShapeChildren
+			var shapeChildrenStartIdx:int = 0;	// starting offset into shapeChildren
+
+			// If we composed starting at the middle of the container, then _linesInView will contain only the lines that were
+			// in view and changed. In that case, we want to skip the lines in the beginning that weren't changed, and start 
+			// the iteration from the point where the new lines start. So we get the first new line, go back one, and find where
+			// we are in the old list. If the line before the first new line was not displayed before, thenwe start from the 
+			// beginning as usual. This can happen if we're scrolled forward, and then edit the first visible line.
+			if (_updateStart > absoluteStart && newShapeChildren.length > 0)
+			{
+				var firstTextLine:TextLine = newShapeChildren[0];
+				var firstLine:TextFlowLine = TextFlowLine(firstTextLine.userData);
+				var prevLine:TextFlowLine = flowComposer.findLineAtPosition(firstLine.absoluteStart - 1);
+				var prevTextLine:TextLine = prevLine.peekTextLine(); 
+				shapeChildrenStartIdx = _shapeChildren.indexOf(prevTextLine);
+				if (shapeChildrenStartIdx >= 0)
+				{
+					shapeChildrenStartIdx++;
+					childIdx += shapeChildrenStartIdx;
+				}
+				else
+					shapeChildrenStartIdx = 0;
+			}
+			var oldIdx:int = shapeChildrenStartIdx;		// offset into shapeChildren
 			
 			while (newIdx != newShapeChildren.length)
 			{
@@ -2758,6 +3034,7 @@ package flashx.textLayout.container
 				if (newChild == _shapeChildren[oldIdx])
 				{
 					// Same shape is in both lists, no change necessary, advance to next item in each list
+					CONFIG::debug { assert(newChild.parent == _container, "updateCompositionShapes expected line was already a child of the container"); }
 					childIdx++;
 					newIdx++;
 					oldIdx++;
@@ -2774,7 +3051,7 @@ package flashx.textLayout.container
 				}
 				else
 				{
-					// The shape is on both lists, but there are several intervening "old" shapes in between. We'll remove the old shapes that
+						// The shape is on both lists, but there are several intervening "old" shapes in between. We'll remove the old shapes that
 					// come before the new one we want to insert.
 					removeAndRecycleTextLines (oldIdx, newChildIdx);
 					oldIdx = newChildIdx;
@@ -2784,23 +3061,53 @@ package flashx.textLayout.container
 			// remove any trailing children no longer displayed
 			removeAndRecycleTextLines (oldIdx, _shapeChildren.length);
 			
-			_shapeChildren = newShapeChildren;
-			shapesInvalid = false;
+			// Update shapeChildren to reflect all these changes
+			if (shapeChildrenStartIdx > 0)
+			{
+				// We only updated some of the lines. Remove the old versions off the end, and add in the new ones from _linesInView
+				_shapeChildren.length = shapeChildrenStartIdx;		// truncate
+				_shapeChildren = _shapeChildren.concat(_linesInView);	// append _linesInView to end of _shapeChildren
+				_linesInView.length = 0;	// truncate
+			}
+			else
+			{	// We updated all of the lines. 
+				_linesInView = _shapeChildren;		// move the old array over to _linesInView, so we reuse its storage
+				_linesInView.length = 0;
+				_shapeChildren = newShapeChildren;
+			}
+
+			if ((_floatsInContainer && _floatsInContainer.length > 0) || (_composedFloats && _composedFloats.length > 0))
+				updateGraphics(_updateStart);
 			
-			// TODO: support for inline children (tables)
-			// synchronize the inline shapes beginning at childIdx 
-			updateInlineChildren();
+			shapesInvalid = false;
 			
 			// _textFrame.updateVisibleRectangle(this._visibleRect);
 			updateVisibleRectangle();
 			
+			var tf:TextFlow = this.textFlow;
+			// Set the Ctrl key condition
+			var needsCtrlKey:Boolean = (interactionManager != null && interactionManager.editingMode == EditingMode.READ_WRITE);
+			// Generate the hit test area for the LinkElements of the visible lines
+			var firstVisibleLine:TextFlowLine = getFirstVisibleLine();
+			var lastVisibleLine:TextFlowLine = getLastVisibleLine();
+			scratchRectangle.left = _contentLeft; 
+			scratchRectangle.top = _contentTop; 
+			scratchRectangle.width = _contentWidth; 
+			scratchRectangle.height = _contentHeight; 
+			_mouseEventManager.updateHitTests(effectiveBlockProgression == BlockProgression.RL && _hasScrollRect ? _contentWidth : 0, 
+				scratchRectangle, tf, 
+				firstVisibleLine ? firstVisibleLine.absoluteStart : _absoluteStart, 
+				lastVisibleLine ? lastVisibleLine.absoluteStart + lastVisibleLine.textLength - 1 : _absoluteStart, 
+				needsCtrlKey);
+			
+			_updateStart = _rootElement.textLength;
+
 			// If we're measuring, then the measurement values may have changed since last time.
 			// Force the transparent background to redraw, so that mouse events will work for the 
 			// entire content area.
 			if (_measureWidth || _measureHeight)
 				attachTransparentBackgroundForHit(false);
 			
-			var tf:TextFlow = this.textFlow;
 			if (tf.backgroundManager)
 			{
 				tf.backgroundManager.onUpdateComplete(this);
@@ -2809,7 +3116,10 @@ package flashx.textLayout.container
 			// If we updated the scroll values, we need to send an event
 			if (scrolled && tf.hasEventListener(TextLayoutEvent.SCROLL))
 			{
-				tf.dispatchEvent(new TextLayoutEvent(TextLayoutEvent.SCROLL));
+				if (originalYScroll != _yScroll)
+					tf.dispatchEvent(new ScrollEvent(TextLayoutEvent.SCROLL, false, false, ScrollEventDirection.VERTICAL, _yScroll - originalYScroll));
+				if (originalXScroll != _xScroll)
+					tf.dispatchEvent(new ScrollEvent(TextLayoutEvent.SCROLL, false, false, ScrollEventDirection.HORIZONTAL, _xScroll - originalXScroll));
 			}
 			
 			if (tf.hasEventListener(UpdateCompleteEvent.UPDATE_COMPLETE))
@@ -2817,11 +3127,503 @@ package flashx.textLayout.container
 				tf.dispatchEvent(new UpdateCompleteEvent(UpdateCompleteEvent.UPDATE_COMPLETE,false,false,tf, this));
 			}
 			
-			CONFIG::debug { assert(tempLineHolder.numChildren == 0,"Uh oh"); }
-			CONFIG::debug { validateLines(); }
-			// prevent leaks here - this code should't be needed
-			while (tempLineHolder.numChildren)
-				tempLineHolder.removeChildAt(0);
+		//	CONFIG::debug { validateLines(); }
+		} 
+		
+		// Add or remove graphics (floats or regular inlines) from the display list
+		tlf_internal function updateGraphics(updateStart:int):void
+		{
+			var inlineHolder:DisplayObjectContainer;
+			
+			var visibleFloats:Array = [];
+			
+			// If we have new floats that have been composed into container, we add them here.
+			// Also, we remove any that are no longer in the container. Only change those
+			// floats that are within the area that was recomposed.
+			
+			var floatInfo:FloatCompositionData;
+			var float:DisplayObject;
+			var firstLine:TextFlowLine = getFirstVisibleLine();
+			var lastLine:TextFlowLine = getLastVisibleLine();
+			var firstVisiblePosition:int = firstLine ? firstLine.absoluteStart : this.absoluteStart;
+			var lastVisiblePosition:int = lastLine ? lastLine.absoluteStart + lastLine.textLength : this.absoluteStart + textLength;
+
+			// Calculate the last possible anchor position for a visible float. The float can't be past the line *after* the last line.
+			// In case that's an uncomposed line with the entire rest of the TextFlow in it, we cap what we'll look at to 2000 chars
+			// past the last visible line end. This keeps us from iterating forever in a long text flow.
+		//	var followingLineIndex:int = flowComposer.findLineIndexAtPosition(lastVisiblePosition) + 1;
+			var followingLine:TextFlowLine = flowComposer.findLineAtPosition(lastVisiblePosition);
+			var lastPossibleFloatPosition:int = followingLine ? followingLine.absoluteStart + followingLine.textLength : this.absoluteStart + textLength;
+			lastPossibleFloatPosition = Math.min(lastPossibleFloatPosition, this.absoluteStart + textLength);
+			lastPossibleFloatPosition = Math.min(lastPossibleFloatPosition, lastVisiblePosition + 2000);
+			lastPossibleFloatPosition = Math.min(lastPossibleFloatPosition, flowComposer.damageAbsoluteStart);
+			CONFIG::debug { assert(lastPossibleFloatPosition <= this.absoluteStart + textLength, "Expected lastPossibleFloatPosition to be before end of container"); }
+			
+			// Get visible area
+			var wmode:String = effectiveBlockProgression;
+			var width:Number = _measureWidth ? _contentWidth : _compositionWidth;
+			var height:Number = _measureHeight ? _contentHeight : _compositionHeight;
+			var adjustX:Number = (wmode == BlockProgression.RL) ? _xScroll - width : _xScroll;
+			var adjustY:Number = _yScroll;
+
+			var floatIndex:int = findFloatIndexAtOrAfter(updateStart);
+			var containerListIndex:int = 0;
+			var childIdx:int = getFirstTextLineChildIndex(); // index where the first text line must appear at in its container  
+			if (floatIndex > 0)		
+			{
+				// starting from the middle, need to skip over the initial entries already in the 
+				// container list that are not being changed. Add them to the list of visible graphics, so they don't get dropped off.
+				floatInfo = _composedFloats[floatIndex - 1];
+				containerListIndex = _floatsInContainer.indexOf(floatInfo.graphic);
+				while (containerListIndex == -1 && floatIndex > 0)
+				{
+					floatIndex--;
+					floatInfo = _composedFloats[floatIndex - 1];
+					containerListIndex = _floatsInContainer.indexOf(floatInfo.graphic);
+				}
+				CONFIG::debug { assert(containerListIndex != -1, "Can't find previously visible float"); }
+				containerListIndex++;
+				for (var m:int = 0; m < floatIndex; ++m)
+				{
+					CONFIG::debug { assert(_composedFloats[m].absolutePosition >= this.absoluteStart, "Found float from previous container"); }
+					if (_composedFloats[m].absolutePosition >= this.absoluteStart)
+						visibleFloats.push(_composedFloats[m].graphic);
+				}
+			}
+			var firstContainerListIndex:int = containerListIndex;
+			if (!_floatsInContainer)
+				_floatsInContainer = [];
+			var numContainerList:int = _floatsInContainer.length;
+			
+			CONFIG::debug
+			{
+				var oldChanges:Array = [];
+				var visibleAtEnd:Array = [];
+				oldUpdateGraphics(_updateStart, oldChanges, visibleAtEnd);
+				var changeIndex:int = 0;
+				var originalAlgorithmChange:Array;
+				var matrix:Matrix;
+				var oldMatrix:Matrix;
+				var changes:Array = [];
+			}
+
+			// Add in the floats from the last compose, at the composed location
+			var numFloats:int = _composedFloats.length;
+			for (; floatIndex < numFloats; )
+			{
+				floatInfo = _composedFloats[floatIndex];
+				float = floatInfo.graphic;
+				var parent:DisplayObjectContainer = floatInfo.parent;
+				var shouldDisplayGraphic:Boolean;
+				if (!float)
+					shouldDisplayGraphic = false;
+				else 
+				{
+					if (floatInfo.floatType == Float.NONE)
+						shouldDisplayGraphic = floatInfo.absolutePosition >= firstVisiblePosition && floatInfo.absolutePosition < lastVisiblePosition;
+					else
+						shouldDisplayGraphic = floatIsVisible(wmode, adjustX, adjustY, width, height, floatInfo) && floatInfo.absolutePosition < lastPossibleFloatPosition && floatInfo.absolutePosition >= this.absoluteStart;
+				}
+				
+				if (!shouldDisplayGraphic)		// skip to the next
+				{
+					// Float may be after the last visible line and still visible if it is anchored to the following line because it was too wide for the column,
+					// so we don't stop iterating until we've gone at least one line past the last visible line.
+					if (floatInfo.absolutePosition >= lastPossibleFloatPosition)
+						break;
+					++floatIndex;
+					continue;
+				}
+				
+				// If we had to remove some no-longer visible graphics, we might have already gone past this graphic before. Only add once.
+				if (visibleFloats.indexOf(float) < 0)
+					visibleFloats.push(float);
+				
+				// If it's an inline, the TextLine in the FloatCompositionData may have been replaced. Check for this and get a new line if necessary.
+				if (floatInfo.floatType == Float.NONE)
+				{
+					// Check to see if the TextLine has changed
+					var tl:TextLine = parent as TextLine;
+					if (tl)
+					{
+						var tfl:TextFlowLine = tl.userData as TextFlowLine;
+						if (!tfl || floatInfo.absolutePosition < tfl.absoluteStart || floatInfo.absolutePosition >= tfl.absoluteStart + tfl.textLength || tl.parent == null || tl.validity == TextLineValidity.INVALID)
+						{
+							// TextLine doesn't match TextFlowLine -- refetch the TextLine
+							tfl = flowComposer.findLineAtPosition(floatInfo.absolutePosition);
+
+							for (var i:int = 0; i < _shapeChildren.length; i++) 
+								if ((_shapeChildren[i] as TextLine).userData == tfl)		// if this is coded into the loop condition we get a warning
+									break;
+							parent = (i < _shapeChildren.length) ? _shapeChildren[i] : null;
+						}
+					}
+				}
+
+				inlineHolder = float.parent;
+
+				// Float is already visible in the right place in the z-order, leave it but update its position
+				if (containerListIndex < numContainerList && floatInfo.parent == _container && inlineHolder && inlineHolder.parent == _container && float == _floatsInContainer[containerListIndex])
+				{
+					if (floatInfo.matrix)
+						inlineHolder.transform.matrix = floatInfo.matrix;
+					else
+					{
+						inlineHolder.x = 0;
+						inlineHolder.y = 0;
+					}
+					inlineHolder.alpha = floatInfo.alpha;
+					inlineHolder.x += floatInfo.x;
+					inlineHolder.y += floatInfo.y;
+					CONFIG::debug { assert(inlineHolder.contains(float), "expected float is already in display list"); }
+					CONFIG::debug  { changes.push(["update", floatInfo.absolutePosition, inlineHolder.transform.matrix ? inlineHolder.transform.matrix.clone() : null, inlineHolder.alpha, inlineHolder.x, inlineHolder.y]);  }
+					++floatIndex;
+					++containerListIndex;
+					continue;
+				}
+				var index:int = _floatsInContainer.indexOf(float);
+				if (index > containerListIndex && parent == _container)		// it's in the existing list, but not yet, remove the old items from the container
+				{
+					var floatToRemove:DisplayObject = _floatsInContainer[containerListIndex++];
+					if (floatToRemove.parent)
+					{
+						CONFIG::debug { changes.push(["remove", getIndexOfFloat(floatToRemove), floatToRemove, "going to add float", floatToRemove.parent.parent is TextLine ? "removing inline" : "removing float"]);  }
+						removeInlineGraphicElement(_container, floatToRemove.parent);
+					}
+				}
+				else					
+				{
+					if (containerListIndex < numContainerList &&  float == _floatsInContainer[containerListIndex])		// it was previously a Float.NONE; so we don't want to remove it later
+						containerListIndex++;
+
+					inlineHolder = new Sprite();
+					if (floatInfo.matrix)
+						inlineHolder.transform.matrix = floatInfo.matrix;
+					inlineHolder.alpha = floatInfo.alpha;
+					inlineHolder.x += floatInfo.x;
+					inlineHolder.y += floatInfo.y;
+					inlineHolder.addChild(float);
+					CONFIG::debug { changes.push(["add", floatInfo.absolutePosition, parent, parent == _container ? childIdx : 0,  
+						inlineHolder.transform.matrix ? inlineHolder.transform.matrix.clone() : null, inlineHolder.alpha, inlineHolder.x, inlineHolder.y]); }
+					if (parent == _container)		// it's float - add to container
+					{
+						childIdx = Math.min(childIdx, _container.numChildren);
+						addInlineGraphicElement(_container, inlineHolder, childIdx++);
+					}
+					else	// it's an inline - add to TextLine
+						addInlineGraphicElement(parent, inlineHolder, 0);
+					++floatIndex;
+				}
+			}
+			while (containerListIndex < _floatsInContainer.length)		// remove trailing items
+			{
+				float = _floatsInContainer[containerListIndex++];
+				if (float.parent)
+				{
+					CONFIG::debug { changes.push(["remove", getIndexOfFloat(float), float, "removeTrailing", float.parent is TextLine ? "removing inline" : "removing float"]);  }
+					removeInlineGraphicElement(_container, float.parent);
+				}
+			}
+			
+			// Update the container list
+			_floatsInContainer = visibleFloats;
+
+		//	CONFIG::debug { compareUpdateGraphicsResults(changes, oldChanges, _floatsInContainer, visibleAtEnd); }
+		} 
+		
+		
+		private function floatIsVisible(wmode:String, scrollX:Number, scrollY:Number, scrollWidth:Number, scrollHeight:Number, floatInfo:FloatCompositionData):Boolean
+		{
+			var inlineGraphicElement:InlineGraphicElement = textFlow.findLeaf(floatInfo.absolutePosition) as InlineGraphicElement;
+			
+			return (wmode == BlockProgression.TB) ?
+				(floatInfo.y + inlineGraphicElement.elementHeight >= scrollY) && 
+					(floatInfo.y <= scrollY + scrollHeight) :
+				(floatInfo.x + inlineGraphicElement.elementWidth >= scrollX) && 
+					(floatInfo.x <= scrollX + scrollWidth);
+		} 
+		
+		CONFIG::debug private function processResults(changes:Array):Array
+		{
+			var newProcessedResults:Array = [];
+			var newResults:Array;
+			for each (newResults in changes)
+			{
+				var i:int;
+				var result:Object = new Object();
+				result.absolutePosition = newResults[1];
+				result.state = newResults;
+				for (i = 0; i < newProcessedResults.length; ++i)
+					if (newProcessedResults[i].absolutePosition == newResults[1])
+						break;
+				if (i < newProcessedResults.length)
+					newProcessedResults[i] = result;
+				newProcessedResults.push(result);
+			}
+			return newProcessedResults;
+		}
+		
+		CONFIG::debug private function compareUpdateGraphicsResults(newAlgorithmChanges:Array, originalAlgorithmChanges:Array, visibleFloats:Array, oldVisibleFloats:Array):void
+		{
+		//	var newResults:Array;
+			var changeIndex:int = 0;
+			var oldMatrix:Matrix;
+			var matrix:Matrix;
+			var result:Object;
+			var newProcessedResults:Array = processResults(newAlgorithmChanges);
+			var oldProcessedResults:Array = processResults(originalAlgorithmChanges);
+			for each (result in newProcessedResults)
+			{
+				for (var i:int = 0; i < oldProcessedResults.length; ++i)
+					if (oldProcessedResults[i].absolutePosition == result.absolutePosition)
+						break;
+				assert(i < oldProcessedResults.length, "Object at " + result.absolutePosition.toString() + "not changed by original algorithm is changed(" + result.state[0] + ") by new");
+				if (i < oldProcessedResults.length)
+				{
+					var oldResult:Object = oldProcessedResults[i];
+					var oldChanges:Array = oldResult.state;
+					var newChanges:Array = result.state;
+					assert (newChanges[0] == oldChanges[0], "New algorithm left object at " + newChanges[1].toString() + " in different state than old algorithm (now " + newChanges[0] + " was " + oldChanges[0]);
+					if (newChanges[0] != oldChanges[0])
+						continue;
+					switch (newChanges[0])
+					{
+						case 'update':
+							oldMatrix = oldChanges[2] as Matrix;
+							matrix = newChanges[2] as Matrix;
+							assert((matrix == null && oldMatrix == null) || 
+								(matrix.a == oldMatrix.a && matrix.b == oldMatrix.b &&
+									matrix.c == oldMatrix.c && matrix.d == oldMatrix.d &&
+									matrix.tx == oldMatrix.tx && matrix.ty == oldMatrix.ty), "Expected matrix of new alogorithm to match matrix of old"); 
+							assert(oldChanges[3] == newChanges[3], "Expected alpha of new alogirthm to match alpha of old"); 
+							assert(oldChanges[4] == newChanges[4], "Expected X of new alogirthm to match X of old on update"); 
+							assert(oldChanges[5] == newChanges[5], "Expected Y of new alogirthm to match Y of old on update"); 
+							break;
+						case 'add':
+							assert(oldChanges[2] == newChanges[2], "After add new and old algorithm get different parent");
+							assert(oldChanges[3] == newChanges[3], "After add new and old algorithm get different child index");
+							matrix = oldChanges[4] as Matrix;
+							oldMatrix = newChanges[4] as Matrix;
+							assert((matrix == null && oldMatrix == null) ||
+								(matrix.a == oldMatrix.a && matrix.b == oldMatrix.b &&
+									matrix.c == oldMatrix.c && matrix.d == oldMatrix.d &&
+									matrix.tx == oldMatrix.tx && matrix.ty == oldMatrix.ty), "After add new and old algorithm get different matrix"); 
+							assert(oldChanges[5] == newChanges[5], "After add new and old algorithm get different alpha"); 
+							assert(oldChanges[6] == newChanges[6], "After add new and old algorithm get different X"); 
+							assert(oldChanges[7] == newChanges[7], "After add new and old algorithm get different Y"); 
+							break;
+						case 'remove':
+							if (oldChanges[0] != "remove" && newChanges[3] == "going to add inline")
+								return;
+							if (oldChanges[2] != newChanges[2])
+							{
+								for (var j:int = 0; j < oldProcessedResults.length; ++j)
+									if (oldProcessedResults[j].state[0] == "remove" && oldProcessedResults[j].state[2] == newChanges[2])
+										break;
+								assert(j < oldProcessedResults.length, "Float at " + newChanges[1].toString() + " removed by new algorithm " + oldChanges[0] + " by the old");
+							}
+							break;
+					}
+				}
+			}
+			var float:DisplayObject;
+			var floatPosition:int = -1;
+			for each (float in visibleFloats)
+			{
+				if (oldVisibleFloats.indexOf(float) < 0)
+				{
+					floatPosition = getIndexOfFloat(float);
+					assert (false, "new algorithm _floatsInContainer has visible graphic at " + floatPosition.toString() + " not in old algorithm in container " + flowComposer.getControllerIndex(this).toString());
+				}
+			}
+			for each (float in oldVisibleFloats)
+			{
+				if (visibleFloats.indexOf(float) < 0)
+				{
+					floatPosition = getIndexOfFloat(float);
+					assert (false, "old algorithm _floatsInContainer has visible graphic at " + floatPosition.toString() + " not in new algorithm" + flowComposer.getControllerIndex(this).toString());
+				}
+			}
+		} 
+		
+		CONFIG::debug private function getIndexOfFloat(float:DisplayObject):int
+		{
+			var floatPosition:int = -1;
+			for (var m:int = 0; m < _composedFloats.length; m++)
+			{
+				if (_composedFloats[m].graphic == float)
+				{
+					floatPosition = _composedFloats[m].absolutePosition;
+					break;
+				}
+			}
+			return floatPosition;
+		}
+		
+		// Add or remove graphis (floats or regular inlines) from the display list
+		CONFIG::debug private function oldUpdateGraphics(updateStart:int, changes:Array, visibleAtEnd:Array):void
+		{
+			var inlineHolder:DisplayObjectContainer;
+			
+			// If we have new floats that have been composed into container, we add them here.
+			// Also, we remove any that are no longer in the container. Only change those
+			// floats that are within the area that was recomposed.
+			
+			var floatInfo:FloatCompositionData;
+			var firstLine:TextFlowLine = getFirstVisibleLine();
+			var lastLine:TextFlowLine = getLastVisibleLine();
+			var firstVisiblePosition:int = firstLine ? firstLine.absoluteStart : this.absoluteStart;
+			var lastVisiblePosition:int = lastLine ? lastLine.absoluteStart + lastLine.textLength : this.absoluteStart + textLength;
+
+			var floatIndex:int = findFloatIndexAtOrAfter(updateStart);
+			var lastFloatIndex:int = findFloatIndexAtOrAfter(lastVisiblePosition);
+			var containerListIndex:int = 0;
+			var childIdx:int = getFirstTextLineChildIndex(); // index where the first text line must appear at in its container  
+			if (floatIndex > 0)		
+			{
+				// starting from the middle, need to skip over the initial entries already in the 
+				// container list that are not being changed
+				floatInfo = _composedFloats[floatIndex - 1];
+				containerListIndex = _floatsInContainer.indexOf(floatInfo.graphic) + 1;
+				CONFIG::debug { assert(containerListIndex >= 0, "Can't find pre-existing float in container list"); }
+			}
+			if (!_floatsInContainer)
+				_floatsInContainer = [];
+			var numContainerList:int = _floatsInContainer.length;
+
+			// Add in the floats from the last compose, at the composed location
+			for (; floatIndex < lastFloatIndex; )
+			{
+				floatInfo = _composedFloats[floatIndex];
+				var float:DisplayObject = floatInfo.graphic;
+				var parent:DisplayObjectContainer = floatInfo.parent;
+				if (floatInfo.floatType == Float.NONE)	// If the parent line is not in view, don't display the ILG
+				{
+					// Check to see if the TextLine has changed
+					var tl:TextLine = parent as TextLine;
+					if (tl)
+					{
+						var tfl:TextFlowLine = tl.userData as TextFlowLine;
+						if (!tfl || floatInfo.absolutePosition < tfl.absoluteStart || floatInfo.absolutePosition >= tfl.absoluteStart + tfl.textLength || tl.parent == null || tl.validity == TextLineValidity.INVALID)
+						{
+							// TextLine doesn't match TextFlowLine -- refetch the TextLine
+							tfl = flowComposer.findLineAtPosition(floatInfo.absolutePosition);
+
+							for (var i:int = 0; i < _shapeChildren.length; i++) 
+								if ((_shapeChildren[i] as TextLine).userData == tfl)		// if this is coded into the loop condition we get a warning
+									break;
+							parent = (i < _shapeChildren.length) ? _shapeChildren[i] : null;
+						}
+					}
+					if (!floatInfo.matrix || _shapeChildren.indexOf(parent) < 0)
+					{
+						++floatIndex;
+						continue;
+					}
+				}
+				if (floatInfo.floatType == Float.NONE && (!floatInfo.matrix || _shapeChildren.indexOf(parent) < 0))	// If the parent line is not in view, don't display the ILG
+				{
+					++floatIndex;
+					continue;
+				}
+				if (float)
+					inlineHolder = float.parent;
+				if (containerListIndex < numContainerList && floatInfo.parent == _container && inlineHolder && inlineHolder.parent == _container && float == _floatsInContainer[containerListIndex])		// its in both lists, just skip over
+				{
+					var updateSprite:Sprite = new Sprite();
+					updateSprite.transform.matrix = inlineHolder.transform.matrix;
+					updateSprite.x = inlineHolder.x;
+					updateSprite.y = inlineHolder.y;
+					var updateAlpha:Number;
+					
+					// Update in place
+					if (floatInfo.matrix)
+						updateMatrix = floatInfo.matrix;
+					else
+					{
+						updateSprite.x = 0;
+						updateSprite.y = 0;
+					}
+					updateAlpha = floatInfo.alpha;
+					updateSprite.x += floatInfo.x;
+					updateSprite.y += floatInfo.y;
+					var updateX:Number = updateSprite.x;
+					var updateY:Number = updateSprite.y;
+					var updateMatrix:Matrix = updateSprite.transform.matrix;
+					updateMatrix = updateMatrix.clone();
+					CONFIG::debug { assert(inlineHolder.contains(float), "expected float is already in display list"); }
+					changes.push(["update", floatInfo.absolutePosition, updateMatrix, updateAlpha, updateX, updateY]);
+					++floatIndex;
+					++containerListIndex;
+					continue;
+				}
+				var index:int = _floatsInContainer.indexOf(float);
+				if (index > containerListIndex && parent == _container)		// it's in the existing list, but not yet, remove the old items from the container
+				{
+					var floatToRemove:DisplayObject = _floatsInContainer[containerListIndex++];
+					if (floatToRemove.parent)
+					//	removeInlineGraphicElement(_container, floatToRemove.parent);
+						changes.push(["remove", getIndexOfFloat(floatToRemove), floatToRemove, parent == _container ? "going to add float" : "going to add inline"]);
+				}
+				else					
+				{
+					if (containerListIndex < numContainerList &&  float == _floatsInContainer[containerListIndex])		// it was previously a Float.NONE; so we don't want to remove it later
+						containerListIndex++;
+
+					var addSprite:Sprite = new Sprite();
+					var addAlpha:Number = floatInfo.alpha;
+
+					if (floatInfo.matrix)
+						addSprite.transform.matrix = floatInfo.matrix;
+					addSprite.x += floatInfo.x;	// addSprite x & y have values set up by matrix assignment - keep twip rounding same by assigning into Sprite
+					addSprite.y += floatInfo.y;
+					var addMatrix:Matrix = addSprite.transform.matrix;
+					var addX:Number = addSprite.x;
+					var addY:Number = addSprite.y;
+					addMatrix = addMatrix ? addMatrix.clone() : null;
+					if (parent == _container)		// it's float - add to container
+						changes.push(["add", floatInfo.absolutePosition, _container, childIdx++, addMatrix, addAlpha, addX, addY]);
+					//	addInlineGraphicElement(_container, inlineHolder, childIdx++);
+					else	// it's an inline - add to TextLine
+						changes.push(["add", floatInfo.absolutePosition, parent, 0, addMatrix, addAlpha, addX, addY]);
+					//	addInlineGraphicElement(parent, inlineHolder, 0);
+					++floatIndex;
+				}
+			}
+			while (containerListIndex < _floatsInContainer.length)		// remove trailing items
+			{
+				float = _floatsInContainer[containerListIndex++];
+				if (float.parent)
+				{
+					changes.push(["remove", getIndexOfFloat(float), float, "removeTrailing"]);
+				//	removeInlineGraphicElement(_container, float.parent);
+				}
+			}
+
+			// Update the container list
+			visibleAtEnd.length = 0;
+			for each (floatInfo in _composedFloats)
+				if (floatInfo.absolutePosition >= firstVisiblePosition && floatInfo.absolutePosition < lastVisiblePosition)
+					visibleAtEnd.push(floatInfo.graphic);
+		}
+			
+		private function releaseLinesInBlock(textBlock:TextBlock):void
+		{
+			// run through the textBlock and if all lines are not in view,
+			// release the lines from the TextBlock, and release the TextBlock itself.
+			for (var textLine:TextLine = textBlock.firstLine; textLine && textLine.parent == null; textLine = textLine.nextLine)
+			{	// do nothing 
+			}
+			if (!textLine && textBlock.firstLine)	// no lines in paragraph are in the view
+			{
+				var para:ParagraphElement;
+				var line:TextFlowLine = textBlock.firstLine.userData as TextFlowLine;
+				if (line)
+					para = line.paragraph;
+				textBlock.releaseLines(textBlock.firstLine, textBlock.lastLine);
+				if (para)
+					para.releaseTextBlock();
+			}
 		}
 		
 		private function removeAndRecycleTextLines (beginIndex:int, endIndex:int):void
@@ -2829,31 +3631,52 @@ package flashx.textLayout.container
 			var backgroundManager:BackgroundManager = textFlow.backgroundManager;
 			
 			var child:TextLine;
-			while (beginIndex < endIndex)
+			var textBlock:TextBlock;
+			for (var index:int = beginIndex; index < endIndex; index++)
 			{
-				child = _shapeChildren[beginIndex++];
-				
+				child = _shapeChildren[index];					
 				removeTextLine(child);
 				CONFIG::debug { Debugging.traceFTECall(null,_container,"removeTextLine",child); }
-				
-				// Recycle if its not displayed and not connected to the textblock
-				if (TextLineRecycler.textLineRecyclerEnabled && !child.parent)
+				// when we've removed all the lines in the paragraph in shapeChildren, run through the textBlock and if all lines are not in view,
+				// release the lines from the TextBlock, and release the TextBlock itself.
+				if (child.textBlock != textBlock)		
 				{
-					if (child.userData == null)
+					if (textBlock)
+						releaseLinesInBlock(textBlock);
+					textBlock = child.textBlock;
+				}
+			}
+			if (textBlock)
+				releaseLinesInBlock(textBlock);
+			
+			// Recycle lines not in view and not in the TextBlock
+			if (TextLineRecycler.textLineRecyclerEnabled)
+			{
+				while (beginIndex < endIndex)
+				{
+					child = _shapeChildren[beginIndex++];
+										
+					// Recycle if its not displayed and not connected to the textblock
+					if (!child.parent)
 					{
-						TextLineRecycler.addLineForReuse(child);
-						if (backgroundManager)
-							backgroundManager.removeLineFromCache(child);
-					}
-					else if (child.validity == TextLineValidity.INVALID)
-					{
-						if (child.nextLine == null && child.previousLine == null && (!child.textBlock || child.textBlock.firstLine != child))
+						if (child.userData == null)
 						{
-							child.userData.releaseTextLine();
-							child.userData = null;
 							TextLineRecycler.addLineForReuse(child);
 							if (backgroundManager)
 								backgroundManager.removeLineFromCache(child);
+						}
+						else 
+						{
+							var tfl:TextFlowLine = child.userData as TextFlowLine;
+							if (tfl && tfl.controller != this)		// don't release lines that belong to other containers
+								continue;
+							if (child.validity == TextLineValidity.INVALID || (child.nextLine == null && child.previousLine == null && (!child.textBlock || child.textBlock.firstLine != child)))
+							{
+								child.userData = null;
+								TextLineRecycler.addLineForReuse(child);
+								if (backgroundManager)
+									backgroundManager.removeLineFromCache(child);
+							}
 						}
 					}
 				}
@@ -2908,7 +3731,7 @@ package flashx.textLayout.container
 		 * 
 		 */	
 		protected function addTextLine(textLine:TextLine, index:int):void
-		{
+		{ 
 			_container.addChildAt(textLine, index);
 		}
 		
@@ -2953,9 +3776,30 @@ package flashx.textLayout.container
 		 * @see #container
 		 * 
 		 */
-		protected function addBackgroundShape(shape:Shape):void
+		protected function addBackgroundShape(shape:Shape):void	// No PMD
 		{
 			_container.addChildAt(_backgroundShape, getFirstTextLineChildIndex());
+		}
+		
+		/**
+		 * Removes a <code>flash.display.Shape</code> object on which background shapes (such as background color) are drawn.
+		 * The default implementation of this method, which may be overriden, removes the object from its <code>parent</code>.
+		 * 
+		 * @param shape <code>flash.display.Shape</code> object to remove
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 * 
+		 * @see flash.display.Shape
+		 * @see flash.text.engine.TextLine
+		 * @see #container
+		 * 
+		 */
+		protected function removeBackgroundShape(shape:Shape):void	
+		{
+			if (shape.parent)
+				shape.parent.removeChild(shape);
 		}
 		
 		/**
@@ -3003,6 +3847,60 @@ package flashx.textLayout.container
 		protected function removeSelectionContainer(selectionContainer:DisplayObjectContainer):void
 		{	
 			selectionContainer.parent.removeChild(selectionContainer);
+		}
+		
+		/**
+		 * Adds a <code>flash.display.DisplayObject</code> object as a descendant of <code>parent</code>.
+		 * The default implementation of this method, which may be overriden, adds the object
+		 * as a direct child of <code>parent</code> at the specified index. This is called to add 
+		 * InlineGraphicElements to the TextLine or container.
+		 * 
+		 * @param parent the <code>flash.display.DisplayObjectContainer</code> object to add the inlineGraphicElement to
+		 * @param inlineGraphicElement the <code>flash.display.DisplayObject</code> object to add
+		 * @param index insertion index of the float in its parent 
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 2.0
+		 * @langversion 3.0
+		 * 
+		 * @see flash.display.DisplayObjectContainer
+		 * @see flash.display.DisplayObject
+		 * @see #container
+		 * 
+		 */	
+		protected function addInlineGraphicElement(parent:DisplayObjectContainer, inlineGraphicElement:DisplayObject, index:int):void
+		{
+			
+			// We're adding the inline holder -- the float it owns should not be in the visible list
+			CONFIG::debug { assert (parent != _container || !parent.contains(inlineGraphicElement), "Float already in container"); }
+			parent.addChildAt(inlineGraphicElement, index);
+		}
+		
+		/**
+		 * Removes a <code>flash.display.DisplayObject</code> object from its parent. 
+		 * The default implementation of this method, which may be overriden, removes the object
+		 * from <code>container</code> if it is a direct child of the latter.
+		 * 
+		 * This method may be called even if the object is not a descendant of <code>parent</code>.
+		 * Any implementation of this method must ensure that no action is taken in this case.
+		 * 
+		 * @param float the <code>flash.display.DisplayObject</code> object to remove 
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 2.0
+		 * @langversion 3.0
+		 * 
+		 * @see flash.display.DisplayObjectContainer
+		 * @see flash.display.DisplayObject
+		 * @see #container
+		 * 
+		 */	
+		protected function removeInlineGraphicElement(parent:DisplayObjectContainer, inlineGraphicElement:DisplayObject):void
+		{
+			// We're removing the inline holder -- the float it owns should be in the visible list
+			CONFIG::debug { assert (parent != _container || _floatsInContainer.indexOf(DisplayObjectContainer(inlineGraphicElement).getChildAt(0)) >= 0, "Float *not* already in container"); }
+			if (inlineGraphicElement.parent == parent)
+				parent.removeChild(inlineGraphicElement);
 		}
 		
 		/**
@@ -3095,31 +3993,33 @@ package flashx.textLayout.container
 		
 		include "../formats/TextLayoutFormatInc.as";
 		
-		/** 
-		 * The <code>userStyles</code> object for a ContainerController instance.  The getter makes a copy of the 
-		 * <code>userStyles</code> object, which is an array of <em>stylename-value</em> pairs.
+		/** Allows you to read and write user styles on a ContainerController object.  Note that reading this property
+		 * makes a copy of the userStyles set in the format of this element. 
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
 		 * @langversion 3.0
+		 * 
 		 */
 		public function get userStyles():Object
-		{
-			var styles:Object = _formatValueHolder == null ? null : _formatValueHolder.userStyles;
-			return styles ? Property.shallowCopy(styles) : null;
-		}
+		{ return _format ? _format.userStyles : null; }
 		public function set userStyles(styles:Object):void
 		{
-			var newStyles:Object = new Object();
-			for (var val:Object in styles)
-				newStyles[val] = styles[val];
-			writableTextLayoutFormatValueHolder().userStyles = newStyles;
-			formatChanged(); // modelChanged(ModelChange.USER_STYLE_CHANGED,0,this.textLength,true);
+			var val:String;
+			// clear the existing userstyles
+			for (val in userStyles)
+				this.setStyle(val,undefined);
+			
+			// set the new ones
+			for (val in styles)
+				this.setStyle(val,styles[val]);
 		}
 		
 		/** Returns the <code>coreStyles</code> on this ContainerController.  Note that the getter makes a copy of the core 
-		 * styles dictionary. The coreStyles object encapsulates those formats that are defined by TextLayoutFormat. The
-		 * <code>coreStyles</code> object consists of an array of <em>stylename-value</em> pairs.
+		 * styles dictionary. The returned object includes the formats that are defined by TextLayoutFormat and are in TextLayoutFormat.description. The
+		 * returned object consists of an array of <em>stylename-value</em> pairs.
+		 * 
+		 * @see flashx.textLayout.formats.TextLayoutFormat
 		 * 
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
@@ -3127,11 +4027,21 @@ package flashx.textLayout.container
 		 */
 		
 		public function get coreStyles():Object
-		{
-			var styles:Object = _formatValueHolder == null ? null : _formatValueHolder.coreStyles;
-			return styles ? Property.shallowCopy(styles) : null;
-		}		
+		{ return _format ? _format.coreStyles : null; }
 		
+		/** Returns the styles on this ContainerController.  Note that the getter makes a copy of the  
+		 * styles dictionary. The returned object includes all styles set in the format property including core and user styles. The
+		 * returned object consists of an array of <em>stylename-value</em> pairs.
+		 * 
+		 * @see flashx.textLayout.formats.TextLayoutFormat
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 */
+		public function get styles():Object
+		{ return _format ? _format.styles : null; }
+
 		/** 
 		 * Stores the ITextLayoutFormat object that contains the attributes for this container. 
 		 * The controller inherits the container properties from the TextFlow of which it is part. 
@@ -3145,33 +4055,29 @@ package flashx.textLayout.container
 		 * @see flashx.textLayout.formats.ITextLayoutFormat
 		 */
 		public function get format():ITextLayoutFormat
-		{ return _formatValueHolder; }
+		{ return _format; }
 		public function set format(value:ITextLayoutFormat):void
 		{
-			formatInternal = value;
-			formatChanged();
-		}
-		
-		private function writableTextLayoutFormatValueHolder():FlowValueHolder
-		{
-			if (_formatValueHolder == null)
-				_formatValueHolder = new FlowValueHolder();
-			return _formatValueHolder;
-		}
-		
-		/** Sets the _format data member. No side effects.
-		 * @private
-		 */
-		tlf_internal function set formatInternal(value:ITextLayoutFormat):void
-		{	
+			if (value == _format)
+				return;
+			
+			var oldStyleName:String = this.styleName;
+			
 			if (value == null)
-			{
-				if (_formatValueHolder == null || _formatValueHolder.coreStyles == null)
-					return; // no change
-				_formatValueHolder.coreStyles = null;
-			}
+				_format.clearStyles();
 			else
-				writableTextLayoutFormatValueHolder().format = value;
+				writableTextLayoutFormat().copy(value);
+
+			formatChanged();
+			if (oldStyleName != this.styleName)
+				styleSelectorChanged();
+		}
+		
+		private function writableTextLayoutFormat():FlowValueHolder
+		{
+			if (_format == null)
+				_format = new FlowValueHolder();
+			return _format;
 		}
 		
 		/** Returns the value of the style specified by the <code>styleProp</code> parameter.
@@ -3185,51 +4091,23 @@ package flashx.textLayout.container
 		 * @langversion 3.0
 		 */
 		public function getStyle(styleProp:String):*
-		{
+		{ 
 			if (TextLayoutFormat.description.hasOwnProperty(styleProp))
-				return computedFormat[styleProp];
-			return getUserStyleWorker(styleProp);
+				return computedFormat.getStyle(styleProp);
+			
+			var tf:TextFlow = _rootElement.getTextFlow();
+			if (!tf || !tf.formatResolver)
+				return computedFormat.getStyle(styleProp);
+			
+			return getUserStyleWorker(styleProp); 
 		}
-		
-		/** 
-		 * Sets the value of the style specified by the <code>styleProp</code> parameter to the value
-		 * specified by the <code>newValue</code> parameter.
-		 *
-		 * @param styleProp The name of the style property whose value you want to set.
-		 * @param newValue The value that you want to assign to the style.
-		 *
-		 * @playerversion Flash 10
-		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 */
-		
-		public function setStyle(styleProp:String,newValue:*):void
-		{
-			if (TextLayoutFormat.description[styleProp] !== undefined)
-				this[styleProp] = newValue;
-			else
-			{
-				_formatValueHolder.setUserStyle(styleProp,newValue);
-				formatChanged(); // modelChanged(ModelChange.USER_STYLE_CHANGED,0,this.textLength,true);
-			}
-		}
-		
-		/** Clears the style specified by <code>styleProp</code> from this FlowElement. Sets the value to
-		 * <code>undefined</code>.
-		 * 
-		 * @playerversion Flash 10
-		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 */
-		public function clearStyle(styleProp:String):void
-		{ setStyle(styleProp,undefined); }
 		
 		/** @private worker function - any styleProp */
 		tlf_internal function getUserStyleWorker(styleProp:String):*
 		{
 			CONFIG::debug { assert(TextLayoutFormat.description[styleProp] === undefined,"bad call to getUserStyleWorker"); }
 			
-			var userStyle:* = _formatValueHolder.getUserStyle(styleProp)
+			var userStyle:* = _format.getStyle(styleProp)
 			if (userStyle !== undefined)
 				return userStyle;
 			
@@ -3243,6 +4121,39 @@ package flashx.textLayout.container
 			// or should it go to the container?
 			return _rootElement ? _rootElement.getUserStyleWorker(styleProp) : undefined;
 		}
+		
+		/** 
+		 * Sets the value of the style specified by the <code>styleProp</code> parameter to the value
+		 * specified by the <code>newValue</code> parameter.
+		 *
+		 * @param styleProp The name of the style property whose value you want to set.
+		 * @param newValue The value that you want to assign to the style.
+		 *
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 */
+		public function setStyle(styleProp:String,newValue:*):void
+		{
+			if (TextLayoutFormat.description[styleProp])
+				this[styleProp] = newValue;
+			else
+			{
+				writableTextLayoutFormat().setStyle(styleProp,newValue);
+				formatChanged();
+			}
+		}
+		
+		/** Clears the style specified by <code>styleProp</code> from this FlowElement. Sets the value to
+		 * <code>undefined</code>.
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 */
+		public function clearStyle(styleProp:String):void
+		{ setStyle(styleProp,undefined); }
+		
 		
 		/** 
 		 * Returns an ITextLayoutFormat instance with the attributes applied to this container, including the attributes inherited from its
@@ -3262,7 +4173,7 @@ package flashx.textLayout.container
 			{
 				// TODO: revise cascade so it goes up through the container chain
 				
-				var parentPrototype:TextLayoutFormatValueHolder = _rootElement ? TextLayoutFormatValueHolder(_rootElement.computedFormat): null;
+				var parentPrototype:TextLayoutFormat = _rootElement ? TextLayoutFormat(_rootElement.computedFormat): null;
 				_computedFormat =  FlowElement.createTextLayoutFormatPrototype(formatForCascade,parentPrototype);
 				
 				resetColumnState();
@@ -3271,31 +4182,31 @@ package flashx.textLayout.container
 		}
 		
 		/** @private */
-		tlf_internal function get formatForCascade():TextLayoutFormatValueHolder
+		tlf_internal function get formatForCascade():ITextLayoutFormat
 		{
 			if (_rootElement)
 			{
 				var tf:TextFlow = _rootElement.getTextFlow();
 				if (tf)
 				{
-					var elemStyle:TextLayoutFormatValueHolder  = tf.getTextLayoutFormatStyle(this);
+					var elemStyle:TextLayoutFormat  = tf.getTextLayoutFormatStyle(this);
 					if (elemStyle)
 					{
-						var localFormat:ITextLayoutFormat = _formatValueHolder;
+						var localFormat:ITextLayoutFormat = _format;
 						if (localFormat == null)
 							return elemStyle;
 						
-						var rslt:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder(elemStyle);
+						var rslt:TextLayoutFormat = new TextLayoutFormat(elemStyle);
 						rslt.apply(localFormat);
 						return rslt;
 					}
 				}
 			}
-			return _formatValueHolder;
+			return _format;
 		}
 		
 		/** @private */
-		tlf_internal function lineIsVisible(wmode:String, scrollXTW:int, scrollYTW:int, scrollWidthTW:int, scrollHeightTW:int, textFlowLine:TextFlowLine):TextLine
+		tlf_internal function isLineVisible(wmode:String, scrollXTW:int, scrollYTW:int, scrollWidthTW:int, scrollHeightTW:int, textFlowLine:TextFlowLine, textLine:TextLine):TextLine
 		{
 			// So this is another take on figuring out whether the line bounds intersects the visible area of the container. 
 			// This code figures out the logical bounds of the line, and uses that for the intersection. There was a 
@@ -3303,71 +4214,256 @@ package flashx.textLayout.container
 			// about the children, and also the bounds of visible glyphs. We decided that the logical bounds is close enough,
 			// and is much faster to obtain. However, there may be some lines, that get a different result using the logical 
 			// bounds than the getBounds. I've left the old code here for verification.
-			
-			var textLine:TextLine;
-			
 			if (!textFlowLine.hasLineBounds())
 			{
-				textLine = textFlowLine.createShape(wmode);
+				if (!textLine)
+					textLine = textFlowLine.getTextLine(true);
+				textFlowLine.createShape(wmode, textLine);
 				if (textLine.numChildren == 0)
 				{
 					// Get it the new way
 					if (wmode == BlockProgression.TB)
-						textFlowLine.setLineBounds(Twips.to(textLine.x), Twips.to(textLine.y - textLine.ascent), Twips.to(textLine.textWidth), Twips.to(textLine.textHeight));
+						textFlowLine.cacheLineBounds(wmode, textLine.x, textLine.y - textLine.ascent, textLine.textWidth, textLine.textHeight);
 					else
-						textFlowLine.setLineBounds(Twips.to(textLine.x - textLine.descent), Twips.to(textLine.y), Twips.to(textLine.textHeight), Twips.to(textLine.textWidth));
+						textFlowLine.cacheLineBounds(wmode, textLine.x - textLine.descent, textLine.y, textLine.textHeight, textLine.textWidth);
 				}
 				else	// Phase this out after composition is updated to handle inline case correctly
 				{
 					var lineBounds:Rectangle = getPlacedTextLineBounds(textLine);
-					textFlowLine.setLineBounds(Twips.to(lineBounds.x), Twips.to(lineBounds.y), Twips.to(lineBounds.width), Twips.to(lineBounds.height));
+					if (textLine.hasGraphicElement)
+						lineBounds = computeLineBoundsWithGraphics(textFlowLine, textLine, lineBounds);		
+					textFlowLine.cacheLineBounds(wmode, lineBounds.x, lineBounds.y, lineBounds.width, lineBounds.height);
 				}
 			}
-			
-			var isVisible:Boolean = textFlowLine.isLineVisible(wmode, scrollXTW, scrollYTW, scrollWidthTW, scrollHeightTW);
-			
-			if (!isVisible)
-				return null;
-			
-			if (!textLine)
-				textLine = textFlowLine.createShape(wmode);
-			return textLine;
+			if ((wmode == BlockProgression.TB ? _measureHeight : _measureWidth) || textFlowLine.isLineVisible(wmode, scrollXTW, scrollYTW, scrollWidthTW, scrollHeightTW))		
+				return textLine ? textLine : textFlowLine.getTextLine(true);
+			return null;
 		}
 		
-		/*	CONFIG::debug private function oldLineIsVisible(wmode:String, scrollAdjustRect:Rectangle, textLine:TextLine):Boolean
-		{
-		var curBounds:Rectangle = getPlacedTextLineBounds(textLine); 
-		
-		// trace("fillShapeChildren:",lineIndex.toString(),curBounds.toString(),textLine.x.toString(),textLine.y.toString(),scrollRect.toString());
-		return ((wmode == BlockProgression.RL) ? curBounds.x + curBounds.width >= scrollAdjustRect.left && curBounds.x < scrollAdjustRect.x + scrollAdjustRect.width :
-		curBounds.y + curBounds.height >= scrollAdjustRect.top && curBounds.y < scrollAdjustRect.y + scrollAdjustRect.height)	
+	/*	This code may turn out to be useful for iterating through the floats and doing some function,
+		similar to applyFunctionToElements. 
+		tlf_internal function applyFunctionToFloats(absoluteStart:int, absoluteEnd:int, func:Function):void
+		{ 
+			if (_composedFloats)
+			{
+				var floatIndex:int = findFloatIndexAtOrAfter(absoluteStart);
+				var lastFloatIndex:int = findFloatIndexAtOrAfter(absoluteEnd);
+				while (floatIndex < lastFloatIndex)
+				{
+					var floatInfo:FloatCompositionData = _composedFloats[floatIndex];
+					if (!func(floatInfo))
+						break;
+					++floatIndex;
+				}
+			}
 		} */
+
+				
+		private function computeLineBoundsWithGraphics(line:TextFlowLine, textLine:TextLine, boundsRect:Rectangle):Rectangle
+		{
+			if (_composedFloats)
+			{
+				var floatIndex:int = findFloatIndexAtOrAfter(line.absoluteStart);
+				var lastFloatIndex:int = findFloatIndexAtOrAfter(line.absoluteStart + line.textLength);
+				var inlineRect:Rectangle = new Rectangle();
+				var topLeft:Point = new Point();
+				while (floatIndex < lastFloatIndex)
+				{
+					var floatInfo:FloatCompositionData = _composedFloats[floatIndex];
+					if (floatInfo.floatType == Float.NONE)
+					{
+						var inlineGraphicElement:InlineGraphicElement = textFlow.findLeaf(floatInfo.absolutePosition) as InlineGraphicElement;
+						var inlineHolder:DisplayObject = inlineGraphicElement.placeholderGraphic.parent;
+						if (inlineHolder)
+						{
+							inlineRect.x = textLine.x + inlineHolder.x;
+							inlineRect.y = textLine.y + inlineHolder.y;
+							inlineRect.width = inlineGraphicElement.elementWidth;
+							inlineRect.height = inlineGraphicElement.elementHeight;
+							boundsRect = boundsRect.union(inlineRect);
+						}
+					}
+					++floatIndex;
+				}
+			}
+			return boundsRect;
+		}
 		
 		/** @private */
 		tlf_internal function getPlacedTextLineBounds(textLine:TextLine):Rectangle
 		{
 			var curBounds:Rectangle;
-			if (!textLine.parent)
-			{
-				// Has to be in the container to get the bounds
-				/*addTextLine(textLine,0);
-				curBounds = textLine.getBounds(_container);
-				removeTextLine(textLine); */
-				tempLineHolder.addChildAt(textLine,0);
-				curBounds = textLine.getBounds(tempLineHolder);
-				tempLineHolder.removeChildAt(0);
-				CONFIG::debug { assert(textLine.parent == null,"Bad removeChild in getPlacedTextLineBounds"); }
-			}
-			else
-			{
-				// Note: Relative to its parent, which may not be _container
-				// but in all reasonable cases, should share its origin with _container -- really???
-				curBounds = textLine.getBounds(textLine.parent);
-			}
-			
+			curBounds = textLine.getBounds(textLine);
+			curBounds.x += textLine.x;
+			curBounds.y += textLine.y;
+			CONFIG::debug { verifyPlacedTextLineBounds(textLine,curBounds); }
 			return curBounds;
 		}
 		
+		CONFIG::debug
+		{
+			import flash.system.Capabilities;
+			// OLD style calculation - lets make sure its the same.  
+			static private var tempLineHolder:Sprite = new Sprite();
+			
+			/** @private */
+			tlf_internal function verifyPlacedTextLineBounds(textLine:TextLine,newBounds:Rectangle):void
+			{
+				// But AIR has a bug so they don't match in AIR
+				if (Capabilities.playerType == "Desktop")
+					return;
+				
+				var curBounds:Rectangle;
+				if (!textLine.parent)
+				{
+					// Has to be in the container to get the bounds
+					/*addTextLine(textLine,0);
+					curBounds = textLine.getBounds(_container);
+					removeTextLine(textLine); */
+					tempLineHolder.addChildAt(textLine,0);
+					curBounds = textLine.getBounds(tempLineHolder);
+					tempLineHolder.removeChildAt(0);
+					CONFIG::debug { assert(textLine.parent == null,"Bad removeChild in getPlacedTextLineBounds"); }
+				}
+				else
+				{
+					// Note: Relative to its parent, which may not be _container
+					// but in all reasonable cases, should share its origin with _container -- really???
+					curBounds = textLine.getBounds(textLine.parent);
+				}
+				
+				assert(Math.abs(newBounds.x-curBounds.x) <= .1 && Math.abs(newBounds.y-curBounds.y) <= .1 && Math.abs(newBounds.width-curBounds.width) <= .1 && Math.abs(newBounds.height-curBounds.height) <= .1,
+					"verifyPlacedTextLineBounds: Bounds are different: "+curBounds.toString()+" : "+newBounds.toString());
+			}
+		}
+		
+		/** @private */
+		tlf_internal function addComposedLine(textLine:TextLine):void
+		{
+			_linesInView.push(textLine);			
+		}
+		
+		/** @private Return the array. Client code may add lines to the array. */
+		tlf_internal function get composedLines():Array
+		{
+			if (!_linesInView)
+				_linesInView = [];
+			return _linesInView;
+		}
+		
+		/** @private Empty out the linesInView, starting from the supplied text index. */
+		tlf_internal function clearComposedLines(pos:int):void
+		{
+			var index:int = 0;
+			for each (var textLine:TextLine in _linesInView)
+			{
+				var tfl:TextFlowLine = textLine.userData as TextFlowLine;
+				if (tfl.absoluteStart >= pos)
+					break;
+				index++;
+			}
+			_linesInView.length = index;
+			_updateStart = Math.min(_updateStart, pos);
+		}
+		
+		/** @private */
+		tlf_internal function get numFloats():int
+		{
+			return _composedFloats ? _composedFloats.length : 0;
+		}
+		
+		/** @private */
+		tlf_internal function getFloatAt(index:int):FloatCompositionData
+		{
+			return _composedFloats[index];
+		}
+		
+		/** @private */
+		tlf_internal function getFloatAtPosition(absolutePosition:int):FloatCompositionData
+		{
+			if (!_composedFloats)
+				return null;
+			
+			var i:int = findFloatIndexAtOrAfter(absolutePosition);
+			return (i < _composedFloats.length) ?  _composedFloats[i] : null;
+			
+		}
+		
+		/** Add new float info (called by composition when a float is composed into the container
+		 * @private
+		 */
+		tlf_internal function addFloatAt(absolutePosition:int, float:DisplayObject, floatType:String, x:Number, y:Number, alpha:Number, matrix:Matrix, depth:Number, knockOutWidth:Number, columnIndex:int, parent:DisplayObjectContainer):void
+		{
+		//	trace("addFloatAt", absolutePosition,  "for container", flowComposer.getControllerIndex(this));
+			if (!_composedFloats)
+				_composedFloats = [];
+			var floatInfo:FloatCompositionData = new FloatCompositionData(absolutePosition, float, floatType, x, y, alpha, matrix, depth, knockOutWidth, columnIndex, parent);
+			if (_composedFloats.length > 0 && _composedFloats[_composedFloats.length - 1] < absolutePosition)
+				_composedFloats.push(floatInfo);
+			else
+			{
+				var index:int = findFloatIndexAtOrAfter(absolutePosition);
+				_composedFloats.splice(index, 0, floatInfo);
+			} 
+			CONFIG::debug { verifyComposedFloats(); }
+		}
+		
+		/** Remove float info for all floats after the given text position
+		 * @private
+		 */
+		tlf_internal function clearFloatsAt(absolutePosition:int):void
+		{
+		//	trace("clearFloatsAt", absolutePosition,  "for container", flowComposer.getControllerIndex(this));
+			if (_composedFloats)
+				if (absolutePosition == this.absoluteStart)
+					_composedFloats.length = 0;
+				else
+					_composedFloats.length = findFloatIndexAtOrAfter(absolutePosition);
+		}
+		
+		/** @private */
+		CONFIG::debug private function verifyComposedFloats():void
+		{
+			var previousPosition:int = -1;
+			for ( var i:int = 0; i < _composedFloats.length; ++i)
+			{
+				var floatInfo:FloatCompositionData = _composedFloats[i];
+				// Don't allow duplicate entries
+				for ( var j:int = i + 1; j < _composedFloats.length && _composedFloats[j].absolutePosition != floatInfo.absolutePosition; ++j) {/* do nothing */}
+				assert(j == _composedFloats.length, "Found duplicate entry in ContainerController _composedFloats list");
+				// Entries should be ordered
+				assert(floatInfo.absolutePosition > previousPosition, "Found out of order float in ContainerController _composedFloats list");
+				previousPosition = floatInfo.absolutePosition;
+				assert (floatInfo.floatType != Float.START && floatInfo.floatType != Float.END, "Unexpected float type in composed floats array");
+			}
+		}
+		
+
+		/** 
+		 * @private
+		 * Returns the index in the array of a knockOut at the specified location, or the first knockOut index past that location.
+		 */	
+		tlf_internal function findFloatIndexAfter(absolutePosition:int):int
+		{	
+			for (var i:int = 0; i < _composedFloats.length && _composedFloats[i].absolutePosition <= absolutePosition; ++i)
+			{
+				// do nothing
+			}
+			return i;
+		} 
+		
+		/** 
+		 * @private
+		 * Returns the index in the array of a knockOut at the specified location, or the first knockOut index past that location.
+		 */	
+		tlf_internal function findFloatIndexAtOrAfter(absolutePosition:int):int
+		{	
+			for (var i:int = 0; i < _composedFloats.length && _composedFloats[i].absolutePosition < absolutePosition; ++i)
+			{
+				// do nothing
+			}
+			return i;
+		} 
 		/** @private */
 		tlf_internal function getInteractionHandler():IInteractionEventHandler
 		{ return this; }
@@ -3388,3 +4484,4 @@ class PsuedoMouseEvent extends MouseEvent
 	public override function get target():Object
 	{ return relatedObject; }
 }
+

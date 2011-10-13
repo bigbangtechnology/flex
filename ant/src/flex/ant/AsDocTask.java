@@ -35,7 +35,38 @@ import java.util.Iterator;
 import java.io.File;
 
 /**
- * 
+ * Implements the &lt;asdoc&gt; Ant task.  For example:
+ * <p>
+ * <pre>
+ *      &lt;asdoc output="${FLEX_HOME}/tempDoc" lenient="true" failonerror="true" keep-xml="true" skip-xsl="true" &gt;
+ *         &lt;compiler.source-path path-element="${basedir}/src"/&gt;
+ *         &lt;doc-classes class="SparkSkinsClasses"/&gt;
+ *         &lt;external-library-path dir="${FLEX_HOME}/frameworks/libs/player/${local.playerglobal.version}"&gt;
+ *             &lt;include name="playerglobal.swc" /&gt;
+ *         &lt;/external-library-path&gt;
+ *         &lt;external-library-path dir="${FLEX_HOME}/frameworks/libs"&gt;
+ *             &lt;include name="framework.swc" /&gt;
+ *             &lt;include name="spark.swc" /&gt;
+ *         &lt;/external-library-path&gt;
+ *         &lt;jvmarg line="${asdoc.jvm.args}"/&gt;
+ *     &lt;/asdoc&gt;
+ * </pre>
+ * <p>
+ * All the simple asdoc configuration parameters are supported as tag
+ * attributes.  Complex configuration options, like
+ * -compiler.namespaces.namespace, are implemented as child tags.  For
+ * example:
+ * <p>
+ * </code>
+ *     &lt;namespace uri="http://www.adobe.com/2006/mxml" manifest="${basedir}/manifest.xml"/&gt;
+ * </code>
+ * <p>
+ * One of the more common child tags is &lt;doc-classes&gt;.  For example:
+ * <p>
+ * <code>
+ *     &lt;doc-classes class="SparkSkinsClasses"/&gt;
+ * </code>
+ *
  * @author gauravj
  */
 public final class AsDocTask extends FlexTask implements DynamicConfigurator
@@ -100,6 +131,7 @@ public final class AsDocTask extends FlexTask implements DynamicConfigurator
                 new ConfigBoolean(new OptionSpec("compiler", "incremental")),
                 new ConfigBoolean(new OptionSpec("compiler", "optimize")),
                 new ConfigBoolean(new OptionSpec("compiler", "report-invalid-styles-as-warnings")),
+                new ConfigBoolean(new OptionSpec("compiler", "report-missing-required-skin-parts-as-warnings")),
                 new ConfigBoolean(new OptionSpec("compiler", "show-actionscript-warnings")),
                 new ConfigBoolean(new OptionSpec("compiler", "show-binding-warnings")),
                 new ConfigBoolean(new OptionSpec("compiler", "show-deprecation-warnings")),
@@ -186,7 +218,9 @@ public final class AsDocTask extends FlexTask implements DynamicConfigurator
                 new ConfigString(new OptionSpec("templates-path")),
                 new ConfigString(new OptionSpec("package-description-file")),
                 // Int Variables
-                new ConfigInt(new OptionSpec("left-frameset-width"))});
+                new ConfigInt(new OptionSpec("left-frameset-width")),
+                new ConfigInt(new OptionSpec("swf-version"))
+        });
 
         nestedAttribs = new ArrayList();
         nestedFileSets = new ArrayList();
@@ -235,7 +269,7 @@ public final class AsDocTask extends FlexTask implements DynamicConfigurator
     {
         if (fonts == null)
         {
-            return fonts = new Fonts();
+            return fonts = new Fonts(this);
         }
         else
         {
@@ -290,7 +324,7 @@ public final class AsDocTask extends FlexTask implements DynamicConfigurator
         }
         else if (lcSpec.matches(name))
         {
-            return createElem("filename", lcSpec);
+        	return createElemAllowAppend(new String[] {"filename"} , lcSpec);
         }
         else if (spSpec.matches(name))
         {

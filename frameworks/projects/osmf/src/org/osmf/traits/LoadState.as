@@ -22,50 +22,65 @@
 package org.osmf.traits
 {
 	/**
-	 * The state of an ILoadable.
+	 * LoadState is the enumeration of possible states that a LoadTrait
+	 * can be in.
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */
 	public final class LoadState
 	{
 		/**
-		 * The loadable has been constructed, but either has not yet started
+		 * The LoadTrait has been constructed, but either has not yet started
 		 * loading or has been unloaded.
-		 **/
-		public static const UNINITIALIZED:String	= "uninitialized";
-		
-		/**
-		 * The loadable has begun loading.
-		 **/
-		public static const LOADING:String			= "loading";
-		
-		/**
-		 * The loadable has begun unloading. Dispatched before any in memory
-		 * media representations are released.
-		 **/
-		public static const UNLOADING:String		= "unloading";
-		
-		/**
-		 * The loadable is ready for playback.
-		 **/
-		public static const READY:String			= "ready";
-
-		/**
-		 * The loadable has failed to load.
-		 **/
-		public static const LOAD_ERROR:String		= "loadError";
-		
-		/**
-		 * All known load states.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
-		public static const ALL_STATES:Vector.<String> = new Vector.<String>(5);
-			ALL_STATES[0] = UNINITIALIZED;
-			ALL_STATES[1] = LOADING;
-			ALL_STATES[2] = UNLOADING;
-			ALL_STATES[3] = READY;
-			ALL_STATES[4] = LOAD_ERROR;
+		public static const UNINITIALIZED:String	= "uninitialized";
+		
+		/**
+		 * The LoadTrait has begun loading.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static const LOADING:String			= "loading";
+		
+		/**
+		 * The LoadTrait has begun unloading.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static const UNLOADING:String		= "unloading";
+		
+		/**
+		 * The LoadTrait is ready for playback.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static const READY:String			= "ready";
+
+		/**
+		 * The LoadTrait has failed to load.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static const LOAD_ERROR:String		= "loadError";
 	}
 }

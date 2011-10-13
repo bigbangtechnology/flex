@@ -10,7 +10,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 package mx.core
-{	
+{   
 import flash.accessibility.Accessibility;
 import flash.accessibility.AccessibilityProperties;
 import flash.display.BlendMode;
@@ -41,6 +41,7 @@ import flash.system.Capabilities;
 import flash.text.TextFormatAlign;
 import flash.text.TextLineMetrics;
 import flash.ui.Keyboard;
+import flash.utils.Dictionary;
 import flash.utils.getQualifiedClassName;
 
 import mx.automation.IAutomationObject;
@@ -99,6 +100,7 @@ import mx.utils.GraphicsUtil;
 import mx.utils.MatrixUtil;
 import mx.utils.NameUtil;
 import mx.utils.StringUtil;
+import mx.utils.TransformUtil;
 import mx.validators.IValidatorListener;
 import mx.validators.ValidationResult;
 
@@ -170,6 +172,9 @@ use namespace mx_internal;
 
 /**
  *  Dispatched when an object's state changes from visible to invisible.
+ * 
+ *  <p>This event is only dispatched when there are one or more relevant listeners 
+ *  attached to the dispatching object.</p>
  *
  *  @eventType mx.events.FlexEvent.HIDE
  *  
@@ -308,6 +313,9 @@ use namespace mx_internal;
 
 /**
  *  Dispatched when an object's state changes from invisible to visible.
+ * 
+ *  <p>This event is only dispatched when there are one or more relevant listeners 
+ *  attached to the dispatching object.</p>
  *
  *  @eventType mx.events.FlexEvent.SHOW
  *  
@@ -695,6 +703,133 @@ use namespace mx_internal;
  */
 [Event(name="exitState", type="mx.events.FlexEvent")]
 
+/**
+ *  Dispatched after the component has entered a new state and
+ *  any state transition animation to that state has finished playing.
+ *
+ *  The event is dispatched immediately if there's no transition playing
+ *  between the states.
+ *
+ *  If the component switches to a different state while the transition is
+ *  underway, this event will be dispatched after the component completes the
+ *  transition to that new state.
+ * 
+ *  <p>This event is only dispatched when there are one or more 
+ *  relevant listeners attached to the dispatching object.</p>
+ *
+ *  @eventType mx.events.FlexEvent.STATE_CHANGE_COMPLETE
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Event(name="stateChangeComplete", type="mx.events.FlexEvent")]
+
+/**
+ *  Dispatched when a component interrupts a transition to its current
+ *  state in order to switch to a new state. 
+ * 
+ *  <p>This event is only dispatched when there are one or more 
+ *  relevant listeners attached to the dispatching object.</p>
+ *
+ *  @eventType mx.events.FlexEvent.STATE_CHANGE_INTERRUPTED
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Event(name="stateChangeInterrupted", type="mx.events.FlexEvent")]
+
+
+//--------------------------------------
+//  TouchInteraction events
+//--------------------------------------
+
+/**
+ *  A cancellable event, dispatched by a component in an attempt to 
+ *  respond to a touch interaction user gesture.
+ * 
+ *  <p>The event is a bubbling event dispatched on the 
+ *  DisplayObject that the touch interaction
+ *  started (where the mouseDown/touchBegin occurred).</p>
+ * 
+ *  <p>Components responding to touch interactions should listen for
+ *  touch interaction events to coordinate with other components around 
+ *  what type of touch interaction the user intended to make and which component 
+ *  is responding to that touch interaction.</p>
+ * 
+ *  <p>A Scroller component will dispatch a touchInteractionStarting event 
+ *  to alert other components that may be responding to the same user's 
+ *  touch interaction that it would like to take control of this touch interaction.
+ *  This is an opportunity for other components to cancel the Scroller's 
+ *  action and to maintain control over this touch interaction.</p>
+ *
+ *  @eventType mx.events.TouchInteractionEvent.TOUCH_INTERACTION_STARTING
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Event(name="touchInteractionStarting", type="mx.events.TouchInteractionEvent")]
+
+/**
+ *  A non-cancellable event, dispatched by a component when it starts
+ *  responding to a touch interaction user gesture.
+ * 
+ *  <p>The event is a bubbling event dispatched on the 
+ *  DisplayObject that the touch interaction 
+ *  started (where the mouseDown/touchBegin occurred).</p>
+ * 
+ *  <p>Components responding to touch interactions should listen for
+ *  touch interaction events to coordinate with other components around 
+ *  what type of touch interaction the user intended to make and which component 
+ *  is responding to that touch interaction.</p>
+ * 
+ *  <p>A Scroller component will dispatch a touchInteractionStart event 
+ *  to alert other components that may be responding to the same user's 
+ *  touch interaction that it is taking control of this touch interaction.
+ *  When they see this event, other components should stop responding 
+ *  to the touch interaction, remove any visual indications that it is 
+ *  responding to the touch interaction, and perform other clean up.</p>
+ *
+ *  @eventType mx.events.TouchInteractionEvent.TOUCH_INTERACTION_START
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Event(name="touchInteractionStart", type="mx.events.TouchInteractionEvent")]
+
+/**
+ *  A non-cancellable event, dispatched by a component when it is done
+ *  responding to a touch interaction user gesture.
+ * 
+ *  <p>The event is a bubbling event dispatched on the 
+ *  DisplayObject that the touch interaction 
+ *  started (where the mouseDown/touchBegin occurred).</p>
+ * 
+ *  <p>Components responding to touch interactions should listen for
+ *  touch interaction events to coordinate with other components around 
+ *  what type of touch interaction the user intended to make and which component 
+ *  is responding to that touch interaction.</p>
+ * 
+ *  <p>A Scroller component will dispatch a touchInteractionEnd event 
+ *  to alert other components that it is done responding to the user's
+ *  touch interaction.</p>
+ *
+ *  @eventType mx.events.TouchInteractionEvent.TOUCH_INTERACTION_END
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Event(name="touchInteractionEnd", type="mx.events.TouchInteractionEvent")]
+
 //--------------------------------------
 //  Tooltip events
 //--------------------------------------
@@ -859,6 +994,24 @@ include "../styles/metadata/AnchorStyles.as";
 [Style(name="errorColor", type="uint", format="Color", inherit="yes")]
 
 /**
+ *  The primary interaction mode for this component.  The acceptable values are: 
+ *  <code>mouse</code> and <code>touch</code>.
+ *
+ *  The default value for the Halo theme is <code>mouse</code>.
+ *  The default value for the Spark theme is <code>mouse</code>.
+ *  The default value for the Mobile theme is <code>touch</code>.
+ * 
+ *  @see mx.core.InteractionMode#MOUSE
+ *  @see mx.core.InteractionMode#TOUCH
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="interactionMode", type="String", enumeration="mouse,touch", inherit="yes")]
+
+/**
  *  Blend mode used by the focus rectangle.
  *  For more information, see the <code>blendMode</code> property
  *  of the flash.display.DisplayObject class.
@@ -936,6 +1089,31 @@ include "../styles/metadata/AnchorStyles.as";
  *  @productversion Flex 4.1
  */
 [Style(name="layoutDirection", type="String", enumeration="ltr,rtl", inherit="yes")]
+
+/**
+ *  Show the error border or skin when this component is invalid
+ * 
+ *  @default true
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="showErrorSkin", type="Boolean", inherit="yes")]
+
+/**
+ *  Show the error tip when this component is invalid and the user 
+ *  rolls over it 
+ * 
+ *  @default true
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="showErrorTip", type="Boolean", inherit="yes")]
 
 /**
  *  Theme color of a component. This property controls the appearance of highlights,
@@ -1218,7 +1396,6 @@ include "../styles/metadata/AnchorStyles.as";
  *    mouseWheelOutside="<i>No default</i>"
  *    move="<i>No default</i>"
  *    preinitialize="<i>No default</i>"
- *    record="<i>No default</i>"
  *    remove="<i>No default</i>"
  *    resize="<i>No default</i>"
  *    show="<i>No default</i>"
@@ -1339,6 +1516,13 @@ public class UIComponent extends FlexSprite
     public static const DEFAULT_MAX_HEIGHT:Number = 10000;
     // When changing this constant, make sure you change
     // the constant with the same name in LayoutElementUIComponentUtils
+
+    /**
+     *  @private
+     *  Static constant representing no cached layout direction style value. 
+     */
+    private static const LAYOUT_DIRECTION_CACHE_UNSET:String = "layoutDirectionCacheUnset";
+    
 
     //--------------------------------------------------------------------------
     //
@@ -1510,6 +1694,7 @@ public class UIComponent extends FlexSprite
 
         addEventListener(Event.ADDED, addedHandler);
         addEventListener(Event.REMOVED, removedHandler);
+        addEventListener(Event.REMOVED_FROM_STAGE, removedFromStageHandler);
 
         // Register for focus and keyboard events.
         if (this is IFocusManagerComponent)
@@ -1540,8 +1725,8 @@ public class UIComponent extends FlexSprite
 
     /**
      *  @private
-     *  hold the setStyles() calls that have been deferred untils a moduleFactory
-     *  is set.
+     *  Temporarily stores the values of styles specified with setStyle() until 
+     *  moduleFactory is set.
      */
     private var deferredSetStyles:Object;
     
@@ -1581,6 +1766,12 @@ public class UIComponent extends FlexSprite
      *  @private
      */
     private var parentChangedFlag:Boolean = false;
+    
+    /**
+     *  @private
+     *  Cached layout direction style
+     */
+    private var layoutDirectionCachedValue:String = LAYOUT_DIRECTION_CACHE_UNSET;
     
     //--------------------------------------------------------------------------
     //
@@ -2659,14 +2850,14 @@ public class UIComponent extends FlexSprite
             invalidateParentSizeAndDisplayList();
 
             _width = value;
-			
-			// The width is needed for the _layoutFeatures' mirror transform.
-			if (_layoutFeatures)
-			{
-				_layoutFeatures.layoutWidth = _width;
-				invalidateTransform();
-			}
-			
+            
+            // The width is needed for the _layoutFeatures' mirror transform.
+            if (_layoutFeatures)
+            {
+                _layoutFeatures.layoutWidth = _width;
+                invalidateTransform();
+            }
+            
             if (hasEventListener("widthChanged"))
                 dispatchEvent(new Event("widthChanged"));
         }
@@ -3000,7 +3191,7 @@ public class UIComponent extends FlexSprite
     {
         super.scaleY = value;
     }
-	
+    
     //----------------------------------
     //  visible
     //----------------------------------
@@ -3083,9 +3274,10 @@ public class UIComponent extends FlexSprite
 
         if (!noEvent)
         {
-            dispatchEvent(new FlexEvent(value ?
-                                        FlexEvent.SHOW :
-                                        FlexEvent.HIDE));
+            var eventType:String = value ? FlexEvent.SHOW :FlexEvent.HIDE;
+            
+            if (hasEventListener(eventType))
+                dispatchEvent(new FlexEvent(eventType));
         }
     }
 
@@ -3977,31 +4169,41 @@ public class UIComponent extends FlexSprite
         // If my parent hasn't been attached to the display list, then its nestLevel
         // will be zero.  If it tries to set my nestLevel to 1, ignore it.  We'll
         // update nest levels again after the parent is added to the display list.
-        //
+        if (value == 1)
+            return;
+        
         // Also punt if the new value for nestLevel is the same as my current value.
+        // TODO: (aharui) add early exit if nestLevel isn't changing
         if (value > 1 && _nestLevel != value)
         {
             _nestLevel = value;
 
             updateCallbacks();
 
-            var childList:IChildList = (this is IRawChildrenContainer) ?
-                IRawChildrenContainer(this).rawChildren : IChildList(this);
-            var n:int = childList.numChildren;
-            for (var i:int = 0; i < n; i++)
+            value ++;
+        }
+        else if (value == 0)
+            _nestLevel = value = 0;
+        else
+            value ++;
+            
+        var childList:IChildList = (this is IRawChildrenContainer) ?
+            IRawChildrenContainer(this).rawChildren : IChildList(this);
+        
+        var n:int = childList.numChildren;
+        for (var i:int = 0; i < n; i++)
+        {
+            var ui:ILayoutManagerClient  = childList.getChildAt(i) as ILayoutManagerClient;
+            if (ui)
             {
-                var ui:ILayoutManagerClient  = childList.getChildAt(i) as ILayoutManagerClient;
-                if (ui)
-                {
-                    ui.nestLevel = value + 1;
-                }
-                else
-                {
-                    var textField:IUITextField = childList.getChildAt(i) as IUITextField;
+                ui.nestLevel = value;
+            }
+            else
+            {
+                var textField:IUITextField = childList.getChildAt(i) as IUITextField;
 
-                    if (textField)
-                        textField.nestLevel = value + 1;
-                }
+                if (textField)
+                    textField.nestLevel = value;
             }
         }
     }
@@ -4393,6 +4595,21 @@ public class UIComponent extends FlexSprite
             }
         }
 
+        if (advanceStyleClientChildren != null)
+        {
+            for (var styleClient:Object in advanceStyleClientChildren)
+            {
+                var iAdvanceStyleClientChild:IFlexModule = styleClient
+                    as IFlexModule;
+                
+                if (iAdvanceStyleClientChild && 
+                    (iAdvanceStyleClientChild.moduleFactory == null 
+                        || iAdvanceStyleClientChild.moduleFactory == _moduleFactory))
+                {
+                    iAdvanceStyleClientChild.moduleFactory = factory;
+                }
+            }
+        }
         _moduleFactory = factory;
 
         setDeferredStyles();
@@ -4481,7 +4698,7 @@ public class UIComponent extends FlexSprite
         _nonInheritingStyles = value;
     }
 
-     //----------------------------------
+    //----------------------------------
     //  styleDeclaration
     //----------------------------------
 
@@ -4767,7 +4984,7 @@ public class UIComponent extends FlexSprite
      *
      *  @see spark.components.Scroller
      *  
-     *  @langversion 4.0
+     *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
@@ -4809,6 +5026,8 @@ public class UIComponent extends FlexSprite
      *  For example, you can set this property to <code>false</code>
      *  on a Button control so that you can use the Tab key to move focus
      *  to the control, but not have the control get focus when you click on it.
+     *
+     * <p>The default value is <code>true</code> for most subclasses, except the Spark TabBar. In that case, the default is <code>false</code>.</p>
      *
      *  @default true
      *  
@@ -4858,7 +5077,7 @@ public class UIComponent extends FlexSprite
      *
      *  @default true
      *  
-     *  @langversion 4.0
+     *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
@@ -5885,13 +6104,17 @@ public class UIComponent extends FlexSprite
      *  The flag is cleared in validateDisplayList().
      */
     mx_internal var oldLayoutDirection:String = LayoutDirection.LTR;
-        
+
     /**
      *  @inheritDoc
      */
     public function get layoutDirection():String
     {
-        return getStyle("layoutDirection");        
+        if (layoutDirectionCachedValue == LAYOUT_DIRECTION_CACHE_UNSET)
+        {
+            layoutDirectionCachedValue = getStyle("layoutDirection");
+        }
+        return layoutDirectionCachedValue;
     }
     
     /**
@@ -6183,7 +6406,13 @@ public class UIComponent extends FlexSprite
      */
     public function set currentState(value:String):void
     {
-        setCurrentState(value, true);
+        // We have a deferred state change currently queued up, let's override
+        // the originally requested state with the newly requested. Otherwise
+        // we'll synchronously assign our new state.
+        if (_currentStateDeferred != null) 
+            _currentStateDeferred = value;
+        else
+            setCurrentState(value, true);
     }
 
     /**
@@ -6297,7 +6526,7 @@ public class UIComponent extends FlexSprite
     //----------------------------------
     //  baselinePosition
     //----------------------------------
-
+    
     /**
      *  @inheritDoc
      *  
@@ -6744,6 +6973,12 @@ public class UIComponent extends FlexSprite
      *  Storage for errorString property.
      */
     mx_internal var _errorString:String = "";
+    
+    /**
+     *  @private
+     *  Storage for previous errorString property.
+     */
+    private var oldErrorString:String = "";
 
     /**
      *  @private
@@ -6798,10 +7033,11 @@ public class UIComponent extends FlexSprite
      */
     public function set errorString(value:String):void
     {
-        var oldValue:String = _errorString;
+        if (value == _errorString)
+            return;
+        
+        oldErrorString = _errorString;
         _errorString = value;
-
-        ToolTipManager.registerErrorString(this, oldValue, value);
 
         errorStringChanged = true;
         invalidateProperties();
@@ -6816,38 +7052,44 @@ public class UIComponent extends FlexSprite
      */
     private function setBorderColorForErrorString():void
     {
-        if (!_errorString || _errorString.length == 0)
+        var showErrorSkin:Boolean = getStyle("showErrorSkin");
+        
+        if (showErrorSkin)
         {
-            if (!isNaN(origBorderColor))
+        
+            if (!_errorString || _errorString.length == 0)
             {
-                setStyle("borderColor", origBorderColor);
-                saveBorderColor = true;
+                if (!isNaN(origBorderColor))
+                {
+                    setStyle("borderColor", origBorderColor);
+                    saveBorderColor = true;
+                }
             }
-        }
-        else
-        {
-            // Remember the original border color
-            if (saveBorderColor)
+            else
             {
-                saveBorderColor = false;
-                origBorderColor = getStyle("borderColor");
+                // Remember the original border color
+                if (saveBorderColor)
+                {
+                    saveBorderColor = false;
+                    origBorderColor = getStyle("borderColor");
+                }
+    
+                setStyle("borderColor", getStyle("errorColor"));
             }
-
-            setStyle("borderColor", getStyle("errorColor"));
+    
+            styleChanged("themeColor");
+    
+            var focusManager:IFocusManager = focusManager;
+            var focusObj:DisplayObject = focusManager ?
+                                         DisplayObject(focusManager.getFocus()) :
+                                         null;
+            if (focusManager && focusManager.showFocusIndicator &&
+                focusObj == this)
+            {
+                drawFocus(true);
+            }
+    
         }
-
-        styleChanged("themeColor");
-
-        var focusManager:IFocusManager = focusManager;
-        var focusObj:DisplayObject = focusManager ?
-                                     DisplayObject(focusManager.getFocus()) :
-                                     null;
-        if (focusManager && focusManager.showFocusIndicator &&
-            focusObj == this)
-        {
-            drawFocus(true);
-        }
-
     }
 
     //----------------------------------
@@ -7134,7 +7376,7 @@ public class UIComponent extends FlexSprite
         if (!p)
         {
             _parent = null;
-            _nestLevel = 0;
+            nestLevel = 0;
         }
         else if (p is IStyleClient)
         {
@@ -7152,7 +7394,7 @@ public class UIComponent extends FlexSprite
         // trace("               " + p);
         parentChangedFlag = true;
     }
-	
+    
     /**
      *  @private
      */
@@ -7185,7 +7427,7 @@ public class UIComponent extends FlexSprite
 
         // Set the font context in non-UIComponent children.
         // UIComponent children use moduleFactory.
-        if (child is IFontContextComponent && !child is UIComponent &&
+        if (child is IFontContextComponent && !(child is UIComponent) &&
             IFontContextComponent(child).fontContext == null)
             IFontContextComponent(child).fontContext = moduleFactory;
 
@@ -7235,14 +7477,40 @@ public class UIComponent extends FlexSprite
      */
     mx_internal function childAdded(child:DisplayObject):void
     {
-        if (child is UIComponent)
+        if (!UIComponentGlobals.designMode)
         {
-            if (!UIComponent(child).initialized)
-                UIComponent(child).initialize();
+            if (child is UIComponent)
+            {
+                if (!UIComponent(child).initialized)
+                    UIComponent(child).initialize();
+            }
+            else if (child is IUIComponent)
+            {
+                IUIComponent(child).initialize();
+            }
         }
-        else if (child is IUIComponent)
+        else
         {
-            IUIComponent(child).initialize();
+            try
+            {
+                if (child is UIComponent)
+                {
+                    if (!UIComponent(child).initialized)
+                        UIComponent(child).initialize();
+                }
+                else if (child is IUIComponent)
+                {
+                    IUIComponent(child).initialize();
+                }               
+            }
+            catch (e:Error)
+            {
+                // Dispatch a initializeError dynamic event for tooling. 
+                var initializeErrorEvent:DynamicEvent = new DynamicEvent("initializeError");
+                initializeErrorEvent.error = e;
+                initializeErrorEvent.source = child; 
+                systemManager.dispatchEvent(initializeErrorEvent);
+            }
         }
     }
 
@@ -7335,7 +7603,7 @@ public class UIComponent extends FlexSprite
     {
         if (initialized)
             return;
-
+        
         // The "preinitialize" event gets dispatched after everything about this
         // DisplayObject has been initialized, and it has been attached to
         // its parent, but before any of its children have been created.
@@ -7346,7 +7614,20 @@ public class UIComponent extends FlexSprite
         dispatchEvent(new FlexEvent(FlexEvent.PREINITIALIZE));
 
         // Create child objects.
+        
+        CONFIG::performanceInstrumentation
+        {
+            var perfUtil:mx.utils.PerfUtil = mx.utils.PerfUtil.getInstance();
+            var token:int = perfUtil.markStart();
+        }
+
         createChildren();
+
+        CONFIG::performanceInstrumentation
+        {
+            perfUtil.markEnd(".createChildren()", token, 2 /*tolerance*/, this);
+        }
+
         childrenCreated();
 
         // Create and initialize the accessibility implementation.
@@ -7518,7 +7799,7 @@ public class UIComponent extends FlexSprite
         {
             invalidatePropertiesFlag = true;
 
-            if (parent && UIComponentGlobals.layoutManager)
+            if (nestLevel && UIComponentGlobals.layoutManager)
                 UIComponentGlobals.layoutManager.invalidateProperties(this);
         }
     }
@@ -7551,7 +7832,7 @@ public class UIComponent extends FlexSprite
         {
             invalidateSizeFlag = true;
 
-            if (parent && UIComponentGlobals.layoutManager)
+            if (nestLevel && UIComponentGlobals.layoutManager)
                 UIComponentGlobals.layoutManager.invalidateSize(this);
         }
     }
@@ -7606,7 +7887,7 @@ public class UIComponent extends FlexSprite
         {
             invalidateDisplayListFlag = true;
 
-            if (isOnDisplayList() && UIComponentGlobals.layoutManager)
+            if (nestLevel && UIComponentGlobals.layoutManager)
                 UIComponentGlobals.layoutManager.invalidateDisplayList(this);
         }
     }
@@ -7616,7 +7897,7 @@ public class UIComponent extends FlexSprite
         if (_layoutFeatures && _layoutFeatures.updatePending == false)
         {
             _layoutFeatures.updatePending = true; 
-            if (isOnDisplayList() && UIComponentGlobals.layoutManager &&
+            if (nestLevel && UIComponentGlobals.layoutManager &&
                 invalidateDisplayListFlag == false)
             {
                 UIComponentGlobals.layoutManager.invalidateDisplayList(this);
@@ -7626,6 +7907,11 @@ public class UIComponent extends FlexSprite
     
     /**
      * @inheritDoc
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 9
+     *  @playerversion AIR 1.1
+     *  @productversion Flex 3
      */
     public function invalidateLayoutDirection():void
     {       
@@ -7690,22 +7976,6 @@ public class UIComponent extends FlexSprite
         invalidateTransform();
     }
 
-    private function isOnDisplayList():Boolean
-    {
-        var p:DisplayObjectContainer;
-
-        try
-        {
-            p = _parent ? _parent : super.parent;
-        }
-        catch (e:SecurityError)
-        {
-            // trace("UIComponent.isOnDisplayList(): " + e);
-            return true;        // we are on the display list but the parent is in another sandbox
-        }
-
-        return p ? true : false;
-    }
 
     /**
      *  Flex calls the <code>stylesInitialized()</code> method when
@@ -7756,18 +8026,23 @@ public class UIComponent extends FlexSprite
      */
     public function styleChanged(styleProp:String):void
     {
+        var allStyles:Boolean = !styleProp || styleProp == "styleName";
+        
         StyleProtoChain.styleChanged(this, styleProp);
         
-        if (styleProp && (styleProp != "styleName"))
-        { 
+        if (!allStyles)
+        {
             if (hasEventListener(styleProp + "Changed"))
                 dispatchEvent(new Event(styleProp + "Changed"));
         }
-        else 
+        else
         {
             if (hasEventListener("allStylesChanged"))
                 dispatchEvent(new Event("allStylesChanged"));
         }
+        
+        if (allStyles || styleProp == "layoutDirection")
+            layoutDirectionCachedValue = LAYOUT_DIRECTION_CACHE_UNSET;
     }
 
     /**
@@ -7829,6 +8104,7 @@ public class UIComponent extends FlexSprite
         // are properly laid out, so that we can use
         // their locations to compute a baselinePosition.
         validateNow();
+        
 
         return true;
     }
@@ -8039,9 +8315,13 @@ public class UIComponent extends FlexSprite
         
         if (errorStringChanged)
         {
-            errorStringChanged = false;
+            errorStringChanged = false;          
+            if (getStyle("showErrorTip"))
+                ToolTipManager.registerErrorString(this, oldErrorString, errorString);
+            
             setBorderColorForErrorString();
         }
+
         if (blendModeChanged)
         {
             blendModeChanged = false; 
@@ -8801,7 +9081,7 @@ public class UIComponent extends FlexSprite
      *  can be any of the following: left, right, top, bottom,
      *  verticalCenter, horizontalCenter, baseline
      *
-     *  @value The value of the constraint can be specified in either
+     *  @param value The value of the constraint can be specified in either
      *  of two forms. It can be specified as a numeric string, for
      *  example, "10" or it can be specified as identifier:numeric
      *  string. For identifier:numeric string, identifier is the
@@ -8823,6 +9103,16 @@ public class UIComponent extends FlexSprite
     [Inspectable(category="General")]
 
     /**
+     *  <p>For components, this layout constraint property is a
+     *  facade on top of the similarly-named style. To set
+     *  a state-specific value of the property in MXML to its default 
+     *  value of <code>undefined</code>,
+     *  use the &#64;Clear() directive. For example, in MXML code,
+     *  <code>left.s2="&#64;Clear()"</code> unsets the <code>left</code>
+     *  constraint in state s2. Or in ActionScript code, 
+     *  <code>button.left = undefined</code> unsets the <code>left</code>
+     *  constraint on <code>button</code>.</p>
+     * 
      *  @inheritDoc
      *  
      *  @langversion 3.0
@@ -8842,6 +9132,16 @@ public class UIComponent extends FlexSprite
     [Inspectable(category="General")]
 
     /**
+     *  <p>For components, this layout constraint property is a
+     *  facade on top of the similarly-named style. To set
+     *  the property to its default value of <code>undefined</code>,
+     *  use the &#64;Clear() directive in MXML or the <code>undefined</code>
+     *  value in ActionScript code. For example, in MXML code,
+     *  <code>right.s2="&#64;Clear()"</code> unsets the <code>right</code>
+     *  constraint in state s2. Or in ActionScript code, 
+     *  <code>button.right = undefined</code> unsets the <code>right</code>
+     *  constraint on <code>button</code>.</p>
+     *  
      *  @inheritDoc
      *  
      *  @langversion 3.0
@@ -8861,6 +9161,16 @@ public class UIComponent extends FlexSprite
     [Inspectable(category="General")]
 
     /**
+     *  <p>For components, this layout constraint property is a
+     *  facade on top of the similarly-named style. To set
+     *  the property to its default value of <code>undefined</code>,
+     *  use the &#64;Clear() directive in MXML or the <code>undefined</code>
+     *  value in ActionScript code. For example, in MXML code,
+     *  <code>top.s2="&#64;Clear()"</code> unsets the <code>top</code>
+     *  constraint in state s2. Or in ActionScript code, 
+     *  <code>button.top = undefined</code> unsets the <code>top</code>
+     *  constraint on <code>button</code>.</p>
+     *  
      *  @inheritDoc
      *  
      *  @langversion 3.0
@@ -8880,6 +9190,16 @@ public class UIComponent extends FlexSprite
     [Inspectable(category="General")]
 
     /**
+     *  <p>For components, this layout constraint property is a
+     *  facade on top of the similarly-named style. To set
+     *  the property to its default value of <code>undefined</code>,
+     *  use the &#64;Clear() directive in MXML or the <code>undefined</code>
+     *  value in ActionScript code. For example, in MXML code,
+     *  <code>bottom.s2="&#64;Clear()"</code> unsets the <code>bottom</code>
+     *  constraint in state s2. Or in ActionScript code, 
+     *  <code>button.bottom = undefined</code> unsets the <code>bottom</code>
+     *  constraint on <code>button</code>.</p>
+     *  
      *  @inheritDoc
      *  
      *  @langversion 3.0
@@ -8899,6 +9219,17 @@ public class UIComponent extends FlexSprite
     [Inspectable(category="General")]
 
     /**
+     *  <p>For components, this layout constraint property is a
+     *  facade on top of the similarly-named style. To set
+     *  the property to its default value of <code>undefined</code>,
+     *  use the &#64;Clear() directive in MXML or the <code>undefined</code>
+     *  value in ActionScript code. For example, in MXML code,
+     *  <code>horizontalCenter.s2="&#64;Clear()"</code> unsets the 
+     *  <code>horizontalCenter</code>
+     *  constraint in state s2. Or in ActionScript code, 
+     *  <code>button.horizontalCenter = undefined</code> unsets the 
+     *  <code>horizontalCenter</code> constraint on <code>button</code>.</p>
+     *  
      *  @inheritDoc
      *  
      *  @langversion 3.0
@@ -8918,6 +9249,16 @@ public class UIComponent extends FlexSprite
     [Inspectable(category="General")]
 
     /**
+     *  <p>For components, this layout constraint property is a
+     *  facade on top of the similarly-named style. To set
+     *  the property to its default value of <code>undefined</code>,
+     *  use the &#64;Clear() directive in MXML or the <code>undefined</code>
+     *  value in ActionScript code. For example, in MXML code,
+     *  <code>verticalCenter.s2="&#64;Clear()"</code> unsets the <code>verticalCenter</code>
+     *  constraint in state s2. Or in ActionScript code, 
+     *  <code>button.verticalCenter = undefined</code> unsets the <code>verticalCenter</code>
+     *  constraint on <code>button</code>.</p>
+     *  
      *  @inheritDoc
      *  
      *  @langversion 3.0
@@ -8937,6 +9278,16 @@ public class UIComponent extends FlexSprite
     [Inspectable(category="General")]
 
     /**
+     *  <p>For components, this layout constraint property is a
+     *  facade on top of the similarly-named style. To set
+     *  the property to its default value of <code>undefined</code>,
+     *  use the &#64;Clear() directive in MXML or the <code>undefined</code>
+     *  value in ActionScript code. For example, in MXML code,
+     *  <code>baseline.s2="&#64;Clear()"</code> unsets the <code>baseline</code>
+     *  constraint in state s2. Or in ActionScript code, 
+     *  <code>button.baseline = undefined</code> unsets the <code>baseline</code>
+     *  constraint on <code>button</code>.</p>
+     *  
      *  @inheritDoc
      *  
      *  @langversion 3.0
@@ -9334,11 +9685,11 @@ public class UIComponent extends FlexSprite
         if (_width != w)
         {
             _width = w;
-			if(_layoutFeatures)
+            if(_layoutFeatures)
             {
-				_layoutFeatures.layoutWidth = w;  // for the mirror transform
-				invalidateTransform();
-			}			
+                _layoutFeatures.layoutWidth = w;  // for the mirror transform
+                invalidateTransform();
+            }           
             if (hasEventListener("widthChanged"))
                 dispatchEvent(new Event("widthChanged"));
             changed = true;
@@ -9716,7 +10067,7 @@ public class UIComponent extends FlexSprite
         if (focusObj)
         {
             var rectCol:Number;
-            if (errorString && errorString != "")
+            if (errorString && errorString != "" && getStyle("showErrorSkin"))
                 rectCol = getStyle("errorColor");
             else if (FlexVersion.compatibilityVersion < FlexVersion.VERSION_4_0)
                 rectCol = getStyle("themeColor");
@@ -9970,6 +10321,11 @@ public class UIComponent extends FlexSprite
 
     /**
      *  @copy mx.core.IStateClient2#hasState() 
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 9
+     *  @playerversion AIR 1.1
+     *  @productversion Flex 3
      */
     public function hasState(stateName:String):Boolean
     {
@@ -9997,6 +10353,10 @@ public class UIComponent extends FlexSprite
         return (this is IStateClient2 && (states.length > 0)) ? states[0].name : null;
     }
 
+    // Used by commitCurrentState() to avoid hard-linking against Effect
+    private static var effectType:Class;
+    private static var effectLoaded:Boolean = false;
+
     /**
      *  @private
      *  Commit a pending current state change.
@@ -10011,23 +10371,63 @@ public class UIComponent extends FlexSprite
         var event:StateChangeEvent;
         var oldState:String = _currentState ? _currentState : "";
         var destination:State = getState(requestedCurrentState);
+        var prevTransitionEffect:Object;
+        var tmpPropertyChanges:Array;
+        
+        // First, make sure we've loaded the Effect class - some of the logic 
+        // below requires it
+        if (nextTransition && !effectLoaded)
+        {
+            effectLoaded = true;
+            if (ApplicationDomain.currentDomain.hasDefinition("mx.effects.Effect"))
+                effectType = Class(ApplicationDomain.currentDomain.
+                    getDefinition("mx.effects.Effect"));
+        }
 
         // Stop any transition that may still be playing
         var prevTransitionFraction:Number;
         if (_currentTransition)
         {
-            if (_currentTransition.autoReverse &&
-                transitionFromState == requestedCurrentState &&
-                transitionToState == _currentState)
+            // Remove the event listener, we don't want to trigger it as it
+            // dispatches FlexEvent.STATE_CHANGE_COMPLETE and we are
+            // interrupting _currentTransition instead.
+            _currentTransition.effect.removeEventListener(EffectEvent.EFFECT_END, transition_effectEndHandler);
+
+            // 'stop' interruptions take precedence over autoReverse behavior
+            if (nextTransition && _currentTransition.interruptionBehavior == "stop")
             {
-                if (_currentTransition.effect.duration == 0)
-                    prevTransitionFraction = 0;
-                else
-                    prevTransitionFraction = 
-                        _currentTransition.effect.playheadTime /
-                        getTotalDuration(_currentTransition.effect);
+                prevTransitionEffect = _currentTransition.effect;
+                prevTransitionEffect.transitionInterruption = true;
+                // This logic stops the effect from applying the end values
+                // so that we can capture the interrupted values correctly
+                // in captureStartValues() below. Save the values in the
+                // tmp variable because stop() clears out propertyChangesArray
+                // from the effect.
+                tmpPropertyChanges = prevTransitionEffect.propertyChangesArray;
+                prevTransitionEffect.applyEndValuesWhenDone = false;
+                prevTransitionEffect.stop();
+                prevTransitionEffect.applyEndValuesWhenDone = true;
             }
-            _currentTransition.effect.end();
+            else
+            {
+                if (_currentTransition.autoReverse &&
+                    transitionFromState == requestedCurrentState &&
+                    transitionToState == _currentState)
+                {
+                    if (_currentTransition.effect.duration == 0)
+                        prevTransitionFraction = 0;
+                    else
+                        prevTransitionFraction = 
+                            _currentTransition.effect.playheadTime /
+                            getTotalDuration(_currentTransition.effect);
+                }
+                _currentTransition.effect.end();
+            }
+
+            // The current transition is being interrupted, dispatch an event
+            if (hasEventListener(FlexEvent.STATE_CHANGE_INTERRUPTED))
+                dispatchEvent(new FlexEvent(FlexEvent.STATE_CHANGE_INTERRUPTED));
+            _currentTransition = null;
         }
 
         // Initialize the state we are going to.
@@ -10036,7 +10436,15 @@ public class UIComponent extends FlexSprite
         // Capture transition start values
         if (nextTransition)
             nextTransition.effect.captureStartValues();
-
+        
+        // Now that we've captured the start values, apply the end values of
+        // the effect as normal. This makes sure that objects unaffected by the
+        // next transition have their correct end values from the previous
+        // transition
+        if (tmpPropertyChanges)
+            prevTransitionEffect.applyEndValues(tmpPropertyChanges,
+                prevTransitionEffect.targets);
+        
         // Dispatch currentStateChanging event
         if (hasEventListener(StateChangeEvent.CURRENT_STATE_CHANGING)) 
         {
@@ -10078,18 +10486,33 @@ public class UIComponent extends FlexSprite
         
         if (nextTransition)
         {
+            var reverseTransition:Boolean =  
+                nextTransition && nextTransition.autoReverse &&
+                (nextTransition.toState == oldState ||
+                 nextTransition.fromState == _currentState);
             // Force a validation before playing the transition effect
             UIComponentGlobals.layoutManager.validateNow();
             _currentTransition = nextTransition;
             transitionFromState = oldState;
             transitionToState = _currentState;
+            // Tell the effect whether it is running in interruption mode, in which
+            // case it should grab values from the states instead of from current
+            // property values
+            Object(nextTransition.effect).transitionInterruption = 
+                (prevTransitionEffect != null);
             nextTransition.effect.addEventListener(EffectEvent.EFFECT_END, 
                 transition_effectEndHandler);
-            nextTransition.effect.play();
+            nextTransition.effect.play(null, reverseTransition);
             if (!isNaN(prevTransitionFraction) && 
                 nextTransition.effect.duration != 0)
                 nextTransition.effect.playheadTime = (1 - prevTransitionFraction) * 
                     getTotalDuration(nextTransition.effect);
+        }
+        else
+        {
+            // Dispatch an event that the transition has completed.
+            if (hasEventListener(FlexEvent.STATE_CHANGE_COMPLETE))
+                dispatchEvent(new FlexEvent(FlexEvent.STATE_CHANGE_COMPLETE));
         }
     }
 
@@ -10135,12 +10558,17 @@ public class UIComponent extends FlexSprite
             startDelay;
         return duration;
     }
+
     /**
      *  @private
      */
     private function transition_effectEndHandler(event:EffectEvent):void
     {
         _currentTransition = null;
+
+        // Dispatch an event that the transition has completed.
+        if (hasEventListener(FlexEvent.STATE_CHANGE_COMPLETE))
+            dispatchEvent(new FlexEvent(FlexEvent.STATE_CHANGE_COMPLETE));
     }
 
     /**
@@ -10330,43 +10758,61 @@ public class UIComponent extends FlexSprite
         var result:Transition = null;   // Current candidate
         var priority:int = 0;           // Priority     fromState   toState
                                         //    1             *           *
-                                        //    2           match         *
-                                        //    3             *         match
-                                        //    4           match       match
-
+                                        //    2          reverse        *
+                                        //    3             *        reverse
+                                        //    4          reverse     reverse
+                                        //    5           match         *
+                                        //    6             *         match
+                                        //    7           match       match
+        
         if (!transitions)
             return null;
-
+        
         if (!oldState)
             oldState = "";
-
+        
         if (!newState)
             newState = "";
-
+        
         for (var i:int = 0; i < transitions.length; i++)
         {
             var t:Transition = transitions[i];
-
+            
             if (t.fromState == "*" && t.toState == "*" && priority < 1)
             {
                 result = t;
                 priority = 1;
             }
-            else if (t.fromState == oldState && t.toState == "*" && priority < 2)
+            else if (t.toState == oldState && t.fromState == "*" && t.autoReverse && priority < 2)
             {
                 result = t;
                 priority = 2;
             }
-            else if (t.fromState == "*" && t.toState == newState && priority < 3)
+            else if (t.toState == "*" && t.fromState == newState && t.autoReverse && priority < 3)
             {
                 result = t;
                 priority = 3;
             }
-            else if (t.fromState == oldState && t.toState == newState && priority < 4)
+            else if (t.toState == oldState && t.fromState == newState && t.autoReverse && priority < 4)
             {
                 result = t;
                 priority = 4;
-
+            }
+            else if (t.fromState == oldState && t.toState == "*" && priority < 5)
+            {
+                result = t;
+                priority = 5;
+            }
+            else if (t.fromState == "*" && t.toState == newState && priority < 6)
+            {
+                result = t;
+                priority = 6;
+            }
+            else if (t.fromState == oldState && t.toState == newState && priority < 7)
+            {
+                result = t;
+                priority = 7;
+                
                 // Can't get any higher than this, let's go.
                 break;
             }
@@ -10375,7 +10821,7 @@ public class UIComponent extends FlexSprite
         // because there is no transition effect to run
         if (result && !result.effect)
             result = null;
-
+        
         return result;
     }
 
@@ -10387,7 +10833,12 @@ public class UIComponent extends FlexSprite
 
     /**
      *  The state to be used when matching CSS pseudo-selectors. By default
-     *  this is the currentState.
+     *  this is the <code>currentState</code>.
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */ 
     protected function get currentCSSState():String
     {
@@ -10407,6 +10858,11 @@ public class UIComponent extends FlexSprite
     public function get styleParent():IAdvancedStyleClient
     {
         return parent as IAdvancedStyleClient;
+    }
+    
+    public function set styleParent(parent:IAdvancedStyleClient):void
+    {
+        
     }
 
     /**
@@ -10538,8 +10994,24 @@ public class UIComponent extends FlexSprite
                     StyleProtoChain.initTextField(IUITextField(child));
             }
         }
-    }
 
+        // Call this method on each non-visual StyleClient
+        if (advanceStyleClientChildren != null)
+        {
+            for (var styleClient:Object in advanceStyleClientChildren)
+            {
+                var iAdvanceStyleClientChild:IAdvancedStyleClient = styleClient
+                    as IAdvancedStyleClient;
+                
+                if (iAdvanceStyleClientChild && 
+                    iAdvanceStyleClientChild.inheritingStyles !=
+                    StyleProtoChain.STYLE_UNINITIALIZED)
+                {
+                    iAdvanceStyleClientChild.regenerateStyleCache(recursive);
+                }
+            }
+        }
+    }
     /**
      *  This method is called when a state changes to check whether
      *  state-specific styles apply to this component. If there is a chance
@@ -10668,7 +11140,7 @@ public class UIComponent extends FlexSprite
     
     /**
      *  @private
-     *  Set style that were deferred because a module factory was not
+     *  Set styles that were deferred because a module factory was not
      *  set yet.
      */
     private function setDeferredStyles():void
@@ -10700,6 +11172,114 @@ public class UIComponent extends FlexSprite
         setStyle(styleProp, undefined);
     }
 
+    /**
+     *  @private
+     */
+    mx_internal var advanceStyleClientChildren:Dictionary = null;
+
+    /**
+     *  Adds a non-visual style client to this component instance. Once 
+     *  this method has been called, the style client will inherit style 
+     *  changes from this component instance. Style clients that are
+     *  DisplayObjects must use the <code>addChild</code> or 
+     *  <code>addChildAt</code> methods to be added to a 
+     *  <code>UIComponent</code>.
+     *  
+     *  As a side effect, this method will set the <code>styleParent</code> 
+     *  property of the <code>styleClient</code> parameter to reference 
+     *  this instance of the <code>UIComponent</code>.
+     *  
+     *  If the <code>styleClient</code> parameter already has a
+     *  <code>styleParent</code>, this method will call
+     *  <code>removeStyleClient</code> from this previous
+     *  <code>styleParent</code>.  
+     * 
+     * 
+     *  @param styleClient The <code>IAdvancedStyleClient</code> to 
+     *  add to this component's list of non-visual style clients.
+     * 
+     *  @throws ArgumentError if the <code>styleClient</code> parameter
+     *  is a <code>DisplayObject</code>. 
+     * 
+     *  @see removeStyleClient
+     *  @see mx.styles.IAdvancedStyleClient
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 9
+     *  @playerversion AIR 1.1
+     *  @productversion Flex 4.5
+     */
+    public function addStyleClient(styleClient:IAdvancedStyleClient):void
+    {
+        if(!(styleClient is DisplayObject))
+        {
+            if(styleClient.styleParent!=null)
+            {
+                var parentComponent:UIComponent = styleClient.styleParent as UIComponent;
+                if (parentComponent)
+                    parentComponent.removeStyleClient(styleClient);
+            }
+            // Create a dictionary with weak references to the key
+            if (advanceStyleClientChildren == null)
+                advanceStyleClientChildren = new Dictionary(true);
+            // Add the styleClient as a key in the dictionary. 
+            // The value assigned to this key entry is currently not used.
+            advanceStyleClientChildren[styleClient] = true;  
+            styleClient.styleParent=this;
+            
+            styleClient.regenerateStyleCache(true);
+            
+            styleClient.styleChanged(null);
+        }
+        else
+        {
+            var message:String = resourceManager.getString(
+                "core", "badParameter", [ styleClient ]);
+            throw new ArgumentError(message);
+        }
+    }
+    
+    /**
+     *  Removes a non-visual style client from this component instance. 
+     *  Once this method has been called, the non-visual style client will
+     *  no longer inherit style changes from this component instance.
+     *  
+     *  As a side effect, this method will set the 
+     *  <code>styleParent</code> property of the <code>styleClient</code>
+     *  parameter to <code>null</code>. 
+     * 
+     *  If the <code>styleClient</code> has not been added to this
+     *  component instance, no action will be taken. 
+     * 
+     *  @param styleClient The <code>IAdvancedStyleClient</code> to remove
+     *  from this component's list of non-visual style clients.
+     * 
+     *  @return The non-visual style client that was passed in as the
+     *  <code>styleClient</code> parameter. 
+     * 
+     *  @see addStyleClient
+     *  @see mx.styles.IAdvancedStyleClient
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 9
+     *  @playerversion AIR 1.1
+     *  @productversion Flex 4.5
+     */
+    public function removeStyleClient(styleClient:IAdvancedStyleClient):void
+    {
+        if(advanceStyleClientChildren && 
+            advanceStyleClientChildren[styleClient])
+        {
+            delete advanceStyleClientChildren[styleClient];
+            
+            styleClient.styleParent = null;
+            
+            styleClient.regenerateStyleCache(true);
+            
+            styleClient.styleChanged(null);
+        }
+    }
+    
     /**
      *  Propagates style changes to the children.
      *  You typically never need to call this method.
@@ -10733,6 +11313,20 @@ public class UIComponent extends FlexSprite
                 // Container.notifyStyleChangeInChildren.
                 if (child is IStyleClient)
                     IStyleClient(child).notifyStyleChangeInChildren(styleProp, recursive);
+            }
+        }
+
+        if (advanceStyleClientChildren != null)
+        {
+            for (var styleClient:Object in advanceStyleClientChildren)
+            {
+                var iAdvanceStyleClientChild:IAdvancedStyleClient = styleClient
+                    as IAdvancedStyleClient;
+                
+                if (iAdvanceStyleClientChild)
+                {
+                    iAdvanceStyleClientChild.styleChanged(styleProp);
+                }
             }
         }
     }
@@ -11757,10 +12351,9 @@ public class UIComponent extends FlexSprite
         catch (error:SecurityError)
         {
 
-        }
-
+        } 
     }
-
+    
     /**
      *  @private
      *  See the comments for addedHandler() above.
@@ -11782,7 +12375,14 @@ public class UIComponent extends FlexSprite
         {
 
         }
-        invalidateSystemManager();
+    }
+    
+    /**
+     *  @private
+     */
+    private function removedFromStageHandler(event:Event):void
+    {
+        _systemManagerDirty = true;
     }
 
     /**
@@ -12566,6 +13166,38 @@ public class UIComponent extends FlexSprite
      */
     protected function initAdvancedLayoutFeatures():void
     {
+        internal_initAdvancedLayoutFeatures();
+    }
+
+    
+    /**
+     *  @private
+     */
+    mx_internal function transformRequiresValidations():Boolean
+    {
+        return (_layoutFeatures != null);        
+    }
+    
+    /**
+     *  @private
+     */
+    mx_internal function clearAdvancedLayoutFeatures():void
+    {
+        if (_layoutFeatures)
+        {
+            // Make sure the matrix is validated before we free the 
+            // layout features. 
+            validateMatrix();
+            _layoutFeatures = null;
+        }
+    }
+
+    /**
+     *  Passed to TransformUtil to create the layout features when performing
+     *  transformation operations.
+     */
+    private function internal_initAdvancedLayoutFeatures():AdvancedLayoutFeatures
+    {
         var features:AdvancedLayoutFeatures = new AdvancedLayoutFeatures();
         
         _hasComplexLayoutMatrix = true;
@@ -12579,9 +13211,10 @@ public class UIComponent extends FlexSprite
         features.layoutX = x;
         features.layoutY = y;
         features.layoutZ = z;
-		features.layoutWidth = width;  // for the mirror transform		
+        features.layoutWidth = width;  // for the mirror transform      
         _layoutFeatures = features;
         invalidateTransform();
+        return features;
     }
 
     /**
@@ -12632,7 +13265,49 @@ public class UIComponent extends FlexSprite
     }
     
     /**
-     *  @private
+     *  An object with properties pertaining to a display object's matrix, color transform, 
+     *  and pixel bounds.  The specific properties — matrix, colorTransform, and three read-only 
+     *  properties (<code>concatenatedMatrix</code>, <code>concatenatedColorTransform</code>, and <code>pixelBounds</code>) — 
+     *  are described in the entry for the <code>Transform</code> class.  
+     *  
+     *  <p>Each of the transform object's properties is itself an object.  This concept is 
+     *  important because the only way to set new values for the matrix or colorTransform 
+     *  objects is to create a new object and copy that object into the transform.matrix or
+     *  transform.colorTransform property.</p>
+     * 
+     *  <p>For example, to increase the tx value of a display object's matrix, you must make a copy
+     *  of the entire matrix object, then copy the new object into the matrix property of the 
+     *  transform object:</p>
+     *
+     *  <pre>
+     *  var myMatrix:Matrix = myUIComponentObject.transform.matrix;  
+     *  myMatrix.tx += 10; 
+     *  myUIComponent.transform.matrix = myMatrix;
+     *  </pre>
+     *   
+     *  You cannot directly set the tx property. The following code has no effect on myUIComponent:
+     * 
+     *  <pre>
+     *  myUIComponent.transform.matrix.tx += 10;
+     *  </pre>
+     *
+     *  <p>Note that for <code>UIComponent</code>, unlike <code>DisplayObject</code>, the <code>transform</code>
+     *  keeps the <code>matrix</code> and <code>matrix3D</code> values in sync and <code>matrix3D</code> is not null
+     *  even when the component itself has no 3D properties set.  Developers should use the <code>is3D</code> property 
+     *  to check if the component has 3D propertis set.  If the component has 3D properties, the transform's 
+     *  <code>matrix3D</code> should be used instead of transform's <code>matrix</code>.</p>
+     *
+     *  @see #setLayoutMatrix
+     *  @see #setLayoutMatrix3D
+     *  @see #getLayoutMatrix
+     *  @see #getLayoutMatrix3D
+     *  @see #is3D
+     *  @see mx.geom.Transform
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 9
+     *  @playerversion AIR 1.1
+     *  @productversion Flex 3
      */
     override public function set transform(value:flash.geom.Transform):void
     {
@@ -12702,6 +13377,8 @@ public class UIComponent extends FlexSprite
             _layoutFeatures.postLayoutTransformOffsets.addEventListener(Event.CHANGE,transformOffsetsChangedHandler);
         if (was3D != is3D)
             validateMatrix();
+
+        invalidateTransform();
     }
 
     /**
@@ -12820,8 +13497,6 @@ public class UIComponent extends FlexSprite
             validateMatrix();
     }
 
-    private static var xformPt:Point;
-
     /**
      *  @copy mx.core.ILayoutElement#transformAround()
      *  
@@ -12848,46 +13523,29 @@ public class UIComponent extends FlexSprite
             _includeInLayout = false;
         }
 
-        // TODO (chaase): Would be nice to put this function in a central place
-        // to be used by UIComponent, SpriteVisualElement, UIMovieClip, and
-        // GraphicElement, since they all have similar or identical functions
-        if (_layoutFeatures == null)
-        {
-            // TODO (chaase): should provide a way to return to having no
-            // layoutFeatures if we call this later with a more trivial
-            // situation
-            var needAdvancedLayout:Boolean = 
-                (scale != null && ((!isNaN(scale.x) && scale.x != 1) || 
-                    (!isNaN(scale.y) && scale.y != 1) ||
-                    (!isNaN(scale.z) && scale.z != 1))) || 
-                (rotation != null && ((!isNaN(rotation.x) && rotation.x != 0) || 
-                    (!isNaN(rotation.y) && rotation.y != 0) ||
-                    (!isNaN(rotation.z) && rotation.z != 0))) || 
-                (translation != null && translation.z != 0 && !isNaN(translation.z)) ||
-                postLayoutScale != null ||
-                postLayoutRotation != null ||
-                (postLayoutTranslation != null && 
-                    (translation == null ||
-                     postLayoutTranslation.x != translation.x ||
-                     postLayoutTranslation.y != translation.y ||
-                     postLayoutTranslation.z != translation.z));
-            if (needAdvancedLayout)
-                initAdvancedLayoutFeatures();
-        }
+        var prevX:Number = x;
+        var prevY:Number = y;
+        var prevZ:Number = z;
+        
+        TransformUtil.transformAround(this,
+                                      transformCenter,
+                                      scale,
+                                      rotation,
+                                      translation,
+                                      postLayoutScale,
+                                      postLayoutRotation,
+                                      postLayoutTranslation,
+                                      _layoutFeatures,
+                                      internal_initAdvancedLayoutFeatures);
+        
         if (_layoutFeatures != null)
         {
-            var prevX:Number = _layoutFeatures.layoutX;
-            var prevY:Number = _layoutFeatures.layoutY;
-            var prevZ:Number = _layoutFeatures.layoutZ;
-            _layoutFeatures.transformAround(transformCenter, scale, rotation,
-                translation, postLayoutScale, postLayoutRotation,
-                postLayoutTranslation);
             invalidateTransform();
 
             // Will not invalidate parent if we have set _includeInLayout to false
             // in the beginning of the method
             invalidateParentSizeAndDisplayList();
-
+            
             if (prevX != _layoutFeatures.layoutX)
                 dispatchEvent(new Event("xChanged"));
             if (prevY != _layoutFeatures.layoutY)
@@ -12895,70 +13553,26 @@ public class UIComponent extends FlexSprite
             if (prevZ != _layoutFeatures.layoutZ)
                 dispatchEvent(new Event("zChanged"));
         }
-        else
-        {
-            if (translation == null && transformCenter != null)
-            {
-                if (xformPt == null)
-                    xformPt = new Point();
-                xformPt.x = transformCenter.x;
-                xformPt.y = transformCenter.y;                
-                var xformedPt:Point = 
-                    transform.matrix.transformPoint(xformPt);
-            }
-            if (rotation != null && !isNaN(rotation.z))
-                this.rotation = rotation.z;
-            if (scale != null)
-            {
-                scaleX = scale.x;
-                scaleY = scale.y;
-            }            
-            if (transformCenter == null)
-            {
-                if (translation != null)
-                {
-                    x = translation.x;
-                    y = translation.y;
-                }
-            }
-            else
-            {
-                if (xformPt == null)
-                    xformPt = new Point();
-                xformPt.x = transformCenter.x;
-                xformPt.y = transformCenter.y;                
-                var postXFormPoint:Point = 
-                    transform.matrix.transformPoint(xformPt);
-                if (translation != null)
-                {
-                    x += translation.x - postXFormPoint.x;
-                    y += translation.y - postXFormPoint.y;
-                }
-                else
-                {
-                    x += xformedPt.x - postXFormPoint.x;
-                    y += xformedPt.y - postXFormPoint.y;                                   
-                }
-            }
-        }
         
         if (!invalidateLayout)
             _includeInLayout = oldIncludeInLayout;
     }
 
     /**
-     * A utility method to transform a point specified in the local
-     * coordinates of this object to its location in the object's parent's 
-     * coordinates. The pre-layout and post-layout result is set on 
-     * the <code>position</code> and <code>postLayoutPosition</code>
-     * parameters, if they are non-null.
+     *  A utility method to transform a point specified in the local
+     *  coordinates of this object to its location in the object's parent's 
+     *  coordinates. The pre-layout and post-layout result is set on 
+     *  the <code>position</code> and <code>postLayoutPosition</code>
+     *  parameters, if they are non-null.
+     *  
+     *  @param localPosition The point to be transformed, specified in the
+     *  local coordinates of the object.
      * 
-     * @param localPosition The point to be transformed, specified in the
-     * local coordinates of the object.
-     * @position A Vector3D point that holds the pre-layout
-     * result. If null, the parameter is ignored.
-     * @postLayoutPosition A Vector3D point that holds the post-layout
-     * result. If null, the parameter is ignored.
+     *  @param position A Vector3D point that holds the pre-layout
+     *  result. If null, the parameter is ignored.
+     * 
+     *  @param postLayoutPosition A Vector3D point that holds the post-layout
+     *  result. If null, the parameter is ignored.
      * 
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -12969,41 +13583,11 @@ public class UIComponent extends FlexSprite
                                            position:Vector3D, 
                                            postLayoutPosition:Vector3D):void
     {
-        if (_layoutFeatures != null)
-        {
-            _layoutFeatures.transformPointToParent(true, localPosition,
-                position, postLayoutPosition);
-        }
-        else
-        {
-            if (xformPt == null)
-                xformPt = new Point();
-            if (localPosition)
-            {
-                xformPt.x = localPosition.x;
-                xformPt.y = localPosition.y;
-            }
-            else
-            {
-                xformPt.x = 0;
-                xformPt.y = 0;
-            }
-            var tmp:Point = (transform.matrix != null) ?
-                transform.matrix.transformPoint(xformPt) :
-                xformPt;
-            if (position != null)
-            {            
-                position.x = tmp.x;
-                position.y = tmp.y;
-                position.z = 0;
-            }
-            if (postLayoutPosition != null)
-            {
-                postLayoutPosition.x = tmp.x;
-                postLayoutPosition.y = tmp.y;
-                postLayoutPosition.z = 0;
-            }
-        }
+        TransformUtil.transformPointToParent(this,
+                                             localPosition,
+                                             position,
+                                             postLayoutPosition,
+                                             _layoutFeatures);
     }
 
     /**
@@ -13149,7 +13733,6 @@ public class UIComponent extends FlexSprite
     //  ILayoutElement
     //
     //--------------------------------------------------------------------------
-
 
     /**
      *  @inheritDoc
@@ -13396,7 +13979,7 @@ public class UIComponent extends FlexSprite
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-        public function get is3D():Boolean
+    public function get is3D():Boolean
     {
         return _layoutFeatures ? _layoutFeatures.is3D : false;
     }

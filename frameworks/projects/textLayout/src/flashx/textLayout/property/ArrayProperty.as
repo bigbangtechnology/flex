@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.property
 {
 	import flashx.textLayout.debug.assert;
@@ -22,13 +22,13 @@ package flashx.textLayout.property
 	{
 		private var _memberType:Class;
 		
-		public function ArrayProperty(nameValue:String, defaultValue:Array, inherited:Boolean, category:String, mType:Class)
-		{ 
+		public function ArrayProperty(nameValue:String, defaultValue:Array, inherited:Boolean, categories:Vector.<String>, mType:Class)
+		{
+			super(nameValue, defaultValue, inherited, categories); 
 			_memberType = mType;
 			CONFIG::debug { assert(_memberType.description != null,"Array member class must have description"); }
 			// can defaultValue be INHERIT?
 			CONFIG::debug { assert(checkArrayTypes(defaultValue),"Array has bad defaultValue"); }
-			super(nameValue, defaultValue, inherited, category); 
 		}
 		
 		/** The type the members of the array are required to be. */
@@ -52,7 +52,7 @@ package flashx.textLayout.property
 		}
 		
 		/** @private */
-		public override function get defaultValue():Object
+		public override function get defaultValue():*
 		{ return super.defaultValue == null ? null : (super.defaultValue as Array).slice();	}
 				
 		/** @private */
@@ -166,7 +166,7 @@ package flashx.textLayout.property
 			var attrsAll:Array = str.split('; '); 
 			for each (var attrs:String in attrsAll)
 			{
-			 	var obj:Object = new _memberType();
+			 	var obj:Object = new _memberType();	// NO PMD
 			 	
 			 	var attrsOne:Array = attrs.split(', ');
 			 	for each (var attr:String in attrsOne)
@@ -188,29 +188,6 @@ package flashx.textLayout.property
 			}
 				
 			return result; 
-		}
-		
-		/** @private */
-		public override function hash(val:Object, seed:uint):uint
-		{
-			if (val == FormatValue.INHERIT)
-				return UintProperty.doHash(inheritHashValue, seed);
-			CONFIG::debug { assert(!(val is String),"ArrayProperty.has non inherit string"); }
-				
-			var hash:uint = seed;
-			
-			// TODO: Check for description?
-			var desc:Object = _memberType.description;
-			for each (var member:Object in val)
-			{
-				for each (var prop:Property in desc)
-				{
-					var val:Object = member[prop.name];
-					if (val != null)
-						hash = prop.hash(val, hash);
-				}
-			}
-			return hash;
 		}
 	}
 }

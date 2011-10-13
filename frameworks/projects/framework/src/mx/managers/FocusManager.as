@@ -132,7 +132,7 @@ public class FocusManager extends EventDispatcher implements IFocusManager
 
 		this.popup = popup;
 
-        IMEEnabled = Capabilities.os.substring(0, 3) != "Mac";
+        IMEEnabled = true;
         browserMode = Capabilities.playerType == "ActiveX" && !popup;
         desktopMode = Capabilities.playerType == "Desktop" && !popup;
         // Flash main windows come up activated, AIR main windows don't
@@ -157,6 +157,7 @@ public class FocusManager extends EventDispatcher implements IFocusManager
         container.addEventListener(FlexEvent.SHOW, showHandler);
         container.addEventListener(FlexEvent.HIDE, hideHandler);
         container.addEventListener(FlexEvent.HIDE, childHideHandler, true);
+        container.addEventListener("_navigationChange_",viewHideHandler, true);
         
         //special case application and window
         if (container.systemManager is SystemManager)
@@ -221,7 +222,7 @@ public class FocusManager extends EventDispatcher implements IFocusManager
      * @private
      * 
      * True if this focus manager will try to enable/disable the IME based on
-     * whether the focused control uses IME.
+     * whether the focused control uses IME.  Leaving this as a backdoor just in case.
      * 
      */
     mx_internal var IMEEnabled:Boolean;
@@ -979,6 +980,9 @@ public class FocusManager extends EventDispatcher implements IFocusManager
      */
     private function isParent(p:DisplayObjectContainer, o:DisplayObject):Boolean
     {
+        if (p == o)
+            return false;
+        
         if (p is IRawChildrenContainer)
             return IRawChildrenContainer(p).rawChildren.contains(o);
         
@@ -987,7 +991,7 @@ public class FocusManager extends EventDispatcher implements IFocusManager
     
     private function isEnabledAndVisible(o:DisplayObject):Boolean
     {
-        var formParent:DisplayObjectContainer = DisplayObject(form).parent;
+        var formParent:DisplayObjectContainer = DisplayObjectContainer(form);
         
         while (o != formParent)
         {
@@ -1609,6 +1613,22 @@ public class FocusManager extends EventDispatcher implements IFocusManager
         return Object(form).toString() + ".focusManager";
     }
     
+    /**
+     *  @private
+     * 
+     *  Clear the browser focus component and undo any tab index we may have set.
+     */
+    private function clearBrowserFocusComponent():void
+    {
+        if (browserFocusComponent)
+        {
+            if (browserFocusComponent.tabIndex == LARGE_TAB_INDEX)
+                browserFocusComponent.tabIndex = -1;
+            
+            browserFocusComponent = null;
+        }
+    }
+    
     //--------------------------------------------------------------------------
     //
     //  Event handlers
@@ -1754,11 +1774,25 @@ public class FocusManager extends EventDispatcher implements IFocusManager
         // trace("FocusManager focusInHandler in  = " + this._form.systemManager.loaderInfo.url);
         // trace("FM " + this + " focusInHandler " + target);
 
-        if (lastFocus && !isEnabledAndVisible(DisplayObject(lastFocus)))
+        if (lastFocus && !isEnabledAndVisible(DisplayObject(lastFocus)) && DisplayObject(form).stage)
         {
             DisplayObject(form).stage.focus = null;
             lastFocus = null;
         }
+    }
+    
+    /**
+     *  @private
+     */
+    private function viewHideHandler(event:Event):void
+    {
+        // Target is the active view that is about to be hidden
+        var target:DisplayObjectContainer = event.target as DisplayObjectContainer;
+        var lastFocusDO:DisplayObject = lastFocus as DisplayObject;
+       
+        // If the lastFocus is in the view about to be hidden, clear focus
+        if (target && lastFocusDO && target.contains(lastFocusDO))
+            lastFocus = null;
     }
 
     /**
@@ -1874,6 +1908,9 @@ public class FocusManager extends EventDispatcher implements IFocusManager
     {
         // trace("FocusManager: mouseFocusChangeHandler  in  = " + this._form.systemManager.loaderInfo.url);
     	// trace("FocusManager: mouseFocusChangeHandler " + event);
+        
+        if (event.isDefaultPrevented())
+            return;
 
         // If relatedObject is null because we don't have access to the 
         // object getting focus then allow the Player to set focus
@@ -1920,6 +1957,10 @@ public class FocusManager extends EventDispatcher implements IFocusManager
         showFocusIndicator = true;
 		focusChanged = false;
 
+        var haveBrowserFocusComponent:Boolean = (browserFocusComponent != null);
+        if (browserFocusComponent)
+            clearBrowserFocusComponent();
+        
         // see if we got here from a tab.  We also need to check for 
         // keyCode == 0 because in IE sometimes the first time you tab 
         // in to the flash player, you get keyCode == 0 instead of TAB.
@@ -1927,13 +1968,8 @@ public class FocusManager extends EventDispatcher implements IFocusManager
         if ((event.keyCode == Keyboard.TAB || (browserMode && event.keyCode == 0)) 
                 && !event.isDefaultPrevented())
         {
-            if (browserFocusComponent)
+            if (haveBrowserFocusComponent)
             {
-                if (browserFocusComponent.tabIndex == LARGE_TAB_INDEX)
-                    browserFocusComponent.tabIndex = -1;
-
-                browserFocusComponent = null;
-
                 if (hasEventListener("browserFocusComponent"))
 	    			dispatchEvent(new FocusEvent("browserFocusComponent", false, false, InteractiveObject(event.target)));
 				
@@ -1983,6 +2019,9 @@ public class FocusManager extends EventDispatcher implements IFocusManager
 
         if (browserMode)
         {
+            if (browserFocusComponent)
+                clearBrowserFocusComponent();
+            
             if (event.keyCode == Keyboard.TAB && focusableCandidates.length > 0)
             {
                 // get the object that has the focus
@@ -2078,9 +2117,6 @@ public class FocusManager extends EventDispatcher implements IFocusManager
         // trace("FocusManager mouseDownHandler in  = " + this._form.systemManager.loaderInfo.url);
         // trace("FocusManager mouseDownHandler target " + event.target);
         
-        if (event.isDefaultPrevented())
-            return;
-
 		// if the target is in a bridged application, let it handle the click.
 		var sm:ISystemManager = form.systemManager;
         var o:DisplayObject = getTopLevelFocusTarget(

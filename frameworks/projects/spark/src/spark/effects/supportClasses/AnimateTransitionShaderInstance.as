@@ -13,6 +13,8 @@ package spark.effects.supportClasses
 import flash.display.BitmapData;
 import flash.display.Shader;
 import flash.filters.ShaderFilter;
+import flash.geom.Point;
+import flash.geom.Rectangle;
 import flash.utils.ByteArray;
 
 import mx.core.IUIComponent;
@@ -161,22 +163,6 @@ public class AnimateTransitionShaderInstance extends AnimateInstance
      *  @productversion Flex 4
      */
     protected var shader:Shader;    
-
-    /**
-     * @private
-     * Cache the filters set on the target when the effect begins.
-     * We will assign our own filters during the effect, so we should
-     * restore the old filters when we're done
-     */
-    private var previousFilters:Array;
-
-    /**
-     * @private
-     * The filters that we will assign during the animation. This is
-     * a concatenation of our shaderFilter plus any filters that were
-     * already on the target.
-     */
-    private var previousPlusShaderFilters:Array;
     
     /**
      *  @private
@@ -209,34 +195,41 @@ public class AnimateTransitionShaderInstance extends AnimateInstance
      *  @private
      */
     override public function play():void
-    {
-        // Buggy seeking behavior of Sequence sometimes causes an instance
-        // to play twice, causing problems with our temporary filters variables.
-        // If this variable is not null, then we must be playing already; don't
-        // play again.
-        if (previousPlusShaderFilters != null)
-            return;
-        
+    {  
         // Only dispose bitmaps that are not provided by the caller
         disposeFrom = (bitmapFrom == null);
         disposeTo = (bitmapTo == null);
+        
+        // If we got the bitmaps from the state information in a transition, they
+        // are stored along with the visual bounds of the object in an Object
+        var boundsFrom:Rectangle;
+        var boundsTo:Rectangle;
+        var bmHolder:Object;
         
         // TODO (chaase): Should take the 'from' snapshot on the
         // fly, in case the object has changed since the overall
         // effect (composite, etc) started much earlier and the
         // object has changed since propertyChanges was initialized 
-        if (!bitmapFrom)
-            if (propertyChanges &&
-                propertyChanges.start["bitmap"] !== undefined)
+        if (!bitmapFrom && propertyChanges &&
+            propertyChanges.start["bitmapInfo"] !== undefined)
+        {
+            bmHolder = propertyChanges.start["bitmapInfo"];
+            if (bmHolder)
             {
-                bitmapFrom = propertyChanges.start["bitmap"];
+                bitmapFrom = bmHolder["bitmap"];
+                boundsFrom = bmHolder["bounds"];
             }
-        if (!bitmapTo)
-            if (propertyChanges &&
-                propertyChanges.end["bitmap"] !== undefined)
+        }
+        if (!bitmapTo && propertyChanges &&
+            propertyChanges.end["bitmapInfo"] !== undefined)
+        {
+            bmHolder = propertyChanges.end["bitmapInfo"];
+            if (bmHolder)
             {
-                bitmapTo = propertyChanges.end["bitmap"];
+                bitmapTo = bmHolder["bitmap"];
+                boundsTo = bmHolder["bounds"];
             }
+        }
         if (!bitmapFrom)
             if (propertyChanges &&
                 (propertyChanges.start["visible"] == false ||
@@ -287,6 +280,21 @@ public class AnimateTransitionShaderInstance extends AnimateInstance
             shader = new Shader(shaderByteCode);
             if (shader.data)
             {
+                if (boundsFrom && boundsTo && 
+                    (boundsFrom.x != boundsTo.x || boundsFrom.y != boundsTo.y))
+                {
+                    var newX:Number = (boundsTo.x - boundsFrom.x);
+                    var newY:Number = (boundsTo.y - boundsFrom.y);
+                    var newW:Number = boundsFrom.width - newX;
+                    var newH:Number = boundsFrom.height - newY;
+                    var newBitmapFrom:BitmapData = new BitmapData(newW, newH, true, 0);
+                    newBitmapFrom.copyPixels(bitmapFrom, 
+                        new Rectangle(newX, newY, newW, newH),
+                        new Point(0, 0));
+                    if (disposeFrom)
+                        bitmapFrom.dispose();
+                    bitmapFrom = newBitmapFrom;
+                }
                 shader.data.from.input = bitmapFrom;
                 shader.data.to.input = bitmapTo;
                 
@@ -296,9 +304,9 @@ public class AnimateTransitionShaderInstance extends AnimateInstance
                 
                 // auto-set width/height if exposed in shader
                 if ("width" in shader.data)
-                    shader.data.width.value = [bitmapFrom.width];
+                    shader.data.width.value = [Math.max(bitmapFrom.width, bitmapTo.width)];
                 if ("height" in shader.data)
-                    shader.data.height.value = [bitmapFrom.height];
+                    shader.data.height.value = [Math.max(bitmapFrom.height,bitmapTo.height)];
                 if (shaderProperties)
                 {
                     for (var prop:String in shaderProperties)
@@ -333,7 +341,7 @@ public class AnimateTransitionShaderInstance extends AnimateInstance
             if (target is GraphicElement)
                 bmData = GraphicElement(target).captureBitmapData(true, 0, false);
             else
-                bmData = BitmapUtil.getSnapshot(IUIComponent(target));
+                bmData = BitmapUtil.getSnapshot(IUIComponent(target), null, true);
         }
         catch (e:SecurityError)
         {
@@ -357,8 +365,7 @@ public class AnimateTransitionShaderInstance extends AnimateInstance
             return;
         
         shader.data.progress.value = [value];
-        if (previousPlusShaderFilters != null)
-            target.filters = previousPlusShaderFilters;
+        target.filters = [shaderFilter].concat(acquireFilters());
     }
 
     /**
@@ -371,9 +378,7 @@ public class AnimateTransitionShaderInstance extends AnimateInstance
         if (!hasBitmaps)
             return;
         
-        previousFilters = target.filters;
-        previousPlusShaderFilters = [shaderFilter].concat(previousFilters);
-        target.filters = previousPlusShaderFilters;
+        target.filters = [shaderFilter].concat(target.filters);;
     }
 
     /**
@@ -386,13 +391,31 @@ public class AnimateTransitionShaderInstance extends AnimateInstance
         if (!hasBitmaps)
             return;
         
-        target.filters = (previousFilters != null) ? previousFilters : [];
-        previousFilters = null;
-        previousPlusShaderFilters = null;
+        target.filters = acquireFilters();
+        
         if (disposeFrom)
             bitmapFrom.dispose();
         if (disposeTo)
             bitmapTo.dispose();
+    }
+    
+    /**
+     * Acquires the current list of filters for our target, *excluding*
+     * our active shader filter. 
+     * @private
+     */
+    private function acquireFilters():Array
+    {
+        var filters:Array = target.filters;
+        for (var i:int=0; i < filters.length; i++)
+        {
+            if (filters[i] == shaderFilter)
+            {
+                filters.splice(i, 1);
+                break;
+            }
+        }
+        return filters;
     }
     
     /**

@@ -343,7 +343,7 @@ public class ListCollectionView extends Proxy
      *  @private
      *  Storage for the sort property.
      */
-    private var _sort:Sort;
+    private var _sort:ISort;
 
     [Bindable("sortChanged")]
     [Inspectable(category="General")]
@@ -358,7 +358,7 @@ public class ListCollectionView extends Proxy
      *  @playerversion AIR 1.1
      *  @productversion Flex 3
      */
-    public function get sort():Sort
+    public function get sort():ISort
     {
         return _sort;
     }
@@ -366,7 +366,7 @@ public class ListCollectionView extends Proxy
     /**
      *  @private
      */
-    public function set sort(s:Sort):void
+    public function set sort(s:ISort):void
     {
         _sort = s;
         dispatchEvent(new Event("sortChanged"));
@@ -649,11 +649,11 @@ public class ListCollectionView extends Proxy
         
         if (localIndex && sort)
         {
-            var startIndex:int = sort.findItem(localIndex, item, Sort.FIRST_INDEX_MODE);
+            var startIndex:int = findItem(item, Sort.FIRST_INDEX_MODE);
             if (startIndex == -1)
                 return -1;
 
-            var endIndex:int = sort.findItem(localIndex, item, Sort.LAST_INDEX_MODE);
+            var endIndex:int = findItem(item, Sort.LAST_INDEX_MODE);
             for (i = startIndex; i <= endIndex; i++)
             {
                 if (localIndex[i] == item)
@@ -1147,7 +1147,8 @@ public class ListCollectionView extends Proxy
      *  @param values the values object that can be passed into Sort.findItem
      *  @param mode the mode to pass to Sort.findItem (see Sort)
      *  @param insertIndex true if it should find the insertion point
-     *  @return the index where the item is located, -1 if not found
+     *  @return the index where the item is located, -1 if not found or SortError
+     *  caught
      *  
      *  @langversion 3.0
      *  @playerversion Flash 9
@@ -1162,11 +1163,20 @@ public class ListCollectionView extends Proxy
                 "collections", "itemNotFound");
             throw new CollectionViewError(message);
         }
+        
         if (localIndex.length == 0)
-        {
             return insertIndex ? 0 : -1;
+        
+        try
+        {
+            return sort.findItem(localIndex, values, mode, insertIndex);
         }
-        return sort.findItem(localIndex, values, mode, insertIndex);
+        catch (e:SortError)
+        {
+            // usually because the find critieria is not compatible with the sort.
+        }
+        
+        return -1;
     }
 
     /**
@@ -1284,6 +1294,12 @@ public class ListCollectionView extends Proxy
                     addItemsToView(event.items, event.location);
                 break;
 
+                case CollectionEventKind.MOVE:
+                    var n:int = event.items.length;
+                    for (var i:int = 0; i < n; i++)
+                        moveItemInView(event.items[i]);                        
+                break;
+                
                 case CollectionEventKind.RESET:
                     reset();
                 break;
@@ -1976,7 +1992,8 @@ class ListCollectionViewCursor extends EventDispatcher implements IViewCursor
      *  If the item can not be found no change to the current location will be
      *  made.
      *  <code>findAny()</code> can only be called on sorted views, if the view
-     *  isn't sorted a <code>CursorError</code> will be thrown.
+     *  isn't sorted, or items in the view do not contain properties used
+     *  to compute the sort order, a <code>CursorError</code> will be thrown.
      *  <p>
      *  If the associated collection is remote, and not all of the items have
      *  been cached locally this method will begin an asynchronous fetch from the
@@ -2036,7 +2053,8 @@ class ListCollectionViewCursor extends EventDispatcher implements IViewCursor
      *  If the item can not be found no change to the current location will be
      *  made.
      *  <code>findFirst()</code> can only be called on sorted views, if the view
-     *  isn't sorted a <code>CursorError</code> will be thrown.
+     *  isn't sorted, or items in the view do not contain properties used
+     *  to compute the sort order, a <code>CursorError</code> will be thrown.
      *  <p>
      *  If the associated collection is remote, and not all of the items have been
      *  cached locally this method will begin an asynchronous fetch from the
@@ -2093,7 +2111,8 @@ class ListCollectionViewCursor extends EventDispatcher implements IViewCursor
      *  If the item can not be found no change to the current location will be
      *  made.
      *  <code>findLast()</code> can only be called on sorted views, if the view
-     *  isn't sorted a <code>CursorError</code> will be thrown.
+     *  isn't sorted, or items in the view do not contain properties used
+     *  to compute the sort order, a <code>CursorError</code> will be thrown.
      *  <p>
      *  If the associated collection is remote, and not all of the items have been
      *  cached locally this method will begin an asynchronous fetch from the

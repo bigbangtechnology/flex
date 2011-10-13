@@ -24,11 +24,12 @@ package org.osmf.media
 	/**
      *  The MediaPlayerState class enumerates public constants that describe the current
      *  state of the MediaPlayer.
-	 *  
-	 *  @langversion 3.0
-	 *  @playerversion Flash 10
-	 *  @playerversion AIR 1.0
-	 *  @productversion OSMF 4.0			 
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion OSMF 1.0
+	 *  @productversion FLEXOSMF 4.0
      */
     public final class MediaPlayerState
     {
@@ -38,8 +39,9 @@ package org.osmf.media
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */
 		public static const UNINITIALIZED:String   = "uninitialized";
 
@@ -48,8 +50,9 @@ package org.osmf.media
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */
 		public static const LOADING:String  = "loading";
 
@@ -58,8 +61,9 @@ package org.osmf.media
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */
 		public static const READY:String = "ready";
 
@@ -68,8 +72,9 @@ package org.osmf.media
          *  
          *  @langversion 3.0
          *  @playerversion Flash 10
-         *  @playerversion AIR 1.0
-         *  @productversion OSMF 4.0
+         *  @playerversion AIR 1.5
+         *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0		 
          */
 		public static const PLAYING:String = "playing";
 
@@ -78,8 +83,9 @@ package org.osmf.media
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */
 		public static const PAUSED:String = "paused";
 
@@ -88,8 +94,9 @@ package org.osmf.media
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */
 		public static const BUFFERING:String = "buffering";
 
@@ -98,8 +105,9 @@ package org.osmf.media
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */
 		public static const PLAYBACK_ERROR:String = "playbackError";
 	} 

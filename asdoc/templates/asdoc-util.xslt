@@ -1892,46 +1892,92 @@
 							</xsl:for-each>
 						</xsl:when>
 						<xsl:when test="contains($entryType,'property')">
-							<xsl:for-each select="./apiValue[apiName=$nameToMatch]">
-								<xsl:choose>
-									<xsl:when test="$descriptionType='shortdesc'">
-										<xsl:if test="./shortdesc[@conref]">
-											<xsl:call-template name="getConRefText">
-												<xsl:with-param name="conref" select="./shortdesc/@conref"/>
-												<xsl:with-param name="descriptionType" select="local-name(./shortdesc)"/>
-											</xsl:call-template>
-										</xsl:if>
-										<xsl:if test="not(./shortdesc[@conref])">
-											<xsl:for-each select="./shortdesc/.">
-												<xsl:if test="$doNotProcessTags">
-													<xsl:value-of select="."/>
-												</xsl:if>
-												<xsl:if test="not ($doNotProcessTags)">
-													<xsl:call-template name="processTags"/>
-												</xsl:if>
-											</xsl:for-each>
-										</xsl:if>
-									</xsl:when>
-									<xsl:otherwise>
-										<xsl:if test="./apiValueDetail/apiDesc[@conref]">
-											<xsl:call-template name="getConRefText">
-												<xsl:with-param name="conref" select="./apiValueDetail/apiDesc/@conref"/>
-												<xsl:with-param name="descriptionType" select="local-name(./apiValueDetail/apiDesc)"/>
-											</xsl:call-template>
-										</xsl:if>
-										<xsl:if test="not(./apiValueDetail/apiDesc[@conref])">
-											<xsl:for-each select="./apiValueDetail/apiDesc">
-												<xsl:if test="$doNotProcessTags">
-													<xsl:value-of select="."/>
-												</xsl:if>
-												<xsl:if test="not ($doNotProcessTags)">
-													<xsl:call-template name="processTags"/>
-												</xsl:if>
-											</xsl:for-each>
-										</xsl:if>
-									</xsl:otherwise>
-								</xsl:choose>
-							</xsl:for-each>
+							<xsl:choose>
+				                <xsl:when test="count(./apiValue[apiName=$nameToMatch]) &gt; 0">
+				                  <xsl:for-each select="./apiValue[apiName=$nameToMatch]">
+				                    <xsl:choose>
+				                      <xsl:when test="$descriptionType='shortdesc'">
+				                        <xsl:if test="./shortdesc[@conref]">
+				                          <xsl:call-template name="getConRefText">
+				                            <xsl:with-param name="conref" select="./shortdesc/@conref"/>
+				                            <xsl:with-param name="descriptionType" select="local-name(./shortdesc)"/>
+				                          </xsl:call-template>
+				                        </xsl:if>
+				                        <xsl:if test="not(./shortdesc[@conref])">
+				                          <xsl:for-each select="./shortdesc/.">
+				                            <xsl:if test="$doNotProcessTags">
+				                              <xsl:value-of select="."/>
+				                            </xsl:if>
+				                            <xsl:if test="not($doNotProcessTags)">
+				                              <xsl:call-template name="processTags"/>
+				                            </xsl:if>
+				                          </xsl:for-each>
+				                        </xsl:if>
+				                      </xsl:when>
+				                      <xsl:otherwise>
+				                        <xsl:if test="./apiValueDetail/apiDesc[@conref]">
+				                          <xsl:call-template name="getConRefText">
+				                            <xsl:with-param name="conref" select="./apiValueDetail/apiDesc/@conref"/>
+				                            <xsl:with-param name="descriptionType" select="local-name(./apiValueDetail/apiDesc)"/>
+				                          </xsl:call-template>
+				                        </xsl:if>
+				                        <xsl:if test="not(./apiValueDetail/apiDesc[@conref])">
+				                          <xsl:for-each select="./apiValueDetail/apiDesc">
+				                            <xsl:if test="$doNotProcessTags">
+				                              <xsl:value-of select="."/>
+				                            </xsl:if>
+				                            <xsl:if test="not($doNotProcessTags)">
+				                              <xsl:call-template name="processTags"/>
+				                            </xsl:if>
+				                          </xsl:for-each>
+				                        </xsl:if>
+				                      </xsl:otherwise>
+				                    </xsl:choose>
+				                  </xsl:for-each>                  
+				                </xsl:when>
+				                <xsl:when test="count(./prolog/asMetadata/skinParts/SkinPart[@name=$nameToMatch]) &gt; 0">
+				                  <xsl:for-each select="./prolog/asMetadata/skinParts/SkinPart[@name=$nameToMatch]">
+				                    <xsl:choose>
+				                      <xsl:when test="$descriptionType='shortdesc'">
+				                        <xsl:if test="./shortdesc[@conref]">
+				                          <xsl:call-template name="getConRefText">
+				                            <xsl:with-param name="conref" select="./shortdesc/@conref"/>
+				                            <xsl:with-param name="descriptionType" select="local-name(./shortdesc)"/>
+				                          </xsl:call-template>
+				                        </xsl:if>
+				                        <xsl:if test="not(./shortdesc[@conref])">
+				                          <xsl:for-each select="./shortdesc/.">
+				                            <xsl:if test="$doNotProcessTags">
+				                              <xsl:value-of select="."/>
+				                            </xsl:if>
+				                            <xsl:if test="not($doNotProcessTags)">
+				                              <xsl:call-template name="processTags"/>
+				                            </xsl:if>
+				                          </xsl:for-each>
+				                        </xsl:if>
+				                      </xsl:when>
+				                      <xsl:otherwise>
+				                        <xsl:if test="./description[@conref]">
+				                          <xsl:call-template name="getConRefText">
+				                            <xsl:with-param name="conref" select="./description/@conref"/>
+				                            <xsl:with-param name="descriptionType" select="local-name(./description)"/>
+				                          </xsl:call-template>
+				                        </xsl:if>
+				                        <xsl:if test="not(./description[@conref])">
+				                          <xsl:for-each select="./description">
+				                            <xsl:if test="$doNotProcessTags">
+				                              <xsl:value-of select="."/>
+				                            </xsl:if>
+				                            <xsl:if test="not($doNotProcessTags)">
+				                              <xsl:call-template name="processTags"/>
+				                            </xsl:if>
+				                          </xsl:for-each>
+				                        </xsl:if>
+				                      </xsl:otherwise>
+				                    </xsl:choose>
+				                  </xsl:for-each>
+				                </xsl:when>
+				              </xsl:choose>						
 						</xsl:when>
 						<xsl:otherwise>
 							<xsl:choose>

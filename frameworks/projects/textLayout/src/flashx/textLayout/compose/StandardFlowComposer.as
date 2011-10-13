@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.compose
 {	
 	import flash.display.Sprite;
@@ -29,8 +29,6 @@ package flashx.textLayout.compose
 
 	use namespace tlf_internal;
 	
-	[Exclude(name="createBackgroundManager",kind="method")]
-	
 	/** 
 	* The StandardFlowComposer class provides a standard composer and container manager. 
 	*
@@ -47,7 +45,7 @@ package flashx.textLayout.compose
 	* <code>flowComposer</code> property of a TextFlow object. Call the <code>updateAllControllers()</code>
 	* method to lay out and display the text in the containers attached to the flow composer.</p>
 	* 
-	* <p><b>Note:</b> For simple, static text flows, you can also use one of the text line factory classes.
+	* <p><b>Note:</b> For simple, static text flows, you can also use the one of the text line factory classes.
 	* These factory classes will typically create lines with less overhead than a flow composer, but do not
 	* support editing, dynamic changes, or user interaction.</p>
 	* 
@@ -80,7 +78,7 @@ package flashx.textLayout.compose
 	 	* @langversion 3.0
 	 	*/
 	 	
-		public function StandardFlowComposer():void
+		public function StandardFlowComposer()
 		{
 			super();
 			_controllerList = new Array();
@@ -148,8 +146,8 @@ package flashx.textLayout.compose
 
 			if (_rootElement != newRootElement)
 			{
-				if (newRootElement is TextFlow && TextFlow(newRootElement).flowComposer != this)
-					TextFlow(newRootElement).flowComposer = this;
+				if (newRootElement is TextFlow && (newRootElement as TextFlow).flowComposer != this)
+					(newRootElement as TextFlow).flowComposer = this;
 				else
 				{
 					clearCompositionResults();
@@ -554,14 +552,14 @@ package flashx.textLayout.compose
 			var sm:ISelectionManager = textFlow.interactionManager;
 			if (sm)
 				sm.flushPendingOperations();
-			var startController:ContainerController = _composing ? null : internalCompose(-1, index);	
+			CONFIG::debug { assert(!_composing, "Didn't expect to be composing here"); }
+			internalCompose(-1, index);	
 			var shapesDamaged:Boolean = areShapesDamaged();
 			if (shapesDamaged)
 				updateCompositionShapes();
 
 			if (sm)
 				sm.refreshSelection();
-			releaseLines(startController);
 			return shapesDamaged;
 		}
 		
@@ -671,7 +669,7 @@ package flashx.textLayout.compose
 		{
 			
 			if (_damageAbsoluteStart == rootElement.getAbsoluteStart()+rootElement.textLength)
-				return getControllerAt(numControllers-1);;
+				return getControllerAt(numControllers-1);
 				
 			var state:ComposeState = getComposeState();
 			
@@ -705,62 +703,67 @@ package flashx.textLayout.compose
 		 */
 		private function internalCompose(composeToPosition:int = -1, composeToControllerIndex:int = -1):ContainerController
 		{
+			var bp:String;
+
+				// Flush pending events (e.g. insert events)
 			var sm:ISelectionManager = textFlow.interactionManager;
 			if (sm)
 				sm.flushPendingOperations();
 			
-			if (numControllers == 0)
-				return null;
-
-			if (composeToControllerIndex < 0)
-			{
-				if (composeToPosition >= 0 && damageAbsoluteStart >= composeToPosition)
-					return null;
-			}
-			else
-			{
-				var controller:ContainerController = getControllerAt(Math.min(composeToControllerIndex,numControllers-1));
-				if (damageAbsoluteStart > controller.absoluteStart+controller.textLength)
-					return null;
-			}
-				
-			// trace("internalCompose: damageAbsoluteStart",damageAbsoluteStart);
-			
-			var lastController:ContainerController;
-			var bp:String;
-			if (composeToControllerIndex == numControllers-1)
-			{
-				lastController = this.getControllerAt(numControllers-1);
-				// skip it if damageAbsoluteStart is past the end of the controller.  are there risks here? AND scrollpositions haven't changed since last composeToControllerIndex
-				var lastVisibleLine:TextFlowLine = lastController.getLastVisibleLine();
-				if (lastVisibleLine)
-				{
-					bp = rootElement.computedFormat.blockProgression
-					if (getBPDirectionScrollPosition(bp,lastController) == this.lastBPDirectionScrollPosition && damageAbsoluteStart >= lastVisibleLine.absoluteStart+lastVisibleLine.textLength)
-						return null;
-				}
-			}
-			lastBPDirectionScrollPosition = Number.NEGATIVE_INFINITY;
-			
 			CONFIG::debug { assert(_composing == false,"internalCompose: Recursive call"); }
 				
 			_composing = true;
-			
+
 			var startController:ContainerController;
-			
 			try
 			{	
-				var cont:ContainerController;	// scratch
-				if (textFlow && numControllers != 0)
+				if (preCompose())
 				{
-					if (preCompose())
+					if (textFlow && numControllers != 0)
 					{
-						startController = callTheComposer(composeToPosition, composeToControllerIndex);
-						if (startController)
+						// This code should really be in preCompose, but we cannot add new parameters to it without breaking the API.
+						var damageLimit:int = _textFlow.textLength;		// If we aren't composed up to this point, we'll have to force composition
+						// If the container index is above the range, set it to the last container
+						composeToControllerIndex = Math.min(composeToControllerIndex,numControllers-1);
+						if (composeToPosition != -1 || composeToControllerIndex != -1)
 						{
-							var idx:int = this.getControllerIndex(startController);
-							while (idx < numControllers)
-								getControllerAt(idx++).shapesInvalid = true;
+							if (composeToControllerIndex < 0)
+							{
+								if (composeToPosition >= 0)
+									damageLimit = composeToPosition;
+							}
+							else 
+							{
+								// We're composing the container, make sure the entire container is composed
+								var controller:ContainerController = getControllerAt(composeToControllerIndex);
+								if (controller.textLength != 0)
+									damageLimit = controller.absoluteStart+controller.textLength;
+	
+								// If we're composing the last container, and its scrollable, only require valid composition to the end of the scrolled position
+								if (composeToControllerIndex == numControllers - 1)
+								{
+									bp = rootElement.computedFormat.blockProgression;
+	
+										// skip it if damageAbsoluteStart is past the end of the controller.  are there risks here? AND scrollpositions haven't changed since last composeToControllerIndex
+									var lastVisibleLine:TextFlowLine = controller.getLastVisibleLine();
+									if (lastVisibleLine && getBPDirectionScrollPosition(bp,controller) == this.lastBPDirectionScrollPosition)
+										damageLimit = lastVisibleLine.absoluteStart+lastVisibleLine.textLength;
+								}
+	
+							}
+						}
+						
+						lastBPDirectionScrollPosition = Number.NEGATIVE_INFINITY;
+				
+						if (_damageAbsoluteStart < damageLimit)
+						{
+							startController = callTheComposer(composeToPosition, composeToControllerIndex);
+							if (startController)
+							{
+								var idx:int = this.getControllerIndex(startController);
+								while (idx < numControllers)
+									getControllerAt(idx++).shapesInvalid = true;
+							}
 						}
 					}
 				}
@@ -772,9 +775,9 @@ package flashx.textLayout.compose
 			}
 			_composing = false;
 			
-			if (lastController)
+			if (composeToControllerIndex == numControllers - 1)
 			{
-				lastBPDirectionScrollPosition = getBPDirectionScrollPosition(bp,lastController);
+				lastBPDirectionScrollPosition = getBPDirectionScrollPosition(bp,controller);
 			}
 			
 			return startController;
@@ -847,42 +850,8 @@ package flashx.textLayout.compose
 			return _composing ? false : internalCompose(-1, index) != null;
 		}
 		
-		/** Release lines in paragraphs that aren't referenced externally, so that they can be garbage collected
-		 * if necessary. Iterates through the lines, looking for lines that do not have a valid parent. If all the
-		 * lines in a paragraph have no parent, we call the paragraph's TextBlock.releaseLines(). 
-		 */
-		private function releaseLines(startController:ContainerController):void
-		{
-			var currentParagraph:ParagraphElement = null;
-			var inUse:Boolean = false;
-			var lastLine:int = lines.length;
-			for (var lineIndex:int = startController ? findLineIndexAtPosition(startController.absoluteStart) : 0; lineIndex < lastLine; lineIndex++)
-			{
-				var line:TextFlowLine = lines[lineIndex];
-				var paragraph:ParagraphElement = line.paragraph;
-				if (paragraph != currentParagraph)		
-				{
-					// We're on a new paragraph. Release the lines from the old para, if they weren't used,
-					// and set up the new para.
-					if (!inUse && currentParagraph)
-						currentParagraph.releaseTextBlock();
-					currentParagraph = paragraph;
-					inUse = false;
-				}
-				if (!inUse && !line.isDamaged())
-				{
-					var textLine:TextLine = line.peekTextLine();
-					if (textLine != null && textLine.parent != null)
-						inUse = true;
-				}
-			}
-			// Release the lines from the last para, if they weren't used.
-			if (!inUse && currentParagraph)
-				currentParagraph.releaseTextBlock();
-		}
-		
 		/** @private */
-		public function createBackgroundManager():BackgroundManager
+		tlf_internal function createBackgroundManager():BackgroundManager
 		{ return new BackgroundManager(); }
 	}
 }

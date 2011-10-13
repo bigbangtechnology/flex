@@ -1,46 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
-//
-//TODO handle multiple flow containers sanely:
-//should we read the text in each container, or the entire model?
-//there is sufficient API to know what is in a single container, but the
-//easiest is that the first container gets the accImpl.
-//
-//TODO what about text selection that starts in one container and extends across
-//multiple containers?
-//
-//TODO SELECTION info from Deneb
-//Had a conversation with Gordon about ISimpleTextSelection and how to test it.
-//Most important outcome: I remembered that I wrote a command-line test tool for
-//ISimpleTextSelection, which acts as a dummy screen reader.  This is how you
-//should test the Vellum implementation.  The MSAA test tools don't include
-//ISimpleTextSelection - it is our invention, and solves the problem that this
-//functionality is missing from MSAA.  Which is why I wrote the test tool.
-//Much easier to test with tools than try to test with screen readers, which
-//may or may not even have support for ISimpleTextSelection - and if they
-//don't, that's a separate battle to fight.
-//
-//My suggestion for proving the Vellum implementation is (1) wait for player
-//implementation of missing passthrough method; (2) implement Vellum support
-//for passthrough method; (3) compare results of this test tool with native
-//text field to results with Vellum implementation.
-//
-//The test tool is checked into theoden:1666 at
-////depot/main/player/Test/TestMSAA/...
-//
-//Be sure to read the README, which explains some of the (severe) limitations
-//of the test tool.  It's the -s switch that tests ISimpleTextSelection.
-//There is also a copy of our MSAA vendor spec, FlashMSAA.html, in the
-//same directory.
-//
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.accessibility
 {
 	import flash.accessibility.Accessibility;

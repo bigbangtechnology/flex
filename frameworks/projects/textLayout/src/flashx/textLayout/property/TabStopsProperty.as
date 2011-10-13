@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.property
 {
 	import flash.text.engine.TabAlignment;
@@ -20,12 +20,11 @@ package flashx.textLayout.property
 	/** Property for tab stops. Extends ArrayProperty; setter takes a string representation of tab stops in addition to an array. @private */
 	public class TabStopsProperty extends ArrayProperty
 	{
-		public function TabStopsProperty(nameValue:String, defaultValue:Array, inherited:Boolean, category:String)
+		public function TabStopsProperty(nameValue:String, defaultValue:Array, inherited:Boolean, categories:Vector.<String>)
 		{ 
-			super (nameValue, defaultValue, inherited, category, TabStopFormat);
+			super(nameValue, defaultValue, inherited, categories, TabStopFormat);
 		}
 			
-		
 		/** Helper function when setting the property */
 		public override function setHelper(currVal:*,newVal:*):*
 		{

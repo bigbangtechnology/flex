@@ -2639,7 +2639,7 @@ public class WindowedApplication extends Application implements IWindow
         const vsLoc:File = File.applicationDirectory.resolvePath(viewSourceURL);
         if (vsLoc.exists)
         {
-            const screenRect:Rectangle = Screen.mainScreen.visibleBounds;
+            const screenRect:Rectangle = flash.display.Screen.mainScreen.visibleBounds;
             const screenWidth:int = screenRect.width;
             const screenHeight:int = screenRect.height;
 
@@ -2710,7 +2710,13 @@ public class WindowedApplication extends Application implements IWindow
     public function activate():void
     {
         if (!systemManager.stage.nativeWindow.closed)
+        {
             systemManager.stage.nativeWindow.activate();    
+            
+            // activate makes the native window visible so this 
+            // component should become visible as well.
+            visible = true;             
+        }
     }
 
     /**
@@ -3005,6 +3011,9 @@ public class WindowedApplication extends Application implements IWindow
      */
     private function enterFrameHandler(e:Event):void
     {
+        if (!stage)
+            return;
+            
         removeEventListener(Event.ENTER_FRAME, enterFrameHandler);
 
         // If nativeApplication.nativeApplication.exit() has been called,
@@ -3116,6 +3125,7 @@ public class WindowedApplication extends Application implements IWindow
     }
 
     /**
+     *  @private
      *  Manages mouse down events on the window border.
      *  
      *  @langversion 3.0

@@ -1,23 +1,29 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.conversion 
 {
+	import flash.system.System;
+	
+	import flashx.textLayout.TextLayoutVersion;
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.elements.BreakElement;
+	import flashx.textLayout.elements.Configuration;
 	import flashx.textLayout.elements.ContainerFormattedElement;
 	import flashx.textLayout.elements.FlowElement;
 	import flashx.textLayout.elements.FlowGroupElement;
 	import flashx.textLayout.elements.FlowLeafElement;
 	import flashx.textLayout.elements.GlobalSettings;
 	import flashx.textLayout.elements.IConfiguration;
+	import flashx.textLayout.elements.ListElement;
+	import flashx.textLayout.elements.ListItemElement;
 	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.elements.ParagraphFormattedElement;
 	import flashx.textLayout.elements.SpanElement;
@@ -30,49 +36,43 @@ package flashx.textLayout.conversion
 	[ExcludeClass]
 	/**
 	 * @private  
-	 * BaseTextLayoutImportFilter is a base class for handling the import/export of TextLayout text in the native format.
+	 * BaseTextLayoutImporter is a base class for handling the import/export of TextLayout text in the native format.
 	 */ 
-	internal class BaseTextLayoutImporter implements ITextImporter
+	internal class BaseTextLayoutImporter extends ConverterBase implements ITextImporter
 	{	
 		private var _ns:Namespace;		// namespace of expected in imported/exported content
 		
-		private var _errors:Vector.<String>;
 		private var _textFlowNamespace:Namespace; // namespace of the TextFlow element against which the namespaces of the following elements are validated
-		
-		private var _throwOnError:Boolean;
-		
+				
 		protected var _config:ImportExportConfiguration;
-		protected var _textFlowConfiguration:IConfiguration;
+		protected var _textFlowConfiguration:IConfiguration = null;
+		protected var _importVersion:uint;
 		
 		// static private const anyPrintChar:RegExp = /[^\s]/g;
 		// Consider only tab, line feed, carriage return, and space as characters used for pretty-printing. 
 		// While debatable, this is consistent with what CSS does. 
 		static private const anyPrintChar:RegExp = /[^\u0009\u000a\u000d\u0020]/g; 
 
-		public function BaseTextLayoutImporter(textFlowConfiguration:IConfiguration, nsValue:Namespace, config:ImportExportConfiguration)
+		public function BaseTextLayoutImporter(nsValue:Namespace, config:ImportExportConfiguration)
 		{
-			_textFlowConfiguration = textFlowConfiguration;
 			_ns = nsValue;
 			_config = config;
 		}
 		
-		protected function clear():void
+		tlf_internal override function clear():void
 		{
-			if (errors)
-				errors.splice(0, errors.length);
+			super.clear();
 			_textFlowNamespace = null;
 			_impliedPara = null;
 		}
 		
-		/** Import text content, from an external source, and convert it into a TextFlow.
-		 * @param source		source data to convert, may be string or XML
-		 * @return TextFlow that was created from the source.
+		/** @copy ITextImporter#importToFlow()
 		 */
 		public function importToFlow(source:Object):TextFlow
 		{
 			clear();		// empty results of previous imports
 			
-			if (_throwOnError)
+			if (throwOnError)
 				return importToFlowCanThrow(source);
 			
 			var rslt:TextFlow = null;
@@ -90,6 +90,18 @@ package flashx.textLayout.conversion
 			return rslt;
 		}
 		
+		/** @copy ITextImporter#get configuration()
+		 */
+		public function get configuration():IConfiguration
+		{
+			return _textFlowConfiguration;
+		}
+		
+		public function set configuration(value:IConfiguration):void
+		{
+			_textFlowConfiguration = value;
+		}
+
 		/** @private */
 		protected function importPropertyErrorHandler(p:Property,value:Object):void
 		{
@@ -125,7 +137,10 @@ package flashx.textLayout.conversion
 				XML.setSettings(originalSettings);
 			}	
 			
-			return importFromXML(xmlTree);
+			var textFlow:TextFlow = importFromXML(xmlTree);
+			if (Configuration.playerEnablesArgoFeatures)
+				System["disposeXML"](xmlTree);
+			return textFlow;
 		}
 		
 		/** Parse and convert input data.
@@ -172,28 +187,28 @@ package flashx.textLayout.conversion
 		}
 
 		/** Parse XML and convert to  TextFlow. 
-		 * @param importFilter	parser object
+		 * @param importer		parser object
 		 * @param xmlToParse	content to parse
 		 * @param parent always null - this parameter is only provided to match FlowElementInfo.importer signature
 		 * @return TextFlow	the new TextFlow created as a result of the parse
 		 */
-		static public function parseTextFlow(importFilter:BaseTextLayoutImporter, xmlToParse:XML, parent:Object=null):TextFlow
+		static public function parseTextFlow(importer:BaseTextLayoutImporter, xmlToParse:XML, parent:Object=null):TextFlow
 		{
-			return importFilter.createTextFlowFromXML(xmlToParse, null);
+			return importer.createTextFlowFromXML(xmlToParse, null);
 		}		
 		
 		/** Static method to parse the supplied XML into a paragrph. Parse the <p ...> tag and it's children.
 		 * 
-		 * @param importFilter	parser object
+		 * @param importer	parser object
 		 * @param xmlToParse	content to parse
 		 * @param parent 		the parent for the new content
 		 */
-		static public function parsePara(importFilter:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
+		static public function parsePara(importer:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
 		{
-			var paraElem:ParagraphElement = importFilter.createParagraphFromXML(xmlToParse);
-			if (importFilter.addChild(parent, paraElem))
+			var paraElem:ParagraphElement = importer.createParagraphFromXML(xmlToParse);
+			if (importer.addChild(parent, paraElem))
 			{
-				importFilter.parseFlowGroupElementChildren(xmlToParse, paraElem);
+				importer.parseFlowGroupElementChildren(xmlToParse, paraElem);
 				//if parsing an empty paragraph, create a Span for it.
 				if (paraElem.numChildren == 0)
 					paraElem.addChild(new SpanElement());
@@ -203,28 +218,27 @@ package flashx.textLayout.conversion
 		static protected function copyAllStyleProps(dst:FlowLeafElement,src:FlowLeafElement):void
 		{
 			dst.format = src.format;
-			dst.styleName       = src.styleName;
-			dst.userStyles      = src.userStyles;
-			dst.id              = src.id;
+			dst.typeName	= src.typeName;
+			dst.id          = src.id;
 		}
 		
 		/** Static method for constructing a span from XML. Parse the <span> ... </span> tag. 
 		 * Insert the span into its parent
 		 * 
-		 * @param importFilter	parser object
+		 * @param importer	parser object
 		 * @param xmlToParse	content to parse
 		 * @param parent 		the parent for the new content
 		 */
-		static public function parseSpan(importFilter:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
+		static public function parseSpan(importer:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
 		{
-			var firstSpan:SpanElement = importFilter.createSpanFromXML(xmlToParse);
+			var firstSpan:SpanElement = importer.createSpanFromXML(xmlToParse);
 			
 			var elemList:XMLList = xmlToParse[0].children();
 			if(elemList.length() == 0)
 			{
 				// Empty span, but may have formatting, so don't strip it out. 
 				// Note: the normalizer may yet strip it out if it is not the last child, but that's the normalizer's business.
-				importFilter.addChild(parent, firstSpan); 
+				importer.addChild(parent, firstSpan); 
 				return;
 			}
 	
@@ -237,69 +251,90 @@ package flashx.textLayout.conversion
 					if (firstSpan.parent == null)	// hasn't been used yet
 					{
 						firstSpan.text = child.toString();
-						importFilter.addChild(parent, firstSpan);
+						importer.addChild(parent, firstSpan);
 					}
 					else
 					{
-						var s:SpanElement = new SpanElement();
+						var s:SpanElement = new SpanElement();	// No PMD
 						copyAllStyleProps(s,firstSpan);
 						s.text = child.toString();
-						importFilter.addChild(parent, s);
+						importer.addChild(parent, s);
 					}
 				}
 				else if (elemName == "br")
 				{
-					var brElem:BreakElement = importFilter.createBreakFromXML(child);	// may be null
+					var brElem:BreakElement = importer.createBreakFromXML(child);	// may be null
 					if (brElem)
 					{
 						copyAllStyleProps(brElem,firstSpan);
-						importFilter.addChild(parent, brElem);
+						importer.addChild(parent, brElem);
 					}
 					else
-						importFilter.reportError(GlobalSettings.resourceStringFunction("unexpectedXMLElementInSpan",[ elemName ]));
+						importer.reportError(GlobalSettings.resourceStringFunction("unexpectedXMLElementInSpan",[ elemName ]));
 				}
 				else if (elemName == "tab")
 				{
-					var tabElem:TabElement = importFilter.createTabFromXML(child);	// may be null
+					var tabElem:TabElement = importer.createTabFromXML(child);	// may be null
 					if (tabElem)
 					{
 						copyAllStyleProps(tabElem,firstSpan);
-						importFilter.addChild(parent, tabElem);
+						importer.addChild(parent, tabElem);
 					}
 					else
-						importFilter.reportError(GlobalSettings.resourceStringFunction("unexpectedXMLElementInSpan",[ elemName ]));
+						importer.reportError(GlobalSettings.resourceStringFunction("unexpectedXMLElementInSpan",[ elemName ]));
 				}
 				else
-					importFilter.reportError(GlobalSettings.resourceStringFunction("unexpectedXMLElementInSpan",[ elemName ]));				
+					importer.reportError(GlobalSettings.resourceStringFunction("unexpectedXMLElementInSpan",[ elemName ]));				
 			}
 		}
 		
 		/** Static method for constructing a break element from XML. Validate the <br> ... </br> tag. 
 		 * Use "\u2028" as the text; Insert the new element into its parent 
 		 * 
-		 * @param importFilter	parser object
+		 * @param importer	parser object
 		 * @param xmlToParse	content to parse
 		 * @param parent 		the parent for the new content
 		 */
-		static public function parseBreak(importFilter:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
+		static public function parseBreak(importer:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
 		{
-			var breakElem:BreakElement = importFilter.createBreakFromXML(xmlToParse);
-			importFilter.addChild(parent, breakElem);
+			var breakElem:BreakElement = importer.createBreakFromXML(xmlToParse);
+			importer.addChild(parent, breakElem);
 		}
 
 		
 		/** Static method for constructing a tab element from XML. Validate the <tab> ... </tab> tag. 
 		 * Use "\t" as the text; Insert the new element into its parent 
 		 * 
-		 * @param importFilter	parser object
+		 * @param importer	parser object
 		 * @param xmlToParse	content to parse
 		 * @param parent 		the parent for the new content
 		 */
-		static public function parseTab(importFilter:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
+		static public function parseTab(importer:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
 		{
-			var tabElem:TabElement = importFilter.createTabFromXML(xmlToParse);	// may be null
+			var tabElem:TabElement = importer.createTabFromXML(xmlToParse);	// may be null
 			if (tabElem)
-				importFilter.addChild(parent, tabElem);
+				importer.addChild(parent, tabElem);
+		}
+
+		static public function parseList(importer:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
+		{
+			var listElem:ListElement = importer.createListFromXML(xmlToParse);
+			if (importer.addChild(parent, listElem))
+			{
+				importer.parseFlowGroupElementChildren(xmlToParse, listElem);
+			}
+		}
+
+		static public function parseListItem(importer:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
+		{
+			var listItem:ListItemElement = importer.createListItemFromXML(xmlToParse);
+			if (importer.addChild(parent, listItem))
+			{
+				importer.parseFlowGroupElementChildren(xmlToParse, listItem);
+				//if parsing an empty list item, create a Paragraph for it.
+				if (listItem.numChildren == 0)
+					listItem.addChild(new ParagraphElement());	
+			}
 		}
 		
 		protected function checkNamespace(xmlToParse:XML):Boolean
@@ -332,12 +367,25 @@ package flashx.textLayout.conversion
 			// reset them all
 			for each (importer in formatImporters)
 				importer.reset();
+				
+			if (!xmlToParse)
+				return;
 			
 			for each (var item:XML in xmlToParse.attributes())
 			{
 				var propertyName:String = item.name().localName;
 				var propertyValue:String = item.toString();
 				var imported:Boolean = false;
+				
+				// Strip out padding properties from XML coming in before TLF 2.0, since they were ignored but are no longer. This preserves the look of the text.
+				if (xmlToParse.localName() == "TextFlow")
+				{
+					if (propertyName == "version")	// skip over the version attribute, we've already processed it
+						continue;
+				}
+				else if (_importVersion < TextLayoutVersion.VERSION_2_0 &&
+					 (propertyName == "paddingLeft" || propertyName == "paddingTop" || propertyName == "paddingRight" || propertyName == "paddingBottom"))
+					continue;
 				for each (importer in formatImporters)
 				{
 					if (importer.importOneFormat(propertyName,propertyValue))
@@ -347,7 +395,8 @@ package flashx.textLayout.conversion
 					}
 				}
 				if (!imported)	// not a supported attribute
-					handleUnknownAttribute (xmlToParse.name().localName, propertyName);}
+					handleUnknownAttribute (xmlToParse.name().localName, propertyName);
+			}
 		}
 				
 		static protected function extractAttributesHelper(curAttrs:Object, importer:TLFormatImporter):Object
@@ -368,19 +417,19 @@ package flashx.textLayout.conversion
 		 * @param textFlow 		TextFlow we're parsing. If null, create or find a new TextFlow based on XML content
 		 * @return TextFlow	the new TextFlow created as a result of the parse
 		 */
-		public function createTextFlowFromXML(xmlToParse:XML, newFlow:TextFlow = null):TextFlow
+		public function createTextFlowFromXML(xmlToParse:XML, newFlow:TextFlow = null):TextFlow	// No PMD
 		{
 			CONFIG::debug { assert(false,"missing override for createTextFlowFromXML"); }
 			return null;
 		}
 		
-		public function createParagraphFromXML(xmlToParse:XML):ParagraphElement
+		public function createParagraphFromXML(xmlToParse:XML):ParagraphElement	// No PMD
 		{
 			CONFIG::debug { assert(false,"missing override for createParagraphFromXML"); }
 			return null;
 		}
 		
-		public function createSpanFromXML(xmlToParse:XML):SpanElement
+		public function createSpanFromXML(xmlToParse:XML):SpanElement	// No PMD
 		{
 			CONFIG::debug { assert(false,"missing override for createSpanFromXML"); }
 			return null;
@@ -390,6 +439,18 @@ package flashx.textLayout.conversion
 		{
 			parseAttributes(xmlToParse,null);	// no attributes allowed - reports errors
 			return new BreakElement();
+		}
+		
+		public function createListFromXML(xmlToParse:XML):ListElement	// No PMD
+		{
+			CONFIG::debug { assert(false,"missing override for createListFromXML"); }
+			return null;
+		}
+
+		public function createListItemFromXML(xmlToParse:XML):ListItemElement	// No PMD
+		{
+			CONFIG::debug { assert(false,"missing override for createListItemFromXML"); }
+			return null;
 		}
 		
 		public function createTabFromXML(xmlToParse:XML):TabElement
@@ -432,12 +493,7 @@ package flashx.textLayout.conversion
 					}
 					
  					if (!strip) 
- 					{
-						// note, we don't want to set the paraFormat so that we inherit them from the TextFlow
-						var span:SpanElement = new SpanElement();
-						span.text = txt;
-						addChild(parent, span);
-					}
+						addChild(parent, createImpliedSpan(txt));
 				}
 			}
 			
@@ -445,8 +501,16 @@ package flashx.textLayout.conversion
 			if (!chainedParent && parent is ContainerFormattedElement)
 				resetImpliedPara();
 		}
+		
+		/** create an implied span with specified text */
+		public function createImpliedSpan(text:String):SpanElement
+		{
+			var span:SpanElement = new SpanElement();	// No PMD
+			span.text = text;
+			return span;
+		}
 			
-		public function createParagraphFlowFromXML(xmlToParse:XML, newFlow:TextFlow = null):TextFlow
+		public function createParagraphFlowFromXML(xmlToParse:XML, newFlow:TextFlow = null):TextFlow	// No PMD
 		{
 			CONFIG::debug { assert(false,"missing override for createParagraphFlowFromXML"); }	// client must override
 			return null;
@@ -530,7 +594,7 @@ package flashx.textLayout.conversion
 				parent = _impliedPara;
 			}	
 			
-			if (_throwOnError)
+			if (throwOnError)
 				parent.addChild(child);
 			else
 			{
@@ -559,39 +623,6 @@ package flashx.textLayout.conversion
 		
 		protected function onResetImpliedPara(para:ParagraphElement):void
 		{
-		}
-
-		/** Errors encountered while parsing. 
-		 * Value is a vector of Strings.
-		 */
-		public function get errors():Vector.<String>
-		{
-			return _errors;
-		}
-		
-		/** Errors will cause exceptions if throwOnError is true. */
-		public function get throwOnError():Boolean
-		{
-			return _throwOnError;
-		}
-		public function set throwOnError(value:Boolean):void
-		{
-			_throwOnError = value;
-		}
-		
-		/** Register an error that was encountered while parsing. If throwOnError
-		 * is true, the error causes an exception. Otherwise it is logged and parsing
-		 * continues.
-		 * @param error	the String that describes the error
-		 */
-		protected function reportError(error:String):void
-		{
-			if (_throwOnError)
-				throw new Error(error);
-			
-			if (!_errors)
-				_errors = new Vector.<String>();
-			_errors.push(error);
 		}
 	}
 }

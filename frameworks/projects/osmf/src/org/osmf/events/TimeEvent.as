@@ -24,12 +24,13 @@ package org.osmf.events
 	import flash.events.Event;
 	
 	/**
-	 * A TimeEvent is dispatched when properties of an ITemporal trait have changed.
+	 * A TimeEvent is dispatched when properties of a TimeTrait change.
 	 *  
 	 *  @langversion 3.0
 	 *  @playerversion Flash 10
-	 *  @playerversion AIR 1.0
-	 *  @productversion OSMF 4.0			 
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 *  @productversion FLEXOSMF 4.0
 	 */	     
 	public class TimeEvent extends Event
 	{       	
@@ -39,8 +40,9 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */	
 		public static const CURRENT_TIME_CHANGE:String = "currentTimeChange";
 		
@@ -51,8 +53,9 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */		
 		public static const DURATION_CHANGE:String = "durationChange";
 
@@ -63,8 +66,9 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */		
 		public static const COMPLETE:String = "complete";
 
@@ -79,8 +83,9 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */		
 		public function TimeEvent(type:String, bubbles:Boolean=false, cancelable:Boolean=false, time:Number=NaN)
 		{			
@@ -96,8 +101,9 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
 		 */		
 		public function get time():Number
 		{

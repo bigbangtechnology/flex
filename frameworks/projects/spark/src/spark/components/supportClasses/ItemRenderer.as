@@ -15,6 +15,7 @@ import flash.events.Event;
 import flash.events.MouseEvent;
 import flash.geom.Point;
 
+import mx.core.InteractionMode;
 import mx.core.mx_internal;
 import mx.events.FlexEvent;
 
@@ -26,6 +27,34 @@ use namespace mx_internal;
 
 /**
  *  The ItemRenderer class is the base class for Spark item renderers.
+ *
+ *  <p>Item renderers support optional view states. 
+ *  You typically use view states in MXML item renderers to control 
+ *  the appearance of a data item based on user interaction with the item. 
+ *  The ItemRenderer class supports all views states so that you can use 
+ *  those item renderers with list-based classes.</p>
+ *
+ *  <p>Flex defines the following view states that you can support 
+ *  in your item renderers: </p>
+ *  <ul>
+ *    <li>normal - The data item has no user interaction.</li>
+ *    <li>hovered - The mouse is over the data item.</li>
+ *    <li>selected - The data item is selected.</li>
+ *    <li>dragging - The data item is being dragged.</li>
+ *    <li>normalAndShowCaret - The data item is in the normal state, 
+ *      and it has focus in the item list. </li>
+ *    <li>hoveredAndShowCaret - The data item is in the hovered state, 
+ *      and it has focus in the item list.</li>
+ *    <li>selectedAndShowCaret - The data item is in the normal state, 
+ *      and it has focus in the item list.</li>
+ *  </ul>
+ *
+ *  <p>When the user interacts with a control in a way that changes 
+ *  the view state of the item renderer, Flex first determines if the 
+ *  renderer defines that view state. 
+ *  If the item renderer supports the view state, Flex sets the item renderer 
+ *  to use that view state. 
+ *  If the item renderer does not supports the view state, Flex does nothing.</p>
  * 
  *  @mxml
  *
@@ -69,7 +98,8 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
         // Initially state is dirty
         rendererStateIsDirty = true;
         
-        addHandlers();
+        interactionStateDetector = new InteractionStateDetector(this);
+        interactionStateDetector.addEventListener(Event.CHANGE, interactionStateDetector_changeHandler);
     }
     
     //--------------------------------------------------------------------------
@@ -80,9 +110,24 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
     
     /**
      *  @private
+     *  Helper class to help determine when we are in the hovered or down states
+     */
+    private var interactionStateDetector:InteractionStateDetector;
+    
+    /**
+     *  @private
      *  Whether the renderer's state is invalid or not.
      */
     private var rendererStateIsDirty:Boolean = false;
+    
+    /**
+     *  @private
+     *  A flag associated with rendererStateIsDirty, determining if 
+     *  this renderer should play any associated transitions 
+     *  in the next validation pass.  This is different from the mx_internal
+     *  playTransitions flag, which is set externally by List and DataGroup. 
+     */
+    private var playTransitionsOnNextRendererState:Boolean = false;
     
     /**
      *  @private
@@ -117,7 +162,7 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
      *  the item renderer is automatically drawn, and it 
      *  depends on the styles that are set (<code>contentBackgroundColor</code>, 
      *  <code>alternatingItemColor</code>, <code>rollOverColor</code>, 
-     *  <code>selectionColor</code>) 
+     *  <code>downColor</code>, <code>selectionColor</code>) 
      *  and the state that the item renderer is in.</p>
      *
      *  <p>If <code>false</code>, the item render draws no backgrounds.
@@ -125,6 +170,11 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
      *  background colors for all user interactions.</p>
      * 
      *  @default true
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function get autoDrawBackground():Boolean
     {
@@ -149,18 +199,64 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
     }
     
     //----------------------------------
+    //  down
+    //----------------------------------
+    /**
+     *  @private
+     *  storage for the down property 
+     */    
+    private var _down:Boolean = false;
+    
+    /**
+     *  Set to <code>true</code> when the user is pressing down on an item renderer.
+     *
+     *  @default false
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */    
+    protected function get down():Boolean
+    {
+        return _down;
+    }
+    
+    /**
+     *  @private
+     */    
+    protected function set down(value:Boolean):void
+    {
+        if (value != _down)
+        {
+            _down = value;
+            invalidateRendererState();
+            if (autoDrawBackground)
+            {
+                redrawRequested = true;
+                super.$invalidateDisplayList();
+            }
+        }
+    }
+    
+    //----------------------------------
     //  hovered
     //----------------------------------
     /**
      *  @private
-     *  storage for the selected property 
+     *  storage for the hovered property 
      */    
     private var _hovered:Boolean = false;
     
     /**
-     *  Set to <code>true</code> when the mouse is hovered over the item renderer.
+     *  Set to <code>true</code> when the user is hovered over the item renderer.
      *
      *  @default false
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */    
     protected function get hovered():Boolean
     {
@@ -175,7 +271,7 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
         if (value != _hovered)
         {
             _hovered = value;
-            setCurrentState(getCurrentRendererState(), playTransitions);
+            invalidateRendererState();
             if (autoDrawBackground)
             {
                 redrawRequested = true;
@@ -183,7 +279,7 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
             }
         }
     }
-
+    
     //----------------------------------
     //  itemIndex
     //----------------------------------
@@ -200,6 +296,11 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
      *  @inheritDoc 
      *
      *  @default 0
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */    
     public function get itemIndex():int
     {
@@ -256,6 +357,11 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
      *  @inheritDoc 
      *
      *  @default false  
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */    
     public function get showsCaret():Boolean
     {
@@ -271,7 +377,7 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
             return;
 
         _showsCaret = value;
-        setCurrentState(getCurrentRendererState(), playTransitions); 
+        invalidateRendererState();
         if (autoDrawBackground)
         {
             redrawRequested = true;
@@ -292,6 +398,11 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
      *  @inheritDoc 
      *
      *  @default false
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */    
     public function get selected():Boolean
     {
@@ -306,7 +417,7 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
         if (value != _selected)
         {
             _selected = value;
-            setCurrentState(getCurrentRendererState(), playTransitions);
+            invalidateRendererState();
             if (autoDrawBackground)
             {
                 redrawRequested = true;
@@ -327,6 +438,11 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
 
     /**
      *  @inheritDoc  
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function get dragging():Boolean
     {
@@ -341,7 +457,7 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
         if (value != _dragging)
         {
             _dragging = value;
-            setCurrentState(getCurrentRendererState(), playTransitions);
+            invalidateRendererState();
         }
     }
 
@@ -361,6 +477,11 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
      *  @inheritDoc 
      *
      *  @default ""    
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function get label():String
     {
@@ -414,13 +535,33 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
     //  Methods - ItemRenderer State Support 
     //
     //--------------------------------------------------------------------------
+
     /**
      *  Returns the name of the state to be applied to the renderer. For example, a
      *  very basic List item renderer would return the String "normal", "hovered", 
-     *  or "selected" to specify the renderer's state. 
+     *  or "selected" to specify the renderer's state.
+     *  If dealing with touch interactions (or mouse interactions where selection
+     *  is ignored), "down" and "downAndSelected" are also important states.
      * 
      *  <p>A subclass of ItemRenderer must override this method to return a value 
      *  if the behavior desired differs from the default behavior.</p>
+     * 
+     *  <p>In Flex 4.0, the 3 main states were "normal", "hovered", and "selected".
+     *  In Flex 4.5, "down" and "downAndSelected" have been added.</p>
+     * 
+     *  <p>The full set of states supported (in order of precedence) are: 
+     *    <ul>
+     *      <li>dragging</li>
+     *      <li>downAndSelected</li>
+     *      <li>selectedAndShowsCaret</li>
+     *      <li>hoveredAndShowsCaret</li>
+     *      <li>normalAndShowsCaret</li>
+     *      <li>down</li>
+     *      <li>selected</li>
+     *      <li>hovered</li>
+     *      <li>normal</li>
+     *    </ul>
+     *  </p>
      * 
      *  @return A String specifying the name of the state to apply to the renderer. 
      *  
@@ -431,18 +572,27 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
      */
     protected function getCurrentRendererState():String
     {
+        // this code is pretty confusing without multi-dimensional states, but it's
+        // defined in order of precedence.
+        
         if (dragging && hasState("dragging"))
             return "dragging";
-
+        
+        if (selected && down && hasState("downAndSelected"))
+            return "downAndSelected";
+        
         if (selected && showsCaret && hasState("selectedAndShowsCaret"))
             return "selectedAndShowsCaret";
-            
+        
         if (hovered && showsCaret && hasState("hoveredAndShowsCaret"))
             return "hoveredAndShowsCaret";
-             
+        
         if (showsCaret && hasState("normalAndShowsCaret"))
             return "normalAndShowsCaret"; 
-            
+          
+        if (down && hasState("down"))
+            return "down";
+        
         if (selected && hasState("selected"))
             return "selected";
         
@@ -453,9 +603,30 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
             return "normal";
         
         // If none of the above states are defined in the item renderer,
-        // we return the empty string. This means the user-defined renderer
-        // will display but essentially be non-interactive visually. 
-        return null;
+        // we return currentState, so we don't change the state just 
+        // in case the developer put the item renderer into its 
+        // own custom state.
+        return currentState;
+    }
+    
+    /**
+     *  Marks the renderer's state as invalid so that the new state is set
+     *  during a later screen update.
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10.1
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     */
+    protected function invalidateRendererState():void
+    {
+        playTransitionsOnNextRendererState = (playTransitionsOnNextRendererState || playTransitions);
+        
+        if (rendererStateIsDirty)
+            return; // State is already invalidated
+        
+        rendererStateIsDirty = true;
+        invalidateProperties();
     }
     
     //--------------------------------------------------------------------------
@@ -469,13 +640,17 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
      */ 
     override protected function commitProperties():void
     {
-        super.commitProperties();
-        
+        // need to run this code before calling super.commitProperites
+        // because the super.commitProperties can handle state change on 
+        // rare occassion (during initialization)
         if (rendererStateIsDirty)
         {
-            setCurrentState(getCurrentRendererState(), playTransitions); 
+            setCurrentState(getCurrentRendererState(), playTransitionsOnNextRendererState); 
+            playTransitionsOnNextRendererState = false;
             rendererStateIsDirty = false;
         }
+        
+        super.commitProperties();
     }
     
     /**
@@ -489,7 +664,7 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
         
         if (autoDrawBackground && (allStyles || styleName == "alternatingItemColors" || 
             styleName == "contentBackgroundColor" || styleName == "rollOverColor" || 
-            styleName == "selectionColor"))
+            styleName == "downColor" || styleName == "selectionColor"))
         {
             redrawRequested = true;
             super.$invalidateDisplayList();
@@ -523,15 +698,22 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
         
         var backgroundColor:uint;
         var drawBackground:Boolean = true;
+        var downColor:* = getStyle("downColor");
         
-        if (selected)
+        if (down && downColor !== undefined)
+            backgroundColor = downColor;
+        else if (selected)
             backgroundColor = getStyle("selectionColor");
         else if (hovered)
             backgroundColor = getStyle("rollOverColor");
         else
         {
-            var alternatingColors:Array = getStyle("alternatingItemColors");
+            var alternatingColors:Array;
+            var alternatingColorsStyle:Object = getStyle("alternatingItemColors");
             
+            if (alternatingColorsStyle)
+                alternatingColors = (alternatingColorsStyle is Array) ? (alternatingColorsStyle as Array) : [alternatingColorsStyle];
+           
             if (alternatingColors && alternatingColors.length > 0)
             {
                 // translate these colors into uints
@@ -571,40 +753,13 @@ public class ItemRenderer extends DataRenderer implements IItemRenderer
     
     /**
      *  @private
-     *  Attach the mouse events.
      */
-    private function addHandlers():void
+    private function interactionStateDetector_changeHandler(event:Event):void
     {
-        addEventListener(MouseEvent.ROLL_OVER, itemRenderer_rollOverHandler);
-        addEventListener(MouseEvent.ROLL_OUT, itemRenderer_rollOutHandler);
-    }
-    
-    /**
-     *  @private
-     */
-    private function anyButtonDown(event:MouseEvent):Boolean
-    {
-        var type:String = event.type;
-        return event.buttonDown || (type == "middleMouseDown") || (type == "rightMouseDown"); 
-    }
-    
-    /**
-     *  @private
-     *  Mouse rollOver event handler.
-     */
-    protected function itemRenderer_rollOverHandler(event:MouseEvent):void
-    {
-        if (!anyButtonDown(event))
-            hovered = true;
-    }
-    
-    /**
-     *  @private
-     *  Mouse rollOut event handler.
-     */
-    protected function itemRenderer_rollOutHandler(event:MouseEvent):void
-    {
-        hovered = false;
+        playTransitions = interactionStateDetector.playTransitions;
+        down = (interactionStateDetector.state == InteractionState.DOWN);
+        hovered = (interactionStateDetector.state == InteractionState.OVER);
+        playTransitions = true;
     }
 
 }

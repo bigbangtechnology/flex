@@ -1,25 +1,27 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
 	import flash.display.BlendMode;
+	import flash.display.Sprite;
 	import flash.system.Capabilities;
-	import flash.text.engine.TextBlock;
 	
 	import flashx.textLayout.compose.StandardFlowComposer;
 	import flashx.textLayout.edit.SelectionFormat;
 	import flashx.textLayout.formats.FormatValue;
+	import flashx.textLayout.formats.IListMarkerFormat;
 	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.ListMarkerFormat;
 	import flashx.textLayout.formats.TextDecoration;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
+	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.tlf_internal;
 	
 	use namespace tlf_internal;
@@ -54,7 +56,12 @@ package flashx.textLayout.elements
 		}
 		
 		/** @private The player may disable the feature for older swfs.  */
-		static tlf_internal const playerEnablesArgoFeatures:Boolean = versionIsAtLeast(10,1) && (new TextBlock).hasOwnProperty("recreateTextLine"); 
+		static tlf_internal const playerEnablesArgoFeatures:Boolean = versionIsAtLeast(10,1); 
+		
+		/** @private The player may disable the feature for older swfs, so its not enough to check
+		the Player version number, the SWF must also be marked as a version 11 SWF to use Spicy features.  */
+		static tlf_internal const playerEnablesSpicyFeatures:Boolean = versionIsAtLeast(10,2) && (new Sprite).hasOwnProperty("needsSoftKeyboard"); 
+		static tlf_internal const hasTouchScreen:Boolean = playerEnablesArgoFeatures && Capabilities["touchScreenType"] != "none";
 		
 		/** If manageTabKey and manageEnterKey are false, the client must handle those keys on their own. */
 		private var _manageTabKey:Boolean;
@@ -65,10 +72,11 @@ package flashx.textLayout.elements
 		private var _enableAccessibility:Boolean;
 		private var _releaseLineCreationData:Boolean;
 		
-		// TODO: make me into dictionaries
 		private var _defaultLinkNormalFormat:ITextLayoutFormat;
 		private var _defaultLinkActiveFormat:ITextLayoutFormat;
 		private var _defaultLinkHoverFormat:ITextLayoutFormat;
+		
+		private var _defaultListMarkerFormat:IListMarkerFormat;
 		
 		private var _textFlowInitialFormat:ITextLayoutFormat;
 		
@@ -107,7 +115,7 @@ package flashx.textLayout.elements
 		
 		private function initialize():void
 		{
-			var scratchFormat:TextLayoutFormatValueHolder;
+			var scratchFormat:TextLayoutFormat;
 	
 			_manageTabKey = false;
 			_manageEnterKey = true;
@@ -119,12 +127,16 @@ package flashx.textLayout.elements
 			_unfocusedSelectionFormat = new SelectionFormat(0xffffff, 0, BlendMode.DIFFERENCE, 0xffffff, 0.0, BlendMode.DIFFERENCE, 0);
 			_inactiveSelectionFormat  = _unfocusedSelectionFormat;
 				
-			scratchFormat = new TextLayoutFormatValueHolder();
+			scratchFormat = new TextLayoutFormat();
 			scratchFormat.textDecoration = TextDecoration.UNDERLINE;
 			scratchFormat.color = 0x0000FF;//default link color is blue
 			_defaultLinkNormalFormat = scratchFormat;
+			
+			var listMarkerFormat:ListMarkerFormat = new ListMarkerFormat();
+			listMarkerFormat.paragraphEndIndent = 4;
+			_defaultListMarkerFormat = listMarkerFormat;
 				
-			scratchFormat = new TextLayoutFormatValueHolder();
+			scratchFormat = new TextLayoutFormat();
 			scratchFormat.lineBreak = FormatValue.INHERIT;
 			scratchFormat.paddingLeft = FormatValue.INHERIT;
 			scratchFormat.paddingRight = FormatValue.INHERIT;
@@ -173,6 +185,7 @@ package flashx.textLayout.elements
 			config.defaultLinkActiveFormat = defaultLinkActiveFormat;
 			config.defaultLinkHoverFormat  = defaultLinkHoverFormat;
 			config.defaultLinkNormalFormat = defaultLinkNormalFormat;
+			config.defaultListMarkerFormat = defaultListMarkerFormat;
 			config.textFlowInitialFormat = _textFlowInitialFormat;
 			config.focusedSelectionFormat = _focusedSelectionFormat;
 			config.unfocusedSelectionFormat = _unfocusedSelectionFormat;
@@ -252,6 +265,23 @@ package flashx.textLayout.elements
 		{ return _defaultLinkNormalFormat; }
 		public function set defaultLinkNormalFormat(val:ITextLayoutFormat):void
 		{ _defaultLinkNormalFormat = val; _immutableClone = null; }
+
+		/** 
+		 * @copy IConfiguration#defaultListMarkerFormat
+		 *
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 *
+		 * @see FlowElement#listMarkerFormat
+		 * @see flashx.textLayout.formats.IListMarkerFormat IListMarkerFormat
+		 * @see LinkElement
+		 */
+		
+		public function get defaultListMarkerFormat():IListMarkerFormat
+		{ return _defaultListMarkerFormat; }
+		public function set defaultListMarkerFormat(val:IListMarkerFormat):void
+		{ _defaultListMarkerFormat = val; _immutableClone = null; }
 		
 		/** 
 		* @copy IConfiguration#defaultLinkHoverFormat  
@@ -489,7 +519,7 @@ package flashx.textLayout.elements
 		* @langversion 3.0
 		*
 		* @see flashx.textLayout.compose.StandardFlowComposer StandardFlowComposer
-		* @see flash.text.engine.TextBlock#releaseLineCreationData TextBlock.releaseLineCreationData
+		* @see flash.text.engine.TextBlock#releaseLineCreationData() TextBlock.releaseLineCreationData()
 		*/
 		
 		public function get releaseLineCreationData():Boolean
@@ -523,6 +553,7 @@ package flashx.textLayout.elements
 		public function set inlineGraphicResolverFunction(val:Function):void
 		{
 			_inlineGraphicResolverFunction = val;
+			_immutableClone = null;
 		}
 	}
 }

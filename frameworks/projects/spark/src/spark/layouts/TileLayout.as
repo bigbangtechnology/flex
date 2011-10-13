@@ -15,12 +15,15 @@ import flash.geom.Rectangle;
 
 import mx.core.ILayoutElement;
 import mx.core.IVisualElement;
+import mx.core.mx_internal;
 import mx.events.PropertyChangeEvent;
 
 import spark.components.supportClasses.GroupBase;
 import spark.core.NavigationUnit;
 import spark.layouts.supportClasses.DropLocation;
 import spark.layouts.supportClasses.LayoutBase;
+
+use namespace mx_internal;
 
 /**
  *  The TileLayout class arranges layout elements in columns and rows
@@ -445,7 +448,151 @@ public class TileLayout extends LayoutBase
         _rowHeight = value;
         invalidateTargetSizeAndDisplayList();
     }
-
+    
+    //----------------------------------
+    //  paddingLeft
+    //----------------------------------
+    
+    private var _paddingLeft:Number = 0;
+    
+    [Inspectable(category="General")]
+    
+    /**
+     *  The minimum number of pixels between the container's left edge and
+     *  the left edge of the layout element.
+     * 
+     *  @default 0
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    public function get paddingLeft():Number
+    {
+        return _paddingLeft;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set paddingLeft(value:Number):void
+    {
+        if (_paddingLeft == value)
+            return;
+        
+        _paddingLeft = value;
+        invalidateTargetSizeAndDisplayList();
+    }    
+    
+    //----------------------------------
+    //  paddingRight
+    //----------------------------------
+    
+    private var _paddingRight:Number = 0;
+    
+    [Inspectable(category="General")]
+    
+    /**
+     *  The minimum number of pixels between the container's right edge and
+     *  the right edge of the layout element.
+     * 
+     *  @default 0
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    public function get paddingRight():Number
+    {
+        return _paddingRight;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set paddingRight(value:Number):void
+    {
+        if (_paddingRight == value)
+            return;
+        
+        _paddingRight = value;
+        invalidateTargetSizeAndDisplayList();
+    }    
+    
+    //----------------------------------
+    //  paddingTop
+    //----------------------------------
+    
+    private var _paddingTop:Number = 0;
+    
+    [Inspectable(category="General")]
+    
+    /**
+     *  Number of pixels between the container's top edge
+     *  and the top edge of the first layout element.
+     * 
+     *  @default 0
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    public function get paddingTop():Number
+    {
+        return _paddingTop;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set paddingTop(value:Number):void
+    {
+        if (_paddingTop == value)
+            return;
+        
+        _paddingTop = value;
+        invalidateTargetSizeAndDisplayList();
+    }    
+    
+    //----------------------------------
+    //  paddingBottom
+    //----------------------------------
+    
+    private var _paddingBottom:Number = 0;
+    
+    [Inspectable(category="General")]
+    
+    /**
+     *  Number of pixels between the container's bottom edge
+     *  and the bottom edge of the last layout element.
+     * 
+     *  @default 0
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    public function get paddingBottom():Number
+    {
+        return _paddingBottom;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set paddingBottom(value:Number):void
+    {
+        if (_paddingBottom == value)
+            return;
+        
+        _paddingBottom = value;
+        invalidateTargetSizeAndDisplayList();
+    }
+    
     //----------------------------------
     //  horizontalAlign
     //----------------------------------
@@ -626,7 +773,7 @@ public class TileLayout extends LayoutBase
      *  the last fully visible row bottom edge aligns with the container's bottom edge.  Note that
      *  explicitly setting the <code>rowHeight</code> does not turn off justification, but 
      *  determines the initial row height value.
-     *  Justification can then increases it.</p>
+     *  Justification can then increase it.</p>
      *
      *  @see #verticalGap
      *  @see #rowHeight
@@ -809,6 +956,8 @@ public class TileLayout extends LayoutBase
     /**
      *  This method is called from measure() and updateDisplayList() to calculate the
      *  actual values for columnWidth, rowHeight, columnCount, rowCount, horizontalGap and verticalGap.
+     *  The width and height should include padding because the padding is accounted for in
+     *  the calculations.
      *
      *  @param width - the width during measure() is the layout target explicitWidth or NaN
      *  and during updateDisplayList() is the unscaledWidth.
@@ -822,37 +971,46 @@ public class TileLayout extends LayoutBase
      */
     private function updateActualValues(width:Number, height:Number):void
     {
+        var widthMinusPadding:Number = width - paddingLeft - paddingRight;
+        var heightMinusPadding:Number = height - paddingTop - paddingBottom;
+        
         // First, figure the tile size
         calculateTileSize();
 
         // Second, figure out number of rows/columns
         var elementCount:int = calculateElementCount();
-        calculateColumnAndRowCount(width, height, elementCount);
+        calculateColumnAndRowCount(widthMinusPadding, heightMinusPadding, elementCount);
 
         // Third, adjust the gaps and column and row sizes based on justification settings
         _horizontalGap = explicitHorizontalGap;
         _verticalGap = explicitVerticalGap;
 
         // Justify
-        switch (columnAlign)
-        {
-            case ColumnAlign.JUSTIFY_USING_GAP:
-                _horizontalGap = justifyByGapSize(width, _columnWidth, _horizontalGap, _columnCount);
-            break;
-            case ColumnAlign.JUSTIFY_USING_WIDTH:
-                _columnWidth = justifyByElementSize(width, _columnWidth, _horizontalGap, _columnCount);
-            break;
-        }
+		if (!isNaN(width))
+		{
+            switch (columnAlign)
+            {
+                case ColumnAlign.JUSTIFY_USING_GAP:
+                    _horizontalGap = justifyByGapSize(widthMinusPadding, _columnWidth, _horizontalGap, _columnCount);
+                    break;
+                case ColumnAlign.JUSTIFY_USING_WIDTH:
+                    _columnWidth = justifyByElementSize(widthMinusPadding, _columnWidth, _horizontalGap, _columnCount);
+                    break;
+	        }
+		}
 
-        switch (rowAlign)
-        {
-            case RowAlign.JUSTIFY_USING_GAP:
-                _verticalGap = justifyByGapSize(height, _rowHeight, _verticalGap, _rowCount);
-            break;
-            case RowAlign.JUSTIFY_USING_HEIGHT:
-                _rowHeight = justifyByElementSize(height, _rowHeight, _verticalGap, _rowCount);
-            break;
-        }
+		if (!isNaN(height))
+		{
+            switch (rowAlign)
+            {
+                case RowAlign.JUSTIFY_USING_GAP:
+                    _verticalGap = justifyByGapSize(heightMinusPadding, _rowHeight, _verticalGap, _rowCount);
+                    break;
+                case RowAlign.JUSTIFY_USING_HEIGHT:
+                    _rowHeight = justifyByElementSize(heightMinusPadding, _rowHeight, _verticalGap, _rowCount);
+                    break;
+	        }
+		}
 
         // Last, if we have explicit overrides for both rowCount and columnCount, then
         // make sure that column/row count along the minor axis reflects the actual count.
@@ -886,6 +1044,8 @@ public class TileLayout extends LayoutBase
      *  Calculates _columnCount and _rowCount based on width, height,
      *  orientation, _requestedColumnCount, _requestedRowCount, _columnWidth, _rowHeight.
      *  _columnWidth and _rowHeight must be valid before calling.
+     * 
+     *  The width and height should not include padding.
      */
     private function calculateColumnAndRowCount(width:Number, height:Number, elementCount:int):void
     {
@@ -1212,15 +1372,15 @@ public class TileLayout extends LayoutBase
 
         var layoutTarget:GroupBase = target;
         var eltCount:int = layoutTarget.numElements;
-        visibleStartX = 0;   // initial values for xPos,yPos in updateDisplayList
-        visibleStartY = 0;
+        visibleStartX = paddingLeft;   // initial values for xPos,yPos in updateDisplayList
+        visibleStartY = paddingTop;
         visibleStartIndex = 0;
         visibleEndIndex = eltCount - 1;
 
         if (useVirtualLayout)
         {
-            var hsp:Number = layoutTarget.horizontalScrollPosition;
-            var vsp:Number = layoutTarget.verticalScrollPosition;
+            var hsp:Number = layoutTarget.horizontalScrollPosition - paddingLeft;
+            var vsp:Number = layoutTarget.verticalScrollPosition - paddingTop;
             var cwg:Number = _columnWidth + _horizontalGap;
             var rwg:Number = _rowHeight + _verticalGap;
             
@@ -1233,13 +1393,13 @@ public class TileLayout extends LayoutBase
             {
                 visibleStartIndex = (visibleRow0 * _columnCount);
                 visibleEndIndex = Math.min(eltCount - 1, (visibleRow1 * _columnCount) + visibleCol1); 
-                visibleStartY = visibleRow0 * rwg;
+                visibleStartY = visibleRow0 * rwg + paddingTop;
             }
             else
             {
                 visibleStartIndex = (visibleCol0 * _rowCount);
                 visibleEndIndex = Math.min(eltCount - 1, (visibleCol1 * _rowCount) + visibleRow1);
-                visibleStartX = visibleCol0 * cwg;                
+                visibleStartX = visibleCol0 * cwg + paddingLeft;       
             }
         }
     }
@@ -1249,7 +1409,7 @@ public class TileLayout extends LayoutBase
      *  This method is called by updateDisplayList() after initial values for 
      *  visibleStartIndex, visibleEndIndex have been calculated.  We 
      *  re-calculateDisplayParameters() to account for the possibility that
-     *  larger cells may have been exposed.  Since tileWdth,Height can only
+     *  larger cells may have been exposed.  Since tileWidth,Height can only
      *  increase, the new visibleStart,EndIndex values will be greater than or
      *  equal to the old ones. 
      */
@@ -1272,10 +1432,9 @@ public class TileLayout extends LayoutBase
                 i = visibleEndIndex;
                 continue;
             } 
-            var el:ILayoutElement = layoutTarget.getVirtualElementAt(i);
+            var el:ILayoutElement = layoutTarget.getElementAt(i);
             if (!el)
                 continue;
-            el.setLayoutBoundsSize(0, 0);
             if (el is IVisualElement)
                 IVisualElement(el).visible = false; 
         }
@@ -1362,7 +1521,10 @@ public class TileLayout extends LayoutBase
      */
     final private function leftEdge(columnIndex:int):Number
     {
-        return Math.max(0, columnIndex * (_columnWidth + _horizontalGap));
+        if (columnIndex < 0)
+            return 0;
+        
+        return Math.max(0, columnIndex * (_columnWidth + _horizontalGap)) + paddingLeft;
     }
 
     /**
@@ -1371,7 +1533,10 @@ public class TileLayout extends LayoutBase
      */
     final private function rightEdge(columnIndex:int):Number
     {
-        return Math.min(target.contentWidth, columnIndex * (_columnWidth + _horizontalGap) + _columnWidth);
+        if (columnIndex < 0)
+            return 0;
+        
+        return Math.min(target.contentWidth, columnIndex * (_columnWidth + _horizontalGap) + _columnWidth) + paddingLeft;
     }
 
     /**
@@ -1380,7 +1545,10 @@ public class TileLayout extends LayoutBase
      */
     final private function topEdge(rowIndex:int):Number
     {
-        return Math.max(0, rowIndex * (_rowHeight + _verticalGap));
+        if (rowIndex < 0)
+            return 0;
+        
+        return Math.max(0, rowIndex * (_rowHeight + _verticalGap)) + paddingTop;
     }
 
     /**
@@ -1389,7 +1557,10 @@ public class TileLayout extends LayoutBase
      */
     final private function bottomEdge(rowIndex:int):Number
     {
-        return Math.min(target.contentHeight, rowIndex * (_rowHeight + _verticalGap) + _rowHeight);
+        if (rowIndex < 0)
+            return 0;
+        
+        return Math.min(target.contentHeight, rowIndex * (_rowHeight + _verticalGap) + _rowHeight) + paddingTop;
     }
     
     /**
@@ -1436,7 +1607,6 @@ public class TileLayout extends LayoutBase
             layoutTarget.invalidateDisplayList();
     }
 
-
     /**
      *  @private
      */
@@ -1451,24 +1621,34 @@ public class TileLayout extends LayoutBase
         // For measure, any explicit overrides for rowCount and columnCount take precedence
         var columnCount:int = _requestedColumnCount != -1 ? Math.max(1, _requestedColumnCount) : _columnCount;
         var rowCount:int = _requestedRowCount != -1 ? Math.max(1, _requestedRowCount) : _rowCount;
-
-        if (columnCount == 0)
-            layoutTarget.measuredWidth = layoutTarget.measuredMinWidth = 0;
-        else
+        
+        var measuredWidth:Number = 0;
+        var measuredMinWidth:Number = 0;
+        var measuredHeight:Number = 0;
+        var measuredMinHeight:Number = 0;
+        
+        if (columnCount > 0)
         {
-            layoutTarget.measuredWidth = Math.ceil(columnCount * (_columnWidth + _horizontalGap) - _horizontalGap);
+            measuredWidth = Math.ceil(columnCount * (_columnWidth + _horizontalGap) - _horizontalGap)
             // measured min size is guaranteed to have enough columns to fit all elements
-            layoutTarget.measuredMinWidth = Math.ceil(_columnCount * (_columnWidth + _horizontalGap) - _horizontalGap);
+            measuredMinWidth = Math.ceil(_columnCount * (_columnWidth + _horizontalGap) - _horizontalGap);
         }
             
-        if (rowCount == 0)
-            layoutTarget.measuredHeight = layoutTarget.measuredMinHeight = 0;        
-        else
+        if (rowCount > 0)
         {
-            layoutTarget.measuredHeight = Math.ceil(rowCount * (_rowHeight + _verticalGap) - _verticalGap);
+            measuredHeight = Math.ceil(rowCount * (_rowHeight + _verticalGap) - _verticalGap);
             // measured min size is guaranteed to have enough rows to fit all elements
-            layoutTarget.measuredMinHeight = Math.ceil(_rowCount * (_rowHeight + _verticalGap) - _verticalGap);
+            measuredMinHeight = Math.ceil(_rowCount * (_rowHeight + _verticalGap) - _verticalGap);
         }
+		_numElementsCached = -1;
+        
+        var hPadding:Number = paddingLeft + paddingRight;
+        var vPadding:Number = paddingTop + paddingBottom;
+
+        layoutTarget.measuredWidth = measuredWidth + hPadding;
+        layoutTarget.measuredMinWidth = measuredMinWidth + hPadding;
+        layoutTarget.measuredHeight = measuredHeight + vPadding;
+        layoutTarget.measuredMinHeight = measuredMinHeight + vPadding;
     }
 
     /**
@@ -1667,15 +1847,18 @@ public class TileLayout extends LayoutBase
             // Make sure we don't return an index for an empty space in the last row.
             // newRow is guaranteed to be greater than zero:
             
-            // Step 1: We can end up at the empty space in the last row if we moved right from
-            // the last item.
-            if (currentIndex == maxIndex && newColumn > currentColumn)
-                newColumn = currentColumn;
-                
-            // Step 2: We can end up at the empty space in the last row if we moved down from
-            // the previous row.    
-            if (newRow == rowCount - 1 && newColumn > maxIndex - columnCount * (rowCount - 1))
-                newRow--;
+            if (newRow == rowCount - 1)
+            {
+                // Step 1: We can end up at the empty space in the last row if we moved right from
+                // the last item.
+                if (currentIndex == maxIndex && newColumn > currentColumn)
+                    newColumn = currentColumn;
+                    
+                // Step 2: We can end up at the empty space in the last row if we moved down from
+                // the previous row.    
+                if (newColumn > maxIndex - columnCount * (rowCount - 1))
+                    newRow--;
+            }
 
             return newRow * columnCount + newColumn;
         }
@@ -1683,16 +1866,19 @@ public class TileLayout extends LayoutBase
         {
             // Make sure we don't return an index for an empty space in the last column.
             // newColumn is guaranteed to be greater than zero:
-
-            // Step 1: We can end up at the empty space in the last column if we moved down from
-            // the last item.
-            if (currentIndex == maxIndex && newRow > currentRow)
-                newRow = currentRow;
-
-            // Step 2: We can end up at the empty space in the last column if we moved right from
-            // the previous column.    
-            if (newColumn == columnCount - 1 && newRow > maxIndex - rowCount * (columnCount - 1))
-                newColumn--;
+            
+            if (newColumn == columnCount - 1)
+            {
+                // Step 1: We can end up at the empty space in the last column if we moved down from
+                // the last item.
+                if (currentIndex == maxIndex && newRow > currentRow)
+                    newRow = currentRow;
+                
+                // Step 2: We can end up at the empty space in the last column if we moved right from
+                // the previous column.    
+                if (newRow > maxIndex - rowCount * (columnCount - 1))
+                    newColumn--;
+            }
 
             return newColumn * rowCount + newRow;
         }
@@ -1712,8 +1898,8 @@ public class TileLayout extends LayoutBase
             updateVirtualLayout(unscaledWidth, unscaledHeight);  // re-calculateDisplayParameters()
         
         // Upper right hand corner of first (visibleStartIndex) tile/cell
-        var xPos:Number = visibleStartX;  // 0 if useVirtualLayout=false
-        var yPos:Number = visibleStartY;  // ...
+        var xPos:Number = visibleStartX;  // paddingLeft if useVirtualLayout=false
+        var yPos:Number = visibleStartY;  // paddingTop if useVirtualLayout=false
                 
         // Use MajorDelta when moving along the major axis
         var xMajorDelta:Number;
@@ -1779,21 +1965,24 @@ public class TileLayout extends LayoutBase
                 counter = 0;
                 if (orientation == TileOrientation.ROWS)
                 {
-                    xPos = 0;
+                    xPos = paddingLeft;
                     yPos += yMinorDelta;
                 }
                 else
                 {
                     xPos += xMinorDelta;
-                    yPos = 0;
+                    yPos = paddingTop;
                 }
             }
         }
 
+        var hPadding:Number = paddingLeft + paddingRight;
+        var vPadding:Number = paddingTop + paddingBottom;
+        
         // Make sure that if the content spans partially over a pixel to the right/bottom,
         // the content size includes the whole pixel.
-        layoutTarget.setContentSize(Math.ceil(_columnCount * (_columnWidth + _horizontalGap) - _horizontalGap),
-                                    Math.ceil(_rowCount * (_rowHeight + _verticalGap) - _verticalGap));
+        layoutTarget.setContentSize(Math.ceil(_columnCount * (_columnWidth + _horizontalGap) - _horizontalGap) + hPadding,
+                                    Math.ceil(_rowCount * (_rowHeight + _verticalGap) - _verticalGap) + vPadding);
 
         // Reset the cache
         if (!useVirtualLayout)
@@ -1842,7 +2031,7 @@ public class TileLayout extends LayoutBase
     {
         var bounds:Rectangle = new Rectangle();
         // Find the column that spans or is to the left of the scrollRect left edge.
-        var column:int = Math.floor((scrollRect.left - 1) / (_columnWidth + _horizontalGap));
+        var column:int = Math.floor((scrollRect.left - 1 - paddingLeft) / (_columnWidth + _horizontalGap));
         bounds.left = leftEdge(column);
         bounds.right = rightEdge(column);
         return bounds;
@@ -1855,7 +2044,7 @@ public class TileLayout extends LayoutBase
     {
         var bounds:Rectangle = new Rectangle();
         // Find the column that spans or is to the right of the scrollRect right edge.
-        var column:int = Math.floor((scrollRect.right + 1 + _horizontalGap) / (_columnWidth + _horizontalGap));
+        var column:int = Math.floor(((scrollRect.right + 1 + _horizontalGap) - paddingLeft) / (_columnWidth + _horizontalGap));
         bounds.left = leftEdge(column);
         bounds.right = rightEdge(column);
         return bounds;
@@ -1868,7 +2057,7 @@ public class TileLayout extends LayoutBase
     {
         var bounds:Rectangle = new Rectangle();
         // Find the row that spans or is above the scrollRect top edge
-        var row:int = Math.floor((scrollRect.top - 1) / (_rowHeight + _verticalGap));
+        var row:int = Math.floor((scrollRect.top - 1 - paddingTop) / (_rowHeight + _verticalGap));
         bounds.top = topEdge(row);
         bounds.bottom = bottomEdge(row);
         return bounds;
@@ -1881,7 +2070,7 @@ public class TileLayout extends LayoutBase
     {
         var bounds:Rectangle = new Rectangle();
         // Find the row that spans or is below the scrollRect bottom edge
-        var row:int = Math.floor((scrollRect.bottom + 1 + _verticalGap) / (_rowHeight + _verticalGap));
+        var row:int = Math.floor(((scrollRect.bottom + 1 + _verticalGap) - paddingTop) / (_rowHeight + _verticalGap));
         bounds.top = topEdge(row);
         bounds.bottom = bottomEdge(row);
         return bounds;
@@ -1911,15 +2100,17 @@ public class TileLayout extends LayoutBase
     
     /**
      *  @private 
-     *  Calculates the column and row and returns the corrsponding cell index.
+     *  Calculates the column and row and returns the corresponding cell index.
      *  Index may be out of range if there's no element for the cell.
      */
     private function calculateDropCellIndex(x:Number, y:Number):Array
     {
-        var column:int = Math.floor(x / (_columnWidth + _horizontalGap));
-        var row:int = Math.floor(y / (_rowHeight + _verticalGap));
+        var xStart:Number = x - paddingLeft;
+        var yStart:Number = y - paddingTop;
+        var column:int = Math.floor(xStart / (_columnWidth + _horizontalGap));
+        var row:int = Math.floor(yStart / (_rowHeight + _verticalGap));
         
-        // Check whehter x is closer to left column or right column:
+        // Check whether x is closer to left column or right column:
         var midColumnLine:Number;
         var midRowLine:Number
         
@@ -1941,9 +2132,9 @@ public class TileLayout extends LayoutBase
             midRowLine = (row + 1) * (_rowHeight + _verticalGap) - _verticalGap - _rowHeight / 2; 
         }
         
-        if (x > midColumnLine)
+        if (xStart > midColumnLine)
             column++;
-        if (y > midRowLine)
+        if (yStart > midRowLine)
             row++;
         
         // Limit row and column, if any one is too far from the drop location
@@ -2069,11 +2260,11 @@ public class TileLayout extends LayoutBase
                                           dropIndicatorElement.getMinBoundsWidth(false));
             }
             
-            x = emptySpaceLeft + Math.round((emptySpace - width) / 2);
+            x = emptySpaceLeft + Math.round((emptySpace - width) / 2) + paddingLeft;
             // Allow 1 pixel overlap with container border
             x = Math.max(-1, Math.min(target.contentWidth - width + 1, x));
 
-            y = row * (_rowHeight + _verticalGap);
+            y = row * (_rowHeight + _verticalGap) + paddingTop;
         }
         else
         {
@@ -2100,9 +2291,9 @@ public class TileLayout extends LayoutBase
                                            dropIndicatorElement.getMinBoundsWidth(false));
             }
 
-            x = column * (_columnWidth + _horizontalGap);
+            x = column * (_columnWidth + _horizontalGap) + paddingLeft;
          
-            y = emptySpaceTop + Math.round((emptySpace - height) / 2);
+            y = emptySpaceTop + Math.round((emptySpace - height) / 2) + paddingTop;
             // Allow 1 pixel overlap with container border
             y = Math.max(-1, Math.min(target.contentHeight - height + 1, y));
         }

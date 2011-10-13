@@ -13,17 +13,21 @@ package spark.skins.spark
 {
     
 import flash.display.DisplayObject;
+import flash.events.Event;
 import flash.events.MouseEvent;
 import flash.geom.Point;
 
 import mx.controls.listClasses.*;
 import mx.core.IDataRenderer;
+import mx.core.InteractionMode;
 import mx.core.UIComponent;
 import mx.core.mx_internal;
 import mx.events.FlexEvent;
 
 import spark.components.IItemRenderer;
 import spark.components.Label;
+import spark.components.supportClasses.InteractionState;
+import spark.components.supportClasses.InteractionStateDetector;
 import spark.components.supportClasses.TextBase;
 
 use namespace mx_internal;
@@ -58,21 +62,27 @@ include "../../styles/metadata/AdvancedInheritingTextStyles.as"
 include "../../styles/metadata/SelectionFormatTextStyles.as"
 
 /**
- *  The colors to use for the backgrounds of the items in the list. 
- *  The value is an array of two or more colors. 
- *  The backgrounds of the list items alternate among the colors in the array. 
- * 
- *  @default undefined
+ *  @copy spark.components.supportClasses.GroupBase#style:alternatingItemColors
  * 
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="alternatingItemColors", type="Array", arrayType="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="alternatingItemColors", type="Array", arrayType="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
- *  Color of focus ring when the component is in focus
+ *  @copy spark.components.supportClasses.GroupBase#style:downColor
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10.1
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="downColor", type="uint", format="Color", inherit="yes", theme="mobile")]
+
+/**
+ *  @copy spark.components.supportClasses.GroupBase#style:focusColor
  *   
  *  @default 0x70B2EE
  *  
@@ -81,10 +91,10 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
- *  Color of the highlights when the mouse is over the component
+ *  @copy spark.components.supportClasses.GroupBase#style:rollOverColor
  *   
  *  @default 0xCEDBEF
  *  
@@ -96,8 +106,7 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
 [Style(name="rollOverColor", type="uint", format="Color", inherit="yes", theme="spark")]
 
 /**
- *  Color of any symbol of a component. Examples include the check mark of a CheckBox or
- *  the arrow of a scroll button
+ *  @copy spark.components.supportClasses.GroupBase#style:symbolColor
  *   
  *  @default 0x000000
  * 
@@ -106,7 +115,7 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 //--------------------------------------
 //  Excluded APIs
@@ -155,7 +164,9 @@ public class DefaultItemRenderer extends UIComponent
     public function DefaultItemRenderer()
     {
         super();
-        addHandlers();
+        
+        interactionStateDetector = new InteractionStateDetector(this);
+        interactionStateDetector.addEventListener(Event.CHANGE, interactionStateDetector_changeHandler);
     }
     
     //--------------------------------------------------------------------------
@@ -172,9 +183,9 @@ public class DefaultItemRenderer extends UIComponent
     
     /**
      *  @private
-     *  Flag that is set when the mouse is hovered over the item renderer.
+     *  Helper class to help determine when we are in the hovered or down state
      */
-    private var hovered:Boolean = false;
+    private var interactionStateDetector:InteractionStateDetector;
     
     //--------------------------------------------------------------------------
     //
@@ -240,7 +251,8 @@ public class DefaultItemRenderer extends UIComponent
     {
         _data = value;
         
-        dispatchEvent(new FlexEvent(FlexEvent.DATA_CHANGE));
+        if (hasEventListener(FlexEvent.DATA_CHANGE))
+            dispatchEvent(new FlexEvent(FlexEvent.DATA_CHANGE));
     }
     
     //----------------------------------
@@ -469,14 +481,22 @@ public class DefaultItemRenderer extends UIComponent
         
         var backgroundColor:uint;
         var drawBackground:Boolean = true;
-        if (selected)
+        var downColor:* = getStyle("downColor");
+        
+        if (interactionStateDetector.state == InteractionState.DOWN && downColor !== undefined)
+            backgroundColor = downColor;
+        else if (selected)
             backgroundColor = getStyle("selectionColor");
-        else if (hovered)
+        else if (interactionStateDetector.state == InteractionState.OVER)
             backgroundColor = getStyle("rollOverColor");
         else
         {
-            var alternatingColors:Array = getStyle("alternatingItemColors");
-            
+			var alternatingColors:Array;
+			var alternatingColorsStyle:Object = getStyle("alternatingItemColors");
+			
+			if (alternatingColorsStyle)
+				alternatingColors = (alternatingColorsStyle is Array) ? (alternatingColorsStyle as Array) : [alternatingColorsStyle];
+			
             if (alternatingColors && alternatingColors.length > 0)
             {
                 // translate these colors into uints
@@ -527,43 +547,9 @@ public class DefaultItemRenderer extends UIComponent
     
     /**
      *  @private
-     *  Attach the mouse events.
      */
-    private function addHandlers():void
+    private function interactionStateDetector_changeHandler(event:Event):void
     {
-        addEventListener(MouseEvent.ROLL_OVER, itemRenderer_rollOverHandler);
-        addEventListener(MouseEvent.ROLL_OUT, itemRenderer_rollOutHandler);
-    }
-    
-    /**
-     *  @private
-     */
-    private function anyButtonDown(event:MouseEvent):Boolean
-    {
-        var type:String = event.type;
-        return event.buttonDown || (type == "middleMouseDown") || (type == "rightMouseDown"); 
-    }
-    
-    /**
-     *  @private
-     *  Mouse rollOver event handler.
-     */
-    protected function itemRenderer_rollOverHandler(event:MouseEvent):void
-    {
-        if (!anyButtonDown(event))
-        {
-            hovered = true;
-            invalidateDisplayList();
-        }
-    }
-    
-    /**
-     *  @private
-     *  Mouse rollOut event handler.
-     */
-    protected function itemRenderer_rollOutHandler(event:MouseEvent):void
-    {
-        hovered = false;
         invalidateDisplayList();
     }
     

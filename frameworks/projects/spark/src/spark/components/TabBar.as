@@ -53,6 +53,14 @@ use namespace mx_internal;  // ListBase/setCurrentCaretIndex(index);
 [IconFile("TabBar.png")]
 
 /**
+ * Because this component does not define a skin for the mobile theme, Adobe
+ * recommends that you not use it in a mobile application. Alternatively, you
+ * can define your own mobile skin for the component. For more information,
+ * see <a href="http://help.adobe.com/en_US/Flex/4.0/UsingSDK/WS53116913-F952-4b21-831F-9DE85B647C8A.html">Spark Skinning</a>.
+ */
+[DiscouragedForProfile("mobileDevice")]
+
+/**
  *  The TabBar class displays a set of identical tabs.  
  *  One tab can be selected at a time, and the first tab is selected by default.
  *  The TabBarSkin class arranges the tabs in a single row.  
@@ -60,9 +68,8 @@ use namespace mx_internal;  // ListBase/setCurrentCaretIndex(index);
  *  of the tabs.
  * 
  *  <p>The set of tabs is defined by the <code>dataProvider</code> property.
- *  The appearance of each tab is defined by the TabBarSkin class.
- *  By default, each tab is defined as a ButtonBarButton component 
- *  with a skin defined by the TabBarButtonSkin class.</p>
+ *  The appearance of the TabBar is defined by the TabBarSkin class.
+ *  The appearance of each tab is defined by the TabBarButtonSkin class.</p>
  *
  *  <p>You can use the TabBar control to set the active child of a ViewStack container, 
  *  as the following example shows:</p>
@@ -112,7 +119,6 @@ use namespace mx_internal;  // ListBase/setCurrentCaretIndex(index);
  *  @see mx.containers.ViewStack
  *  @see spark.skins.spark.TabBarSkin
  *  @see spark.skins.spark.TabBarButtonSkin
- *  @see spark.components.ButtonBarButton
  * 
  *  @includeExample examples/TabBarExample.mxml
  *  

@@ -9,7 +9,7 @@
 	<key>CFBundleExecutable</key>
 	<string>ExtendedAppEntry</string>
 	<key>CFBundleGetInfoString</key>
-	<string>Adobe AIR 2.0.2</string>
+	<string>Adobe AIR 2.6</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.adobe.air.NativeTemplate</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -17,13 +17,13 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0.2</string>
+	<string>2.6</string>
 	<key>CFBundleVersion</key>
-	<string>2.0.2.12610</string>
+	<string>2.6.0.19120</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>10.4.9</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2007-2010 Adobe Systems Inc.</string>
+	<string>Copyright © 2007-2011 Adobe Systems Inc.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

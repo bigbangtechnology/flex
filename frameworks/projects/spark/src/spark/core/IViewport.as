@@ -206,7 +206,7 @@ public interface IViewport extends IVisualElement
      *  @productversion Flex 4
      */
     function get clipAndEnableScrolling():Boolean;
-    function set clipAndEnableScrolling(value:Boolean):void;    
+    function set clipAndEnableScrolling(value:Boolean):void;
 }
 
 }

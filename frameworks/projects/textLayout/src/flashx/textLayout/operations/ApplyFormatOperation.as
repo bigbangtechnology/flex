@@ -1,27 +1,29 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
 
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.edit.ElementRange;
 	import flashx.textLayout.edit.ParaEdit;
+	import flashx.textLayout.edit.PointFormat;
 	import flashx.textLayout.edit.SelectionState;
+	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.elements.TextFlow;
 	import flashx.textLayout.formats.Category;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
 	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
+
 	use namespace tlf_internal;
 		
 	/**
@@ -141,12 +143,36 @@ package flashx.textLayout.operations
 			// Apply character format
 			if (applyLeafFormat)
 			{
-				if (absoluteStart != absoluteEnd)
+				var begSel:int = absoluteStart;
+				var endSel:int = absoluteEnd;
+				
+				if (absoluteStart == absoluteEnd)
 				{
-					var range:ElementRange = ElementRange.createElementRange(textFlow, absoluteStart,absoluteEnd);
+					// On a caret selection, apply the leaf format to the SelectionManager's pointFormat, so it will be applied to the next insert.
+					// But if the paragraph is empty, go ahead and apply it now to the paragraph terminator.
+					var paragraph:ParagraphElement = textFlow.findLeaf(absoluteStart).getParagraph();
+					if (paragraph.textLength <= 1)
+					{
+						endSel++;
+						anyNewSelectionState = originalSelectionState.clone();
+						anyNewSelectionState.pointFormat = null;
+					}
+					else if (originalSelectionState.selectionManagerOperationState && textFlow.interactionManager)
+					{
+						// on point selection remember pendling leaf formats for next char typed
+						
+						anyNewSelectionState = originalSelectionState.clone();
+						var newFormat:PointFormat = new PointFormat(anyNewSelectionState.pointFormat);
+						newFormat.apply(applyLeafFormat);
+						anyNewSelectionState.pointFormat = newFormat;
+					}
+				}
+				if (begSel != endSel)
+				{
+					var range:ElementRange = ElementRange.createElementRange(textFlow, begSel,endSel);
 					
-					var begSel:int = range.absoluteStart;
-					var endSel:int = range.absoluteEnd;
+					begSel = range.absoluteStart;
+					endSel = range.absoluteEnd;
 					if(endSel == textFlow.textLength - 1)
 						++endSel;
 						
@@ -157,15 +183,6 @@ package flashx.textLayout.operations
 						ParaEdit.cacheStyleInformation(textFlow,begSel,endSel,undoLeafArray);
 					}
 					ParaEdit.applyTextStyleChange(textFlow,begSel,endSel,applyLeafFormat,null);
-				}
-				else if (originalSelectionState.selectionManagerOperationState && textFlow.interactionManager)
-				{
-					// on point selection remember pendling leaf formats for next char typed
-					
-					anyNewSelectionState = originalSelectionState.clone();
-					var newFormat:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder(anyNewSelectionState.pointFormat);
-					newFormat.apply(applyLeafFormat);
-					anyNewSelectionState.pointFormat = newFormat;
 				}
 			}
 
@@ -221,7 +238,7 @@ package flashx.textLayout.operations
 
 			// Undo container format changes
 			for each (obj in undoContainerArray)
-				ParaEdit.setContainerStyleChange(textFlow,obj);
+				ParaEdit.setContainerStyleChange(obj);
 
 			return originalSelectionState;
 		}

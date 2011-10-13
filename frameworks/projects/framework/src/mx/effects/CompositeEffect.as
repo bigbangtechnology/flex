@@ -144,6 +144,8 @@ public class CompositeEffect extends Effect
 
     [Inspectable(category="General", arrayType="mx.effects.Effect")]
     
+    private var _children:Array = [];
+    
     /**
      *  An Array containing the child effects of this CompositeEffect.
      *  
@@ -152,8 +154,6 @@ public class CompositeEffect extends Effect
      *  @playerversion AIR 1.1
      *  @productversion Flex 3
      */
-    private var _children:Array = [];
-    
     public function get children():Array
     {
         return _children;
@@ -313,13 +313,13 @@ public class CompositeEffect extends Effect
                     childEffect.filterObject = filterObject;
                 }
 
-				// TODO (chaase): This doesn't seem good enough...
-				// possibly redundant, but otherwise we'll be using the
-				// old semantics. Might be a better way (e.g., reuse
-				// the same semantics provider). Note that it's been 
+                // TODO (chaase): This doesn't seem good enough...
+                // possibly redundant, but otherwise we'll be using the
+                // old semantics. Might be a better way (e.g., reuse
+                // the same semantics provider). Note that it's been 
                 // working since Flex 3.
                 if (effectTargetHost) // && !childEffect.targetSemantics)
-                	childEffect.effectTargetHost = effectTargetHost;
+                    childEffect.effectTargetHost = effectTargetHost;
                 
                 if (childEffect.targets.length == 0)
                 {
@@ -428,6 +428,21 @@ public class CompositeEffect extends Effect
         }
     }
 
+    /**
+     * @private
+     * Override this property so that we can set it on all child effects
+     */
+    override mx_internal function set transitionInterruption(value:Boolean):void
+    {
+        super.transitionInterruption = value;
+
+        var n:int = children.length;
+        for (var i:int = 0; i < n; i++)
+        {
+            var child:Effect = children[i];            
+            child.transitionInterruption = value;
+        }
+    }
     //--------------------------------------------------------------------------
     //
     //  Methods

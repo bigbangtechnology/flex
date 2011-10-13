@@ -23,10 +23,19 @@ package org.osmf.events
 {
 	import flash.events.Event;
 	
+	[ExcludeClass]
+	
 	/**
+	 * @private
+	 * 
 	 * The BeaconEvent is dispatched by a Beacon when its HTTP request
 	 * either succeeds or fails.
-	 **/
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
 	public class BeaconEvent extends Event
 	{
 		/**
@@ -35,17 +44,27 @@ package org.osmf.events
 		 * event.
 		 * 
 		 * @eventType PING_COMPLETE
-		 **/
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		public static const PING_COMPLETE:String = "pingComplete";
 
 		/**
-		 * The BeaconEvent.PING_FAILED constant defines the value
-		 * of the type property of the event object for a pingFailed
+		 * The BeaconEvent.PING_ERROR constant defines the value
+		 * of the type property of the event object for a pingError
 		 * event.
 		 * 
-		 * @eventType PING_FAILED
-		 **/
-		public static const PING_FAILED:String = "pingFailed";
+		 * @eventType PING_ERROR
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static const PING_ERROR:String = "pingError";
 
 		/**
 		 * Constructor.
@@ -54,8 +73,13 @@ package org.osmf.events
 		 * @param bubbles Specifies whether the event can bubble up the display list hierarchy.
  		 * @param cancelable Specifies whether the behavior associated with the event can be prevented. 
 		 * @param errorText Textual description of the error.  Only valid for
-		 * events of type PING_FAILED.
-		 **/
+		 * events of type PING_ERROR.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		public function BeaconEvent(type:String, bubbles:Boolean=false, cancelable:Boolean=false, errorText:String=null)
 		{
 			super(type, bubbles, cancelable);
@@ -65,8 +89,13 @@ package org.osmf.events
 		
 		/**
 		 * Textual description of the error.  Only valid for events of type
-		 * PING_FAILED.
-		 **/
+		 * PING_ERROR.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		public function get errorText():String
 		{
 			return _errorText;

@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.formats
 {
 	/**
@@ -124,6 +124,19 @@ package flashx.textLayout.formats
 	 	 * @langversion 3.0 
 		 */
 		public static const APPROXIMATE_TEXT_FIELD:String = "approximateTextField";
+		
+		/**  Specifies a leading model based on the CSS inline formatting model, which involves stacking <i>line boxes</i> contiguously.
+		 * A <i>line box</i> is defined as the bounding box around <i>inline boxes</i> for all leaf elements on the text line, after they have been aligned
+		 * using <code>baselineShift</code>, <code>dominantBaseline</code>, <code>alignmentBaseline</code> etc. For a span, the <i>inline box</i> 
+		 * is obtained by applying leading equally above and below the text content such that its height equals <code>lineHeight</code>.
+		 * For an inline graphic, <code>lineHeight</code> is ignored; the <i>inline box</i> is derived from its specified dimensions and padding values.
+		 * Also, <code>firstBaselineOffset</code> is ignored with this leading model.
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0 
+		 */
+		public static const BOX:String = "box";
 		
 	}
 }

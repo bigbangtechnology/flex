@@ -1,16 +1,17 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
 	import flash.display.DisplayObjectContainer;
+	import flash.events.IEventDispatcher;
 	import flash.utils.Dictionary;
 	import flash.utils.getDefinitionByName;
 	import flash.utils.getQualifiedClassName;
@@ -20,11 +21,10 @@ package flashx.textLayout.elements
 	import flashx.textLayout.debug.Debugging;
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.events.ModelChange;
-	import flashx.textLayout.formats.FlowElementDisplayType;
 	import flashx.textLayout.formats.FormatValue;
 	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.ListMarkerFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
 	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 	
@@ -62,15 +62,15 @@ package flashx.textLayout.elements
 		private var _parent:FlowGroupElement;
 		
 		/** format settings on this FlowElement. @private */
-		tlf_internal var _formatValueHolder:FlowValueHolder;
+		private var _format:FlowValueHolder;
 		
 		/** @private computed formats applied to the element */
-		protected var _computedFormat:TextLayoutFormatValueHolder;
+		protected var _computedFormat:TextLayoutFormat;
 			
-		/** start, _start of element, relative to parent.  */
+		/** start, _start of element, relative to parent; tlf_internal to eliminate getter calls  */
 		private var _parentRelativeStart:int = 0;		
 		
-		/** _textLength (number of chars) in the element, including child content */
+		/** _textLength (number of chars) in the element, including child content; tlf_internal to eliminate getter calls */
 		private var _textLength:int = 0;	
 	
 		/** Base class - invoking <code>new FlowElement()</code> throws an error exception.
@@ -107,7 +107,7 @@ package flashx.textLayout.elements
 		}
 		
 		/** Allows you to read and write user styles on a FlowElement object.  Note that reading this property
-		* makes a copy of the user-styles dictionary. 
+		* makes a copy of the userStyles set in the format of this element. 
 		*
 		* @playerversion Flash 10
 		* @playerversion AIR 1.5
@@ -115,79 +115,58 @@ package flashx.textLayout.elements
 		*
 		*/
 		public function get userStyles():Object
-		{
-			var styles:Object = _formatValueHolder == null ? null : _formatValueHolder.userStyles;
-			return styles ? Property.shallowCopy(styles) : null;
-		}
+		{ return _format ? _format.userStyles : null; }
 		public function set userStyles(styles:Object):void
 		{
-			var newStyles:Object;
-			if (styles)
+			var val:String;
+			// clear the existing userstyles
+			for (val in userStyles)
+				this.setStyle(val,undefined);
+			
+			// set the new ones
+			for (val in styles)
 			{
-				newStyles = new Object();
-				for (var val:Object in styles)
-					newStyles[val] = styles[val];
+				if (!TextLayoutFormat.description.hasOwnProperty(val))
+					this.setStyle(val,styles[val]);
 			}
-			writableTextLayoutFormatValueHolder().userStyles = newStyles;
-			modelChanged(ModelChange.USER_STYLE_CHANGED,0,this.textLength,true);
 		}
 		
-		/** Returns the core styles on a FlowElement instance. Returns a copy of the core styles. 
-		 *  
-		 *
+		/** Returns the <code>coreStyles</code> on this FlowElement.  Note that the getter makes a copy of the core 
+		 * styles dictionary. The coreStyles object encapsulates the formats that are defined by TextLayoutFormat and are in TextLayoutFormat.description. The
+		 * <code>coreStyles</code> object consists of an array of <em>stylename-value</em> pairs.
+		 * 
+		 * @see flashx.textLayout.formats.TextLayoutFormat
+		 * 
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
-	 	 * @langversion 3.0
-		 *
+		 * @langversion 3.0
 		 */
-		 
 		public function get coreStyles():Object
-		{
-			var styles:Object = _formatValueHolder == null ? null : _formatValueHolder.coreStyles;
-			return styles ? Property.shallowCopy(styles) : null;
-		}
+		{ return _format ? _format.coreStyles : null; }
 		
+		/** Returns the styles on this FlowElement.  Note that the getter makes a copy of the  
+		 * styles dictionary. The returned object encapsulates all styles set in the format property including core and user styles. The
+		 * returned object consists of an array of <em>stylename-value</em> pairs.
+		 * 
+		 * @see flashx.textLayout.formats.TextLayoutFormat
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 */
+		public function get styles():Object
+		{ return _format ? _format.styles : null; }
+
 		/** @private */
-		tlf_internal function setCoreStylesInternal(styles:Object):void
+		tlf_internal function setStylesInternal(styles:Object):void
 		{
-			var newStyles:Object;
 			if (styles)
-			{
-				newStyles = new Object();
-				for (var val:Object in styles)
-				{
-					var value:* = styles[val];
-					if (value != undefined)
-						newStyles[val] = value;
-				}
-			}
-			writableTextLayoutFormatValueHolder().coreStyles = newStyles;
+				writableTextLayoutFormat().setStyles(Property.shallowCopy(styles),false);
+			else if (_format)
+				_format.clearStyles();
+				
 			formatChanged();		
 		}
-		
-
-		public function set linkNormalFormat(value:*):void
-		{ setStyle(LinkElement.LINK_NORMAL_FORMAT_NAME,value); }
-		/** Defines the formatting attributes used for links in normal state. This value will cascade down the hierarchy and apply to any links that are descendants.
-		 * Equivalent to setStyle(linkNormalFormat,value).  Expects a dictionary of properties.  Converts an array of objects with key and value as members to a dictionary. */
-		public function get linkNormalFormat():*
-		{ return getStyle(LinkElement.LINK_NORMAL_FORMAT_NAME); }
-		
-
-		public function set linkActiveFormat(value:*):void
-		{ setStyle(LinkElement.LINK_ACTIVE_FORMAT_NAME,value); }
-		/** Defines the formatting attributes used for links in active state, when the mouse is down on a link. This value will cascade down the hierarchy and apply to any links that are descendants.
-		 * Equivalent to setStyle(linkActiveFormat,value).  Expects a dictionary of properties.  Converts an array of objects with key and value as members to a dictionary. */
-		public function get linkActiveFormat():*
-		{ return getStyle(LinkElement.LINK_ACTIVE_FORMAT_NAME); }
-		
-
-		public function set linkHoverFormat(value:*):void
-		{ setStyle(LinkElement.LINK_HOVER_FORMAT_NAME,value); }
-		/** Defines the formatting attributes used for links in hover state, when the mouse is within the bounds (rolling over) a link. This value will cascade down the hierarchy and apply to any links that are descendants.
-		 * Equivalent to setStyle(linkHoverFormat,value).  Expects a dictionary of properties.  Converts an array of objects with key and value as members to a dictionary. */
-		public function get linkHoverFormat():*
-		{ return getStyle(LinkElement.LINK_HOVER_FORMAT_NAME); }
 		
 		/** Compare the userStyles of this with otherElement's userStyles. 
 		 *
@@ -207,15 +186,13 @@ package flashx.textLayout.elements
 		 */
 		public function equalUserStyles(otherElement:FlowElement):Boolean
 		{
-			var myStyles:Object = _formatValueHolder ? _formatValueHolder.userStyles : null;
-			var elemStyles:Object = otherElement._formatValueHolder ? otherElement._formatValueHolder.userStyles : null;
-			return Property.equalStyleObjects(myStyles,elemStyles);
+			return Property.equalStyles(this.userStyles,otherElement.userStyles,null);
 		}
 		
 		/** @private Compare the styles of two elements for merging.  Return true if they can be merged. */
 		tlf_internal function equalStylesForMerge(elem:FlowElement):Boolean
 		{
-			return this.id == elem.id && this.styleName == elem.styleName && TextLayoutFormat.isEqual(elem.format,format) && equalUserStyles(elem);
+			return this.id == elem.id && this.typeName == elem.typeName && TextLayoutFormat.isEqual(elem.format,format);
 		}
 		
 		/**
@@ -240,15 +217,15 @@ package flashx.textLayout.elements
 	 	 */
 		 
 		public function shallowCopy(relativeStart:int = 0, relativeEnd:int = -1):FlowElement
-		{
-			if (relativeEnd == -1)
-				relativeEnd = textLength;
-				
+		{		
 			var retFlow:FlowElement = new (getDefinitionByName(getQualifiedClassName(this)) as Class);
-			retFlow.styleName = styleName;
-			retFlow.id = id;	// ???? copy me ?????
-			if (_formatValueHolder !=  null)
-				retFlow._formatValueHolder = new FlowValueHolder(_formatValueHolder);
+			if (_format !=  null)
+				retFlow._format = new FlowValueHolder(_format);
+			
+			CONFIG::debug { assert(retFlow.styleName == styleName,"Failed top copy styleName"); }
+			CONFIG::debug { assert(retFlow.typeName == typeName,"Failed top copy typeName"); }
+			CONFIG::debug { assert(retFlow.id == id,"Failed top copy id"); }
+
 			return retFlow;
 		}
 
@@ -274,7 +251,7 @@ package flashx.textLayout.elements
 		public function deepCopy(relativeStart:int = 0, relativeEnd:int = -1):FlowElement
 		{
 			if (relativeEnd == -1)
-				relativeEnd = textLength;
+				relativeEnd = _textLength;
 				
 			return shallowCopy(relativeStart, relativeEnd);
 		}
@@ -315,7 +292,7 @@ package flashx.textLayout.elements
 		 
 		public function splitAtPosition(relativePosition:int):FlowElement
 		{
-			if ((relativePosition < 0) || (relativePosition > textLength))
+			if ((relativePosition < 0) || (relativePosition > _textLength))
 				throw RangeError(GlobalSettings.resourceStringFunction("invalidSplitAtPosition"));
 			return this;
 		}
@@ -356,14 +333,6 @@ package flashx.textLayout.elements
 			CONFIG::debug { assert(false,"invalid call to createContentElement"); }
 		}
 
-		/** @private 
-		 * True if it is safe to release the corresponding FTE data structure.
-		 */
-		tlf_internal function canReleaseContentElement():Boolean
-		{
-			return true;
-		}
-		
 		/** Returns the parent of this FlowElement object. Every FlowElement has at most one parent.
 		*
 		* @playerversion Flash 10
@@ -372,15 +341,18 @@ package flashx.textLayout.elements
 	 	*/
 	 	
 		public function get parent():FlowGroupElement
-		{ return _parent; }
+		{ 
+			// must be final to prevent overrides for safe internal access to _parent
+			return _parent; 
+		}
 		
-		/** parent setter. @private */
+		/** @private parent setter. */
 		
 		tlf_internal function setParentAndRelativeStart(newParent:FlowGroupElement,newStart:int):void
 		{ _parent = newParent; _parentRelativeStart = newStart; attributesChanged(false); }
 		
 				
-		/** Used when the textBlock.content is already correctly configured. @private */
+		/** @private Used when the textBlock.content is already correctly configured. */
 		tlf_internal function setParentAndRelativeStartOnly(newParent:FlowGroupElement,newStart:int):void
 		{ _parent = newParent;  _parentRelativeStart = newStart; }
 			
@@ -403,7 +375,7 @@ package flashx.textLayout.elements
 		public function get textLength():int
 		{ return _textLength; }
 		
-		/** textLength setter.  @private */
+		/** @private textLength setter.  */
 		tlf_internal function setTextLength(newLength:int):void
 		{ _textLength = newLength; }	
 		
@@ -420,9 +392,12 @@ package flashx.textLayout.elements
 		 */
 		 
 		public function get parentRelativeStart():int
-		{ return _parentRelativeStart; }
+		{
+			// make final to prevent overrides and enable direct internal read access
+			return _parentRelativeStart; 
+		}
 		
-		/** start setter. @private */
+		/** @private start setter. */
 		tlf_internal function setParentRelativeStart(newStart:int):void
 		{ _parentRelativeStart = newStart; }
 		
@@ -486,7 +461,7 @@ package flashx.textLayout.elements
 		 * @param styleName	name of the property
 		 */
 		tlf_internal function getPrivateStyle(styleName:String):*
-		{ return _formatValueHolder ? _formatValueHolder.getPrivateData(styleName) : undefined; }
+		{ return _format ? _format.getPrivateData(styleName) : undefined; }
 
 		/**
 		 * @private
@@ -498,8 +473,8 @@ package flashx.textLayout.elements
 		{
 			if (getPrivateStyle(styleName) != val)
 			{
-				writableTextLayoutFormatValueHolder().setPrivateData(styleName,val);
-				modelChanged(ModelChange.STYLE_SELECTOR_CHANGED,0,this.textLength);
+				writableTextLayoutFormat().setPrivateData(styleName,val);
+				modelChanged(ModelChange.STYLE_SELECTOR_CHANGED,this,0,this._textLength);
 			}
 		}
 		
@@ -525,20 +500,37 @@ package flashx.textLayout.elements
 		public function set id(val:String):void
 		{ return setPrivateStyle(idString, val);	}
 		
-		private static const styleNameString:String ="styleName";
+		private static const typeNameString:String ="typeName";
 
 		/**
-		 * Assigns an identifying class to the element, making it possible to set a style for the element
-		 * by referencing the <code>styleName</code>. 
+		 * Each FlowElement has a <code>typeName</code>.  <code>typeName</code> defaults to the string the <code>textLayoutFormat</code> TextConverter uses.  This API
+		 * can be used to set a different <code>typeName</code> to a <code>FlowElement</code>.  Typically this is done to support <code>type</code> selectors in CSS.  
+		 * 
+		 * <p>See the <code>TEXT_FIELD_HTML_FORMAT</code> documentation for how this used..</p>
+		 * 
+		 * @see flashx.textLayout.conversion.TextConverter
+		 * @see flashx.textLayout.conversion.TextConverter#TEXT_FIELD_HTML_FORMAT
+		 * @see flashx.textLayout.conversion.IHTMLImporter
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
 		 * @langversion 3.0
 		 */
-		public function get styleName():String
-		{ return getPrivateStyle(styleNameString); }
-		public function set styleName(val:String):void
-		{ return setPrivateStyle(styleNameString, val);	}
+		public function get typeName():String
+		{ 
+			var typeName:String = getPrivateStyle(typeNameString); 
+			return typeName ? typeName : defaultTypeName;
+		}
+		public function set typeName(val:String):void
+		{ 
+			// extra testing here to avoid saving defaultTypeName in privateStyles
+			if (val != typeName)
+				setPrivateStyle(typeNameString, val == defaultTypeName ? undefined : val);
+		}
+		
+		/** @private */
+		tlf_internal function get defaultTypeName():String
+		{ return null; }
 		
 		private static const impliedElementString:String = "impliedElement";
 		/** @private */
@@ -546,9 +538,11 @@ package flashx.textLayout.elements
 		{
 			return getPrivateStyle(impliedElementString) !== undefined;
 		}
-		tlf_internal function set impliedElement(value:Boolean):void
+		/** @private */		
+		tlf_internal function set impliedElement(value:*):void
 		{
-			setPrivateStyle(impliedElementString, "true");
+			CONFIG::debug { assert(value === true || value === undefined,"Bad value to FlowElement.impliedElement"); }
+			setPrivateStyle(impliedElementString, value);
 		}
 				
 		// **************************************** 
@@ -561,25 +555,30 @@ package flashx.textLayout.elements
 		 * @see flashx.textLayout.formats.ITextLayoutFormat
 		 */
 		public function get format():ITextLayoutFormat
-		{ return _formatValueHolder; }
+		{ return _format; }
 		public function set format(value:ITextLayoutFormat):void
 		{
+			if (value == _format)
+				return;
+			
+			var oldStyleName:String = this.styleName;
+			
 			if (value == null)
-			{
-				if (_formatValueHolder == null || _formatValueHolder.coreStyles == null)
-					return; // no change
-				_formatValueHolder.coreStyles = null;
-			}
+				_format.clearStyles();
 			else
-				writableTextLayoutFormatValueHolder().format = value;
+				writableTextLayoutFormat().copy(value);
 			formatChanged();
+			
+			if (oldStyleName != this.styleName)
+				styleSelectorChanged();
 		}
 		
-		private function writableTextLayoutFormatValueHolder():FlowValueHolder
+		/** @private */
+		tlf_internal function writableTextLayoutFormat():FlowValueHolder
 		{
-			if (_formatValueHolder == null)
-				_formatValueHolder = new FlowValueHolder();
-			return _formatValueHolder;
+			if (_format == null)
+				_format = new FlowValueHolder();
+			return _format;
 		}
 
 		/** This gets called when an element has changed its attributes. This may happen because an
@@ -589,8 +588,18 @@ package flashx.textLayout.elements
 		tlf_internal function formatChanged(notifyModelChanged:Boolean = true):void
 		{
 			if (notifyModelChanged)
-				modelChanged(ModelChange.TEXTLAYOUT_FORMAT_CHANGED,0,textLength);
-			// wipe out whatever values were cached
+				modelChanged(ModelChange.TEXTLAYOUT_FORMAT_CHANGED,this,0,_textLength);
+			// require recompute of computedFormat
+			_computedFormat = null;
+		}
+		
+		/** This gets called when an element has changed its style selection related attributes. This may happen because an
+		 * ancestor element changed it attributes.
+		 * @private 
+		 */		
+		tlf_internal function styleSelectorChanged():void
+		{
+			modelChanged(ModelChange.STYLE_SELECTOR_CHANGED,this,0,this._textLength);
 			_computedFormat = null;
 		}
 		
@@ -601,29 +610,29 @@ package flashx.textLayout.elements
 		 * 
 		 * @private
 		 */
-		tlf_internal function get formatForCascade():TextLayoutFormatValueHolder
+		tlf_internal function get formatForCascade():ITextLayoutFormat
 		{
 			var tf:TextFlow = getTextFlow();
 			if (tf)
 			{
-				var elemStyle:TextLayoutFormatValueHolder  = tf.getTextLayoutFormatStyle(this);
+				var elemStyle:TextLayoutFormat  = tf.getTextLayoutFormatStyle(this);
 				if (elemStyle)
 				{
 					var localFormat:ITextLayoutFormat = format;
 					if (localFormat == null)
 						return elemStyle;
 						
-					var rslt:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder();
+					var rslt:TextLayoutFormat = new TextLayoutFormat();
 					rslt.apply(elemStyle);
 					rslt.apply(localFormat);
 					return rslt;
 				}
 			}
-			return _formatValueHolder;
+			return _format;
 		}
 		
 		/** @private  Shared scratch element for use in computedFormat methods only */
-		static tlf_internal var _scratchTextLayoutFormat:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder();
+		static tlf_internal var _scratchTextLayoutFormat:TextLayoutFormat = new TextLayoutFormat();
 		
 		/** 
 		 * Returns the computed format attributes that are in effect for this element.
@@ -643,9 +652,10 @@ package flashx.textLayout.elements
 			return _computedFormat;
 		}
 		
-		tlf_internal function doComputeTextLayoutFormat():TextLayoutFormatValueHolder
+		/** @private */
+		tlf_internal function doComputeTextLayoutFormat():TextLayoutFormat
 		{
-			var parentPrototype:TextLayoutFormatValueHolder = parent ? TextLayoutFormatValueHolder(parent.computedFormat): null;
+			var parentPrototype:TextLayoutFormat = _parent ? TextLayoutFormat(_parent.computedFormat): null;
 			return FlowElement.createTextLayoutFormatPrototype(formatForCascade,parentPrototype);
 		}
 
@@ -682,10 +692,39 @@ package flashx.textLayout.elements
 		 * @see #userStyles
 		 */
 		public function getStyle(styleProp:String):*
-		{
+		{ 
 			if (TextLayoutFormat.description.hasOwnProperty(styleProp))
-				return computedFormat[styleProp];
-			return getUserStyleWorker(styleProp);
+				return computedFormat.getStyle(styleProp);
+			
+			var tf:TextFlow = getTextFlow();
+			if (!tf || !tf.formatResolver)
+				return computedFormat.getStyle(styleProp);
+			
+			return getUserStyleWorker(styleProp); 
+		}
+		// { return TextLayoutFormat.description.hasOwnProperty(styleProp) ? computedFormat.getStyle(styleProp) : getUserStyleWorker(styleProp); } }
+		
+		/** @private worker function - any styleProp */
+		tlf_internal function getUserStyleWorker(styleProp:String):*
+		{
+			// CONFIG::debug { assert(TextLayoutFormat.description[styleProp] === undefined,"bad call to getUserStyleWorker"); }
+			
+			if (_format != null)
+			{
+				var userStyle:* = _format.getStyle(styleProp)
+				if (userStyle !== undefined)
+					return userStyle;
+			}
+			
+			var tf:TextFlow = getTextFlow();
+			if (tf && tf.formatResolver)
+			{
+				userStyle = tf.formatResolver.resolveUserFormat(this,styleProp);
+				if (userStyle !== undefined)
+					return userStyle;
+			}
+			// TODO: does TextFlow need to ask a "psuedo parent"				
+			return _parent ? _parent.getUserStyleWorker(styleProp) : undefined;
 		}
 		
 		/** Sets the style specified by the <code>styleProp</code> parameter to the value specified by the
@@ -710,12 +749,12 @@ package flashx.textLayout.elements
 		*/
 		public function setStyle(styleProp:String,newValue:*):void
 		{
-			if (TextLayoutFormat.description[styleProp] !== undefined)
+			if (TextLayoutFormat.description[styleProp])
 				this[styleProp] = newValue;
 			else
 			{
-				writableTextLayoutFormatValueHolder().setUserStyle(styleProp,newValue);
-				modelChanged(ModelChange.USER_STYLE_CHANGED,0,this.textLength,true);
+				writableTextLayoutFormat().setStyle(styleProp,newValue);
+				formatChanged();
 			}
 		}
 		
@@ -738,75 +777,44 @@ package flashx.textLayout.elements
 		public function clearStyle(styleProp:String):void
 		{ setStyle(styleProp,undefined); }
 		
-		/** @private worker function - any styleProp */
-		tlf_internal function getUserStyleWorker(styleProp:String):*
-		{
-			CONFIG::debug { assert(TextLayoutFormat.description[styleProp] === undefined,"bad call to getUserStyleWorker"); }
-			
-			if (_formatValueHolder != null)
-			{
-				var userStyle:* = _formatValueHolder.getUserStyle(styleProp)
-				if (userStyle !== undefined)
-					return userStyle;
-			}
-				
-			var tf:TextFlow = getTextFlow();
-			if (tf && tf.formatResolver)
-			{
-				userStyle = tf.formatResolver.resolveUserFormat(this,styleProp);
-				if (userStyle !== undefined)
-					return userStyle;
-			}
-			// TODO: does TextFlow need to ask a "psuedo parent"				
-			return parent ? parent.getUserStyleWorker(styleProp) : undefined;
-		}
-		
 		/**
 		 * Called whenever the model is modified.  Updates the TextFlow and notifies the selection manager - if it is set.
 		 * This method has to be called while the element is still in the flow
 		 * @param changeType - type of change
+		 * @param element - the actual element that is modified
 		 * @param start - elem relative offset of start of damage
 		 * @param len - length of damage
 		 * @see flow.model.ModelChange
 		 * @private
 		 */
-		tlf_internal function modelChanged(changeType:String, changeStart:int, changeLen:int, needNormalize:Boolean = true, bumpGeneration:Boolean = true):void
+		tlf_internal function modelChanged(changeType:String, element:FlowElement, changeStart:int, changeLen:int, needNormalize:Boolean = true, bumpGeneration:Boolean = true):void
 		{
 			var tf:TextFlow = this.getTextFlow();
 			if (tf)
-				tf.processModelChanged(changeType, this, changeStart, changeLen, needNormalize, bumpGeneration);
+				tf.processModelChanged(changeType, element, getAbsoluteStart()+changeStart, changeLen, needNormalize, bumpGeneration);
 		}
 		
 		/** @private */
-		tlf_internal function appendElementsForDelayedUpdate(tf:TextFlow):void
+		tlf_internal function appendElementsForDelayedUpdate(tf:TextFlow,changeType:String):void
 		{ }
 		
 		/** @private */
 		tlf_internal function applyDelayedElementUpdate(textFlow:TextFlow,okToUnloadGraphics:Boolean,hasController:Boolean):void
 		{ }
 						
-		// **************************************** 
-		// Begin display property Related code
-		// ****************************************
-		/**
-		 * Indicates how the element should be composed. It may be either inline, and appear as part of a line, or be float, 
-		 * in which case it appears in a container of its own.
-		 * 
-		 * @see text.elements.FlowElementDisplayType#INLINE
-		 * @see text.elements.FlowElementDisplayType#FLOAT
-		 * 
-		 * This feature still in prototype phase - has to be the main namespace so it is accessible through mxml
-		 * @private
-		 */
-		public function get display():String
-		{
-			return FlowElementDisplayType.INLINE;
-		}
+		/** @private */
+		tlf_internal function getEffectivePaddingLeft():Number
+		{ return computedFormat.paddingLeft == FormatValue.AUTO ? 0 : computedFormat.paddingLeft; }
+		/** @private */
+		tlf_internal function getEffectivePaddingRight():Number
+		{ return computedFormat.paddingRight == FormatValue.AUTO ? 0 : computedFormat.paddingRight; }
+		/** @private */
+		tlf_internal function getEffectivePaddingTop():Number
+		{ return computedFormat.paddingTop == FormatValue.AUTO ? 0 : computedFormat.paddingTop; }
+		/** @private */
+		tlf_internal function getEffectivePaddingBottom():Number
+		{ return computedFormat.paddingBottom == FormatValue.AUTO ? 0 : computedFormat.paddingBottom; }
 		
-		// **************************************** 
-		// End display property Related code
-		// ****************************************	
-
  		// **************************************** 
 		// Begin tracking property Related code
 		// ****************************************
@@ -834,14 +842,6 @@ package flashx.textLayout.elements
 		// Begin import helper code
 		// ****************************************			
 
-		/**
-		 * Create the default container for the element. @private
-		 */
-		tlf_internal function createGeometry(parentToBe:DisplayObjectContainer):void
-		{
-			return;
-		}
-		
 		/** Strips white space from the element and its children, according to the whitespaceCollaspse
 		 *  value that has been applied to the element or inherited from its parent.
 		 *  If a FlowLeafElement's attrs are set to WhiteSpaceCollapse.PRESERVE, then collapse is
@@ -863,45 +863,6 @@ package flashx.textLayout.elements
 		// ****************************************	
 
 		// **************************************** 
-		// Begin helper code for tables
-		// ****************************************			
-		
-		/** Determines whether a particular FlowElement should be treated as a single selection.
-		 * @private
-		 */
-		tlf_internal function isReadOnlyFlowElement():Boolean
-		{
-			return false;
-		}
-
-		/** Gets the highest parent that is a read only flow element
-		 * @private
-		 */		
-		tlf_internal function getHighestReadOnlyFlowElement():FlowElement
-		{
-			var highestReadOnlyFlowElement:FlowElement = null;
-			if (this.isReadOnlyFlowElement())
-			{
-				highestReadOnlyFlowElement = this;
-			}
-			
-			var curFlowElement:FlowElement = parent;
-			while (curFlowElement != null)
-			{
-				if (curFlowElement.isReadOnlyFlowElement())
-				{
-					highestReadOnlyFlowElement = curFlowElement;
-				}
-				curFlowElement = curFlowElement.parent;
-			}
-			return highestReadOnlyFlowElement;
-		}
-		
-		// **************************************** 
-		// End helper code for tables
-		// ****************************************							
-
-		// **************************************** 
 		// Begin tree navigation code
 		// ****************************************
 		
@@ -918,14 +879,14 @@ package flashx.textLayout.elements
  		 * @return The index of the start of the element from the start of the TextFlow object.
  		 *
  		 * @see #parentRelativeStart
- 		 * @see #TextFlow
+ 		 * @see TextFlow
 	 	 */
 	 	 
 		public function getAbsoluteStart():int
 		{
-			var rslt:int = parentRelativeStart;
-			for (var elem:FlowElement = parent; elem; elem = elem.parent)
-				rslt += elem.parentRelativeStart;
+			var rslt:int = _parentRelativeStart;
+			for (var elem:FlowElement = _parent; elem; elem = elem._parent)
+				rslt += elem._parentRelativeStart;
 			return rslt;
 		}
 		
@@ -950,9 +911,9 @@ package flashx.textLayout.elements
 		 
 		public function getElementRelativeStart(ancestorElement:FlowElement):int
 		{
-			var rslt:int = parentRelativeStart;
-			for (var elem:FlowElement = parent; elem && elem != ancestorElement; elem = elem.parent)
-				rslt += elem.parentRelativeStart;
+			var rslt:int = _parentRelativeStart;
+			for (var elem:FlowElement = _parent; elem && elem != ancestorElement; elem = elem._parent)
+				rslt += elem._parentRelativeStart;
 			return rslt;
 		}
 		
@@ -974,8 +935,8 @@ package flashx.textLayout.elements
 		{
 			// find the root element entry and either return null or the containing textFlow
 			var elem:FlowElement = this;
-			while (elem.parent != null)
-				elem = elem.parent;
+			while (elem._parent != null)
+				elem = elem._parent;
 			return elem as TextFlow;		
 		}	
 
@@ -997,14 +958,16 @@ package flashx.textLayout.elements
 		 
 		public function getParagraph():ParagraphElement
 		{
+			var para:ParagraphElement = null;
 			var rslt:FlowElement = this;
 			while (rslt)
 			{
-				if (rslt is ParagraphElement)
-					return rslt as ParagraphElement;
-				rslt = rslt.parent;
+				para = rslt as ParagraphElement;
+				if (para)
+					break;
+				rslt = rslt._parent;
 			}
-			return null;
+			return para;
 		}
 		
 		
@@ -1020,12 +983,12 @@ package flashx.textLayout.elements
 		 */
 		public function getParentByType(elementType:Class):FlowElement
 		{
-			var curElement:FlowElement = parent;
+			var curElement:FlowElement = _parent;
 			while (curElement)
 			{
 				if (curElement is elementType)
 					return curElement;
-				curElement = curElement.parent;
+				curElement = curElement._parent;
 			}
 			return null;
 		}
@@ -1045,11 +1008,11 @@ package flashx.textLayout.elements
 		public function getPreviousSibling():FlowElement
 		{
 			//this can happen if FE is on the scrap and doesn't have a parent. - gak 06.25.08
-			if(!parent)
+			if(!_parent)
 				return null;
 				
-			var idx:int = parent.getChildIndex(this);
-			return idx == 0 ? null : parent.getChildAt(idx-1);
+			var idx:int = _parent.getChildIndex(this);
+			return idx == 0 ? null : _parent.getChildAt(idx-1);
 		}
 		
 		/** Returns the next FlowElement sibling in the text flow hierarchy. 
@@ -1067,11 +1030,11 @@ package flashx.textLayout.elements
 	 	
 		public function getNextSibling():FlowElement
 		{
-			if (!parent)
+			if (!_parent)
 				return null;
 
-			var idx:int = parent.getChildIndex(this);
-			return idx == parent.numChildren-1 ? null : parent.getChildAt(idx+1);
+			var idx:int = _parent.getChildIndex(this);
+			return idx == _parent.numChildren-1 ? null : _parent.getChildAt(idx+1);
 		}
 		
 		/** 
@@ -1116,20 +1079,40 @@ package flashx.textLayout.elements
 			var str:String = getCharAtPosition(relativePosition);
 			return str && str.length > 0 ? str.charCodeAt(0) : 0;
 		}
+
+		/** @private apply function to all elements until it says stop */
+		tlf_internal function applyFunctionToElements(func:Function):Boolean
+		{ return func(this); }
 		
-		/** @private return an element or matching idName. */
-		tlf_internal function getElementByIDHelper(idName:String):FlowElement
+		/** @private
+		 * Gets the EventDispatcher associated with this FlowElement.  Use the functions
+		 * of EventDispatcher such as <code>setEventHandler()</code> and <code>removeEventHandler()</code> 
+		 * to capture events that happen over this FlowLeafElement object.  The
+		 * event handler that you specify will be called after this FlowElement object does
+		 * the processing it needs to do. If the FlowElement cannot dispatch events, the return
+		 * value is null.
+		 * 
+		 * Note that the event dispatcher will only dispatch FlowElementMouseEvent events.
+		 *
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 *
+		 * @see flash.events.EventDispatcher
+		 * @see flashx.textLayout.events.FlowElementMouseEvent
+		 */
+		tlf_internal function getEventMirror():IEventDispatcher
 		{
-			if (this.id == idName)
-				return this;
 			return null;
 		}
-		
-		/** @private return adding elements with matching styleName to an array. */
-		tlf_internal function getElementsByStyleNameHelper(a:Array,styleName:String):void
+
+		/** @private
+		 * Checks whether an event dispatcher is attached, and if so, if the event dispatcher
+		 * has any active listeners.
+		 */
+		tlf_internal function hasActiveEventMirror():Boolean
 		{
-			if (this.styleName == styleName)
-				a.push(this);
+			return false;
 		}
 		
 		// **************************************** 
@@ -1147,7 +1130,7 @@ package flashx.textLayout.elements
 		 */
 		private function updateRange(len:int): void
 		{
-			setParentRelativeStart(parentRelativeStart + len);
+			setParentRelativeStart(_parentRelativeStart + len);
 		}
 		
 		/** Update the FlowElements in response to an insertion or deletion.
@@ -1162,8 +1145,8 @@ package flashx.textLayout.elements
 		 */
 		tlf_internal function updateLengths(startIdx:int,len:int,updateLines:Boolean):void
 		{
-			setTextLength(textLength + len);		
-			var p:FlowGroupElement = parent;	
+			setTextLength(_textLength + len);		
+			var p:FlowGroupElement = _parent;	
 			if (p)
 			{
 				// update the elements following this in parent's children				
@@ -1191,13 +1174,13 @@ package flashx.textLayout.elements
 			
 			//more than likely, we are building up spans for the very first time.
 			//the container has not yet been created
-			if (textFlow == null || textFlow.flowComposer == null || textFlow.flowComposer.numLines == 0)
+			if (textFlow == null || textFlow.flowComposer == null)
 				return null;
-			
+						
 			var curItem:FlowElement = this;
 			while (curItem && (!(curItem is ContainerFormattedElement) || ContainerFormattedElement(curItem).flowComposer == null))
 			{
-				curItem = curItem.parent;
+				curItem = curItem._parent;
 			}
 			
 			var flowComposer:IFlowComposer = ContainerFormattedElement(curItem).flowComposer;
@@ -1232,15 +1215,21 @@ package flashx.textLayout.elements
 						{
 							var flowComposer:IFlowComposer = enclosingController.flowComposer;
 							var myIdx:int = flowComposer.getControllerIndex(enclosingController);
+							var previousEnclosingWithContent:ContainerController = enclosingController;
 							CONFIG::debug { assert(myIdx >= 0,"FlowElement.deleteContainerText: bad return from getContainerControllerIndex"); }
 							while (myIdx+1 < flowComposer.numControllers && enclosingController.absoluteStart + enclosingController.textLength < endPos)
 							{
 								enclosingController = flowComposer.getControllerAt(myIdx+1);
 								if (enclosingController.textLength)
+								{
+									previousEnclosingWithContent = enclosingController;
 									break;
+								}
 								myIdx++;
 							}
 						}
+						if (!enclosingController || !enclosingController.textLength)
+							enclosingController = previousEnclosingWithContent;
 						if (!enclosingController)
 							break;
 					}
@@ -1275,7 +1264,8 @@ package flashx.textLayout.elements
 		/** Support for splitting FlowLeafElements.  Does a quick copy of _characterFormat if necessary.  @private */
 		tlf_internal function quickCloneTextLayoutFormat(sibling:FlowElement):void
 		{
-			_formatValueHolder = sibling._formatValueHolder ? new FlowValueHolder(sibling._formatValueHolder) : null;
+			_format = sibling._format ? new FlowValueHolder(sibling._format) : null;
+			_computedFormat = null;
 		}
 			
 		// **************************************** 
@@ -1322,7 +1312,7 @@ package flashx.textLayout.elements
 				if (depth == 0)
 					trace("----------------------------------");
 
-				trace("FlowElement:",depth.toString(),getDebugIdentity(this),"start:",parentRelativeStart.toString(),"length:",textLength.toString(),extraData);
+				trace("FlowElement:",depth.toString(),getDebugIdentity(this),"start:",_parentRelativeStart.toString(),"length:",_textLength.toString(),extraData);
 			}
 			return 0;
 		}
@@ -1333,8 +1323,8 @@ package flashx.textLayout.elements
 			
 			if (element != null)
 			{
-				if (element.parent != null)
-					result = elementPath(element.parent) + "." + element.name + "[" + element.parent.getChildIndex(element) + "]";
+				if (element._parent != null)
+					result = elementPath(element._parent) + "." + element.name + "[" + element._parent.getChildIndex(element) + "]";
 				else
 					result = element.name;
 			}
@@ -1346,7 +1336,7 @@ package flashx.textLayout.elements
 		 */
 		CONFIG::debug public function toString():String
 		{
-			return "flowElement:" + name + " start:" + parentRelativeStart.toString() + " absStart:" + this.getAbsoluteStart().toString() + " textLength:" + textLength.toString();			
+			return "flowElement:" + name + " start:" + _parentRelativeStart.toString() + " absStart:" + this.getAbsoluteStart().toString() + " textLength:" + _textLength.toString();			
 		}
 		// **************************************** 
 		// End debug support code
@@ -1356,58 +1346,69 @@ package flashx.textLayout.elements
 		// BEGIN PROTOTYPING CASCADE SUPPORT 
 		// //////////////////////////////////////////////////////////////////////
 		
-		static private var defaultStylesPrototype:Object;
-		
-		static private function createDefaultStylesPrototyope():void
-		{
-			defaultStylesPrototype = new Object();
-			defaultStylesPrototype.hasNonInheritedStyles = false;
-			defaultStylesPrototype.setPropertyIsEnumerable("hasNonInheritedStyles",false);
-			Property.defaultsAllHelper(TextLayoutFormat.description,defaultStylesPrototype);
-		}
-		
-		createDefaultStylesPrototyope();
-		
-		
-		private static var factory:Function = function():void
-		{ }
-		
+
+					
 		/** @private */
-		tlf_internal static function createTextLayoutFormatPrototype(localStyles:ITextLayoutFormat,parentPrototype:TextLayoutFormatValueHolder):TextLayoutFormatValueHolder
+		tlf_internal static function createTextLayoutFormatPrototype(localStyles:ITextLayoutFormat,parentPrototype:TextLayoutFormat):TextLayoutFormat
 		{			
+			var parentPrototypeUsable:Boolean = true;
+			var hasStylesSet:Boolean = false;
+			// the actual prototype to use
+			var parentStylesPrototype:Object;
 			// create a new stylesObject with a parentPrototype
-			var parentStylesPrototype:Object = parentPrototype ? parentPrototype.coreStyles : defaultStylesPrototype;
-			factory.prototype = parentStylesPrototype;
-			var stylesObject:Object = new factory();
+			if (parentPrototype)
+			{
+				parentStylesPrototype = parentPrototype.getStyles();
+				if (parentStylesPrototype.hasNonInheritedStyles !== undefined)
+				{
+					// its either a boolean or if its been used once an object that has the non-inheriting styles reset
+					if (parentStylesPrototype.hasNonInheritedStyles === true)
+					{
+						// create a modified prototype and give it all default non-inherited values
+						var noInheritParentStylesPrototype:Object = Property.createObjectWithPrototype(parentStylesPrototype); 
+						TextLayoutFormat.resetModifiedNoninheritedStyles(noInheritParentStylesPrototype);
+						// now save it in the parent for reuse
+						parentStylesPrototype.hasNonInheritedStyles = noInheritParentStylesPrototype;
+						parentStylesPrototype = noInheritParentStylesPrototype;
+					}
+					else
+					{
+						parentStylesPrototype = parentStylesPrototype.hasNonInheritedStyles;
+					}
+					parentPrototypeUsable = false;	// can't use it
+				}
+			}
+			else
+			{
+				parentPrototype = TextLayoutFormat.defaultFormat as TextLayoutFormat;
+				parentStylesPrototype = parentPrototype.getStyles();
+			}
+
+			var stylesObject:Object = Property.createObjectWithPrototype(parentStylesPrototype); 
 			
 			var key:String;
 			var val:*;
 			var prop:Property;
 			// has nonInherited Styles that are *different* from the default
 			var hasNonInheritedStyles:Boolean = false;	
-			
-			// has any styles set locally - copy from parent's nonInheritedStyles value.
-			var hasStylesSet:Boolean = parentStylesPrototype.hasNonInheritedStyles;
-			if (hasStylesSet)
-				TextLayoutFormatValueHolder.resetModifiedNoninheritedStyles(stylesObject);
-			
+
 			// two cases depending on how localStyles are supplied
 			if (localStyles != null)
 			{
-				var lvh:TextLayoutFormatValueHolder = localStyles as TextLayoutFormatValueHolder;
+				var lvh:TextLayoutFormat = localStyles as TextLayoutFormat;
 				if (lvh)
 				{
-					var coreStyles:Object = lvh.coreStyles;
+					var coreStyles:Object = lvh.getStyles();
 					
 					for (key in coreStyles)
 					{
-						prop = TextLayoutFormat.description[key];
 						val = coreStyles[key];
 						if (val == FormatValue.INHERIT)
 						{
 							if (parentPrototype)
 							{
-								if (!prop.inherited)
+								prop = TextLayoutFormat.description[key];
+								if (prop && !prop.inherited)
 								{
 									// actually do the inheritance - might have been wiped out above!
 									val = parentPrototype[key];
@@ -1415,7 +1416,8 @@ package flashx.textLayout.elements
 									{
 										stylesObject[key] = val;
 										hasNonInheritedStyles = true;
-										CONFIG::debug { assert(val != prop.defaultValue,"Unexpected non-inheritance"); }
+										hasStylesSet = true;
+										// CONFIG::debug { assert(val != prop.defaultValue,"Unexpected non-inheritance"); }
 									}
 								}
 							}
@@ -1424,9 +1426,10 @@ package flashx.textLayout.elements
 						{
 							if (stylesObject[key] != val)
 							{
-								if (!prop.inherited)
+								prop = TextLayoutFormat.description[key];
+								if (prop && !prop.inherited)
 								{
-									CONFIG::debug { assert(val != prop.defaultValue,"Unexpected non-inheritance"); }
+									// CONFIG::debug { assert(val != prop.defaultValue,"Unexpected non-inheritance"); }
 									hasNonInheritedStyles = true;
 								}
 								stylesObject[key] = val;
@@ -1455,7 +1458,8 @@ package flashx.textLayout.elements
 										{
 											stylesObject[key] = val;
 											hasNonInheritedStyles = true;
-											CONFIG::debug { assert(val != prop.defaultValue,"Unexpected non-inheritance"); }
+											hasStylesSet = true;
+											// CONFIG::debug { assert(val != prop.defaultValue,"Unexpected non-inheritance"); }
 										}
 									}
 								}
@@ -1466,7 +1470,7 @@ package flashx.textLayout.elements
 								{
 									if (!prop.inherited)
 									{
-										CONFIG::debug { assert(val != prop.defaultValue,"Unexpected non-inheritance"); }
+										// CONFIG::debug { assert(val != prop.defaultValue,"Unexpected non-inheritance"); }
 										hasNonInheritedStyles = true;
 									}
 									stylesObject[key] = val;
@@ -1478,23 +1482,35 @@ package flashx.textLayout.elements
 				}
 			}
 			
-			var rslt:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder();
+			var rslt:TextLayoutFormat;
+			
 			if (!hasStylesSet)
 			{
 				// nothing has changed from the parent so just reuse it
 				CONFIG::debug { assert(hasNonInheritedStyles == false,"stylesCount mismatch with hasNonInheritedStyles"); }
-				rslt.coreStyles = parentStylesPrototype;
+				if (parentPrototypeUsable)
+					return parentPrototype;
+				// we can use the parentStylesPrototype but not the parentPrototype
+				rslt = new TextLayoutFormat();
+				rslt.setStyles(stylesObject,true);
+				return rslt;
 			}
-			else
+
+			if (hasNonInheritedStyles)
 			{
-				if (stylesObject.hasNonInheritedStyles != hasNonInheritedStyles)
-				{
-					stylesObject.hasNonInheritedStyles = hasNonInheritedStyles;
-					stylesObject.setPropertyIsEnumerable("hasNonInheritedStyles",false);
-				}
-				
-				rslt.coreStyles = stylesObject;
+				// if its not identical in stylesObject need to set it
+				CONFIG::debug { assert(stylesObject.hasNonInheritedStyles !== hasNonInheritedStyles,"unexpected nonInheritedStyles"); }
+				stylesObject.hasNonInheritedStyles = true;
+				stylesObject.setPropertyIsEnumerable("hasNonInheritedStyles",false);
 			}
+			else if (stylesObject.hasNonInheritedStyles !== undefined)
+			{
+				stylesObject.hasNonInheritedStyles = undefined;
+				stylesObject.setPropertyIsEnumerable("hasNonInheritedStyles",false);				
+			}
+				
+			rslt = new TextLayoutFormat();
+			rslt.setStyles(stylesObject,false);
 			return rslt;
 		}
 	}

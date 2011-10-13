@@ -1,20 +1,27 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
+	import flashx.textLayout.conversion.ConverterBase;
+	import flashx.textLayout.edit.ModelEdit;
 	import flashx.textLayout.edit.SelectionState;
 	import flashx.textLayout.edit.TextFlowEdit;
 	import flashx.textLayout.edit.TextScrap;
+	import flashx.textLayout.elements.FlowElement;
+	import flashx.textLayout.elements.FlowGroupElement;
+	import flashx.textLayout.elements.FlowLeafElement;
 	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.elements.TextFlow;
+	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.tlf_internal;
 
 
@@ -39,8 +46,11 @@ package flashx.textLayout.operations
 	public class PasteOperation extends FlowTextOperation
 	{
 		private var _textScrap:TextScrap;
-		private var _tScrapUnderSelection:TextScrap;
 		private var _numCharsAdded:int = 0;
+		private var _deleteTextOperation:DeleteTextOperation;
+		private var _applyParagraphSettings:Array;
+		private var _pointFormat:ITextLayoutFormat;
+		private var _applyPointFormat:ApplyFormatOperation;
 		
 		/** 
 		 * Creates a PasteOperation object.
@@ -55,6 +65,7 @@ package flashx.textLayout.operations
 		 */
 		public function PasteOperation(operationState:SelectionState, textScrap:TextScrap)
 		{
+			_pointFormat = operationState.pointFormat;
 			super(operationState);
 			_textScrap = textScrap;
 		}
@@ -64,25 +75,47 @@ package flashx.textLayout.operations
 		{
 			if (_textScrap != null)
 			{
-				_tScrapUnderSelection = TextFlowEdit.createTextScrap(originalSelectionState.textFlow, originalSelectionState.absoluteStart, originalSelectionState.absoluteEnd);
-				internalDoOperation();
+				if (absoluteStart != absoluteEnd)	
+				{
+					_deleteTextOperation = new DeleteTextOperation(originalSelectionState);
+					_deleteTextOperation.doOperation();
+				}
+				
+				var plainText:Boolean = _textScrap.isPlainText();
+				if (!plainText)
+				{
+					// If we're pasting formatted text into an empty paragraph, apply the paragraph settings from the scrap to the paragraph in the TextFlow
+					var leaf:FlowLeafElement = textFlow.findLeaf(absoluteStart);
+					var paragraph:ParagraphElement = leaf.getParagraph();
+					if (paragraph.textLength == 1)
+						applyParagraphSettings(paragraph);
+				}
+				
+				var nextInsertPosition:int = TextFlowEdit.insertTextScrap(textFlow, absoluteStart, _textScrap, plainText);
+				if (textFlow.interactionManager)
+					textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, nextInsertPosition - absoluteStart);				
+				_numCharsAdded = (nextInsertPosition - absoluteStart);
+				
+				if (_pointFormat && plainText)
+				{
+					_applyPointFormat = new ApplyFormatOperation(new SelectionState(textFlow, absoluteStart, absoluteStart + _numCharsAdded), _pointFormat, null, null);
+					_applyPointFormat.doOperation();
+				}
+				
 			}
 			return true;	
 		}
 		
-		private function internalDoOperation():void
+		private function applyParagraphSettings(paragraph:ParagraphElement):void
 		{
-			if (absoluteStart != absoluteEnd)	
-			{
-				TextFlowEdit.replaceRange(textFlow, absoluteStart, absoluteEnd, null);
-				if (textFlow.interactionManager)
-					textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, absoluteStart - absoluteEnd);
-			}
+			var scrapParagraph:ParagraphElement = _textScrap.textFlow.getFirstLeaf().getParagraph();
 			
-			var nextInsertPosition:int = TextFlowEdit.replaceRange(textFlow, absoluteStart, absoluteStart, _textScrap);
-			if (textFlow.interactionManager)
-				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, nextInsertPosition - absoluteStart);				
-			_numCharsAdded = (nextInsertPosition - absoluteStart) /*- (absoluteEnd - absoluteStart) */;
+			_applyParagraphSettings = [];
+			var format:TextLayoutFormat = new TextLayoutFormat(scrapParagraph.format);
+			format.setStyle(ConverterBase.MERGE_TO_NEXT_ON_PASTE, undefined);
+			var applyParagraphFormat:ApplyFormatToElementOperation = new ApplyFormatToElementOperation(originalSelectionState, paragraph, format);
+			applyParagraphFormat.doOperation();
+			_applyParagraphSettings.push(applyParagraphFormat);			
 		}
 		
 		/** @private */
@@ -90,9 +123,16 @@ package flashx.textLayout.operations
 		{
 			if (_textScrap != null)
 			{
-				TextFlowEdit.replaceRange(textFlow, absoluteStart, absoluteStart + _numCharsAdded, _tScrapUnderSelection);
-				if (textFlow.interactionManager)
-					textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, -_numCharsAdded);
+				if (_applyPointFormat)
+					_applyPointFormat.undo(); 
+				ModelEdit.deleteText(textFlow, absoluteStart, absoluteStart + _numCharsAdded, false);
+				if (_applyParagraphSettings)
+				{
+					for (var i:int = _applyParagraphSettings.length - 1; i >= 0; --i)
+						_applyParagraphSettings[i].undo();
+				}
+				if (_deleteTextOperation)
+					_deleteTextOperation.undo();
 			}
 			return originalSelectionState;	
 		}
@@ -101,7 +141,20 @@ package flashx.textLayout.operations
 		public override function redo():SelectionState
 		{
 			if (_textScrap != null)
-				internalDoOperation();								
+			{
+				if (_deleteTextOperation)
+					_deleteTextOperation.redo();
+				if (_applyParagraphSettings)
+				{
+					for (var i:int = _applyParagraphSettings.length - 1; i >= 0; --i)
+						_applyParagraphSettings[i].redo();
+				}
+				var nextInsertPosition:int = TextFlowEdit.insertTextScrap(textFlow, absoluteStart, _textScrap, _textScrap.isPlainText());
+				if (textFlow.interactionManager)
+					textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, nextInsertPosition - absoluteStart);		
+				if (_applyPointFormat)
+					_applyPointFormat.redo(); 
+			}
 			return new SelectionState(textFlow, absoluteStart + _numCharsAdded, absoluteStart + _numCharsAdded,null);	
 		}		
 

@@ -1,3 +1,14 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+//  ADOBE SYSTEMS INCORPORATED
+//  Copyright 2008 Adobe Systems Incorporated
+//  All Rights Reserved.
+//
+//  NOTICE: Adobe permits you to use, modify, and distribute this file
+//  in accordance with the terms of the license agreement accompanying it.
+//
+////////////////////////////////////////////////////////////////////////////////
+
 package mx.filters
 {
     import flash.events.EventDispatcher;
@@ -5,7 +16,8 @@ package mx.filters
     import flash.events.Event;
 
    /**
-    *  
+    *  Base class for some Spark filters.
+    * 
     *  @langversion 3.0
     *  @playerversion Flash 10
     *  @playerversion AIR 1.5
@@ -14,7 +26,8 @@ package mx.filters
     public class BaseFilter extends EventDispatcher
     {
        /**
-        *  
+        *  The string <code>"change"</code>. Used by the event when the filter has changed.
+        * 
         *  @langversion 3.0
         *  @playerversion Flash 10
         *  @playerversion AIR 1.5
@@ -23,7 +36,10 @@ package mx.filters
         public static const CHANGE:String = "change";       
         
        /**
-        *  
+        *  Constructor.
+        * 
+        *  @param target The target to which the filter is applied.
+        * 
         *  @langversion 3.0
         *  @playerversion Flash 10
         *  @playerversion AIR 1.5
@@ -35,7 +51,8 @@ package mx.filters
         }
         
        /**
-        *  
+        *  Propagates a change event when the filter has changed.
+        * 
         *  @langversion 3.0
         *  @playerversion Flash 10
         *  @playerversion AIR 1.5

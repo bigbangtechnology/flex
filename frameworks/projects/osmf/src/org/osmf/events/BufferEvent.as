@@ -24,7 +24,12 @@ package org.osmf.events
 	import flash.events.Event;
 	
 	/**
-	 * A BufferEvent is dispatched when properties of an IBufferable trait have changed.
+	 * A BufferEvent is dispatched when the properties of a BufferTrait change.
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */	
 	public class BufferEvent extends Event
 	{
@@ -34,7 +39,12 @@ package org.osmf.events
 		 * event.
 		 * 
 		 * @eventType BUFFERING_CHANGE
-		 **/
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		public static const BUFFERING_CHANGE:String = "bufferingChange";
 
 		/**
@@ -43,7 +53,12 @@ package org.osmf.events
 		 * event.
 		 * 
 		 * @eventType BUFFER_TIME_CHANGE
-		 **/
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		public static const BUFFER_TIME_CHANGE:String = "bufferTimeChange";
 
 		/**
@@ -54,7 +69,12 @@ package org.osmf.events
  		 * @param cancelable Specifies whether the behavior associated with the event can be prevented.
  		 * @param buffering Specifies whether or not the trait is currently buffering. 
  		 * @param time The new bufferTime for the trait. 
-		 **/
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		public function BufferEvent(type:String, bubbles:Boolean=false, cancelable:Boolean=false, buffering:Boolean=false, bufferTime:Number=NaN)
 		{
 			super(type, bubbles, cancelable);
@@ -68,8 +88,8 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get buffering():Boolean
 		{
@@ -81,8 +101,8 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get bufferTime():Number
 		{

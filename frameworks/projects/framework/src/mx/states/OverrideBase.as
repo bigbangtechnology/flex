@@ -12,7 +12,9 @@
 package mx.states
 {
     
+import mx.binding.BindingManager;
 import mx.core.UIComponent;
+import mx.core.mx_internal;
 import mx.events.PropertyChangeEvent;
 import mx.utils.OnDemandEventDispatcher;
 
@@ -64,6 +66,16 @@ public class OverrideBase extends OnDemandEventDispatcher implements IOverride
      *  @private
      */  
     private var targetProperty:String;
+    
+    /**
+     *  @private
+     *  Specifies whether or not a property-centric 
+     *  state override's base value is data bound.
+     *  
+     *  This value is intended for use by the MXML 
+     *  compiler only.
+     */
+    public var isBaseValueDataBound:Boolean;
     
     //--------------------------------------------------------------------------
     //
@@ -173,6 +185,28 @@ public class OverrideBase extends OnDemandEventDispatcher implements IOverride
         {
             apply(parentContext);
             removeContextListener();
+        }
+    }
+    
+    /**
+     * @private 
+     * Disables or enables binding associated with a property override.
+     */
+    protected function enableBindings(target:Object, parent:UIComponent, property:String, enable:Boolean=true):void
+    {
+        if (isBaseValueDataBound && target && parent && property)
+        {
+            var document:Object = target.hasOwnProperty("document") ? target.document : null;
+            document = !document && parent.hasOwnProperty("document") ? parent.document : document;
+            
+            var name:String = target.hasOwnProperty("id") ? target.id : null;
+            name = !name && target.hasOwnProperty("name") ? target.name : name;
+            
+            if (document && name)
+            {
+                var root:String = (document == target) ? "this" : name;
+                BindingManager.enableBindings(document, root + "." + property, enable);
+            }
         }
     }
 }

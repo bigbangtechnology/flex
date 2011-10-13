@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.utils
 {
 	import flash.text.engine.JustificationStyle;
@@ -76,13 +76,21 @@ package flashx.textLayout.utils
 			return localeSet.dominantBaseline;
 		}
 		
+		
+		/** @private */
+		static private function addLocale(locale:String):LocaleSettings
+		{
+			CONFIG::debug{ assert(_localeSettings[locale] == null, "Cannot add a new locale property set when it already exists.  Locale == " + locale); }
+			_localeSettings[locale] = new LocaleSettings();
+			return _localeSettings[locale];
+		}
+		
 		/** @private */
 		static private function initializeDefaultLocales():void
 		{
 			CONFIG::debug{ assert(_localeSettings == null, "Should not call initializeDefaultLocales when dictionary exists!"); }
 			_localeSettings = new Dictionary();
 			
-			try
 			{
 				var locale:LocaleSettings = addLocale("en");
 				CONFIG::debug{ assert(locale != null, "Failed to create new locale for 'en'!"); }
@@ -107,38 +115,15 @@ package flashx.textLayout.utils
 				locale.justificationStyle = JustificationStyle.PUSH_IN_KINSOKU;
 				locale.leadingModel = LeadingModel.IDEOGRAPHIC_TOP_DOWN;
 				locale.dominantBaseline = TextBaseline.IDEOGRAPHIC_CENTER;
-			}	
-			catch(e:ArgumentError)
-			{
-				trace(e);
-				return;
 			}		
-			finally
-			{
-				return;
-			}
-		}
-		
-		/** @private */
-		static private function addLocale(locale:String):LocaleSettings
-		{
-			CONFIG::debug{ assert(_localeSettings[locale] == null, "Cannot add a new locale property set when it already exists.  Locale == " + locale); }
-			_localeSettings[locale] = new LocaleSettings();
-			return _localeSettings[locale];
 		}
 		
 		/** @private */
 		static private function getLocale(locale:String):LocaleSettings
 		{
-			var lowerLocale:String = locale.toLowerCase();
-			if(lowerLocale.indexOf("en") == 0)
-				return _localeSettings["en"];
-			else if(lowerLocale.indexOf("ja") == 0)
-				return _localeSettings["ja"];
-			else if(lowerLocale.indexOf("zh") == 0)
-				return _localeSettings["zh"];
-			else //default
-				return _localeSettings["en"];
+			var lowerLocale:String = locale.toLowerCase().substr(0,2);
+			var rslt:LocaleSettings = _localeSettings[lowerLocale];
+			return rslt == null ? _localeSettings["en"] : rslt;
 		}
 		
 		/** @private */
@@ -147,22 +132,17 @@ package flashx.textLayout.utils
 			if(_localeSettings == null)
 				initializeDefaultLocales();
 			
-			var localeSet:LocaleSettings = null;
 			if(locale == _lastLocaleKey)
-				localeSet = _lastLocale;
-			else
-			{
-				localeSet = getLocale(locale);
-				
-				//update the last locale data
-				_lastLocale = localeSet;
-				_lastLocaleKey = locale;
-			}
+				return _lastLocale;
+			
+			var localeSet:LocaleSettings = getLocale(locale);
+			
+			//update the last locale data
+			_lastLocale = localeSet;
+			_lastLocaleKey = locale;
 			return localeSet;
 		}
 	}
-	
-	
 }
 
 import flashx.textLayout.formats.JustificationRule;

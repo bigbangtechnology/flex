@@ -79,7 +79,7 @@ import mx.effects.IEffect;
  */
 public class Transition
 {
-	include "../core/Version.as";
+    include "../core/Version.as";
 
     //--------------------------------------------------------------------------
     //
@@ -95,10 +95,10 @@ public class Transition
      *  @playerversion AIR 1.1
      *  @productversion Flex 3
      */
-	public function Transition()
-	{
-		super();
-	}
+    public function Transition()
+    {
+        super();
+    }
 
     //--------------------------------------------------------------------------
     //
@@ -107,30 +107,30 @@ public class Transition
     //--------------------------------------------------------------------------
 
     //----------------------------------
-	//  effect
+    //  effect
     //----------------------------------
 
-	/**
-	 *  The IEffect object to play when you apply the transition. Typically,
-	 *  this is a composite effect object, such as the Parallel or Sequence effect,
-	 *  that contains multiple effects.
-	 *
-	 *  <p>The <code>effect</code> property is the default property of the
-	 *  Transition class. You can omit the <code>&lt;mx:effect&gt;</code> tag 
-	 *  if you use MXML tag syntax.</p>
-	 *  
-	 *  @langversion 3.0
-	 *  @playerversion Flash 9
-	 *  @playerversion AIR 1.1
-	 *  @productversion Flex 3
-	 */
-	public var effect:IEffect;
+    /**
+     *  The IEffect object to play when you apply the transition. Typically,
+     *  this is a composite effect object, such as the Parallel or Sequence effect,
+     *  that contains multiple effects.
+     *
+     *  <p>The <code>effect</code> property is the default property of the
+     *  Transition class. You can omit the <code>&lt;mx:effect&gt;</code> tag 
+     *  if you use MXML tag syntax.</p>
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 9
+     *  @playerversion AIR 1.1
+     *  @productversion Flex 3
+     */
+    public var effect:IEffect;
 
     //----------------------------------
-	//  fromState
+    //  fromState
     //----------------------------------
 
-	[Inspectable(category="General")]
+    [Inspectable(category="General")]
 
     /**
      *  A String specifying the view state that your are changing from when
@@ -146,64 +146,111 @@ public class Transition
      *  @playerversion AIR 1.1
      *  @productversion Flex 3
      */
-	public var fromState:String = "*";
+    public var fromState:String = "*";
 
     //----------------------------------
-	//  toState
+    //  toState
     //----------------------------------
 
-	[Inspectable(category="General")]
+    [Inspectable(category="General")]
 
-	/**
-	 *  A String specifying the view state that you are changing to when
-	 *  you apply the transition. The default value is "&#42;", meaning any view state.
+    /**
+     *  A String specifying the view state that you are changing to when
+     *  you apply the transition. The default value is "&#42;", meaning any view state.
      *
      *  <p>You can set this property to an empty string, "",
      *  which corresponds to the base view state.</p>
      *
      *  @default "&#42;"
-	 *  
-	 *  @langversion 3.0
-	 *  @playerversion Flash 9
-	 *  @playerversion AIR 1.1
-	 *  @productversion Flex 3
-	 */
-	public var toState:String = "*";
-	
-    /**
-     *  Whether the transition should automatically reverse itself 
-     *  when the opposite state transition begins playing.
-     *
-     *  <p>Flex does not currently play multiple transitions simultaneously.
-     *  This means that when a new state transition occurs, if there
-     *  is already one playing it is stopped by calling <code>end()</code>
-     *  on it, which snaps it to its end values. The new transition
-     *  then starts playing from that state.</p>
-     * 
-     *  <p>The <code>autoReverse</code> flag allows the developer to
-     *  control whether the default snap-to-end behavior occurs, or whether,
-     *  instead, the previous effect is stopped in place and the new
-     *  effect is played from that intermediate state instead. Internally,
-     *  the transition code calculates how much of the previous effect
-     *  has been played and then plays the next effect for the inverse of that
-     *  time.</p>
-     * 
-     *  <p>This flag is only checked when the new transition is going in the
-     *  exact opposite direction of the currently playing one. That is, if
-     *  a transition is playing between states A and B and then a transition
-     *  to return to A is started, this flag will be checked. But if the
-     *  application is going from state A to B and a transition to state C is
-     *  started, then the default behavior of snapping to the end of the A->B
-     *  transition, then playing the B->C transition will occur.</p>
-     * 
-     *  @default false 
      *  
      *  @langversion 3.0
      *  @playerversion Flash 9
      *  @playerversion AIR 1.1
      *  @productversion Flex 3
      */
-	public var autoReverse:Boolean = false;
+    public var toState:String = "*";
+    
+    /**
+     *  Set to <code>true</code> to specify that this transition applies 
+     *  to both the forward and reverse view state changes. 
+     *  Therefore, use this transition on a change from view state A to 
+     *  view state B, and on the change from B to A. 
+     *
+     *  <p>While the transition from view state A to view state B is playing, 
+     *  the reverse transition can occur to interrupt the current transition. 
+     *  The reverse transition always halts the current transition at 
+     *  its current location. 
+     *  That is, the reverse transition always plays as if 
+     *  the <code>interruptionBehavior</code> property was set to <code>stop</code>, 
+     *  regardless of the real value of <code>interruptionBehavior</code>.</p>
+     * 
+     *  <p>This property is only checked when the new transition is going in the
+     *  exact opposite direction of the currently playing one. That is, if
+     *  a transition is playing between states A and B and then a transition
+     *  to return to A is started. </p>
+     *  
+     *  <p>If a transition uses the <code>toState</code> and <code>fromState</code> 
+     *  properties to explicitly handle the transition from view state B to A, 
+     *  then Flex ignores the <code>autoReverse</code> property. </p>
+     * 
+     *  @default false 
+     *
+     *  @see Transition#interruptionBehavior
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 9
+     *  @playerversion AIR 1.1
+     *  @productversion Flex 3
+     */
+    public var autoReverse:Boolean = false;
+    
+    /**
+     *  Flex does not support the playing of multiple transitions simultaneously. 
+     *  If a transition is currently playing when a new transition occurs, 
+     *  the current transition is interrupted. 
+     *  This property controls how the current transition behaves when interrupted. 
+     *  
+     *  <p>By default, the current transition ends, which snaps all effects in 
+     *  the transition to their end values. 
+     *  This corresponds to a property value of <code>end</code>.
+     *  If the value of this property is <code>stop</code>, the current transition 
+     *  halts at its current location. 
+     *  The new transition start playing from the halt location of 
+     *  the previous transition.</p> 
+     *
+     *  <p>The value of <code>stop</code> can smooth out the appearance of an 
+     *  interrupted transition. 
+     *  That is because the user does not see the current transition snap 
+     *  to its end state before the new transition begins.</p>
+     *
+     *  <p>In some cases, the interrupting transition can be the reverse of 
+     *  the current transition. 
+     *  For example, while the transition from view state A to view state B  
+     *  is playing, the reverse transition occurs to interrupt the current transition. 
+     *  If you set the <code>autoReverse</code> property of a transition instance  
+     *  to <code>true</code>, you can use the same transition to handle both 
+     *  the forward and reverse transitions.
+     *  When the interrupting transition is the reverse transition of the  
+     *  current transition and has <code>autoReverse</code> set to <code>true</code>, 
+     *  the interrupting transition runs as if the 
+     *  <code>interruptionBehavior</code> property was set to <code>stop</code>, 
+     *  regardless of the real value of <code>interruptionBehavior</code>.</p>
+     *
+     *  <p>The mx.states.InterruptionBehavior class defines 
+     *  the possible values for this property.</p>
+     * 
+     *  @default end
+     *
+     *  @see Transition#autoReverse
+     *  @see mx.states.InterruptionBehavior
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10.2
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     */
+    [Inspectable(category="General", enumeration="end,stop", defaultValue="end")]
+    public var interruptionBehavior:String = InterruptionBehavior.END;
 }
 
 }

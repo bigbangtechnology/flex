@@ -16,6 +16,13 @@
             </xs:restriction>
           </xs:simpleType>
         </xs:element>
+        <xs:element name="publisherID">
+          <xs:simpleType>
+            <xs:restriction base="xs:string">
+              <xs:pattern value="[A-Fa-f0-9]{40}\.1" />
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
         <xs:element name="name" type="LocalizableType" minOccurs="0" />
         <xs:element name="version" type="xs:string" />
         <xs:element name="filename">
@@ -102,16 +109,16 @@
 	    <xs:element name="installFolder"     minOccurs="0"              >
           <xs:simpleType>
             <xs:restriction base="xs:string">
-              <!-- installFolder cannot begin with a / (forward-slash) or a ' ' (space), have any of these characters: *":<>?\|, and end with a . (dot) or ' ' (space) -->
-              <xs:pattern value='[^\*"/:&gt;&lt;\?\\\|\. ]|[^\*"/:&gt;&lt;\?\\\| ][^\*":&gt;&lt;\?\\\|]*[^\*":&gt;&lt;\?\\\|\. ]'/>
+              <!-- installFolder cannot begin with a / (forward-slash) or a ' ' (space), have any of these characters: *":<>?\|, and end with a . (dot), ' ' (space), or / (forward slash) -->
+              <xs:pattern value='[^\*"/:&gt;&lt;\?\\\|\. ]|[^\*"/:&gt;&lt;\?\\\| ][^\*":&gt;&lt;\?\\\|]*[^\*":&gt;&lt;\?\\\|\. /]'/>
             </xs:restriction>
           </xs:simpleType>
         </xs:element>
         <xs:element name="programMenuFolder" minOccurs="0"              >
           <xs:simpleType>
             <xs:restriction base="xs:string">
-              <!-- programMenuFolder cannot begin with a / (forward-slash) or a ' ' (space), have any of these characters: *":<>?\|, and end with a . (dot) or ' ' (space) -->
-              <xs:pattern value='[^\*"/:&gt;&lt;\?\\\|\. ]|[^\*"/:&gt;&lt;\?\\\| ][^\*":&gt;&lt;\?\\\|]*[^\*":&gt;&lt;\?\\\|\. ]'/>
+              <!-- programMenuFolder cannot begin with a / (forward-slash) or a ' ' (space), have any of these characters: *":<>?\|, and end with a . (dot), ' ' (space), or / (forward slash) -->
+              <xs:pattern value='[^\*"/:&gt;&lt;\?\\\|\. ]|[^\*"/:&gt;&lt;\?\\\| ][^\*":&gt;&lt;\?\\\|]*[^\*":&gt;&lt;\?\\\|\. /]'/>
             </xs:restriction>
           </xs:simpleType>
         </xs:element>
@@ -193,7 +200,7 @@
       <xs:element name="image29x29"   type="xs:anyURI" minOccurs="0" />
       <xs:element name="image32x32"   type="xs:anyURI" minOccurs="0" />
       <xs:element name="image48x48"   type="xs:anyURI" minOccurs="0" />
-	  <!-- 59x59 is never used by file icons -->
+	  <!-- 57x57 is never used by file icons -->
       <xs:element name="image57x57"   type="xs:anyURI" minOccurs="0" />
       <xs:element name="image72x72"   type="xs:anyURI" minOccurs="0" />
       <xs:element name="image128x128" type="xs:anyURI" minOccurs="0" />

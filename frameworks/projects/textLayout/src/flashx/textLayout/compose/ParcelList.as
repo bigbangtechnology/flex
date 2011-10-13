@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.compose
 {
 	import flash.geom.Rectangle;
@@ -22,18 +22,19 @@ package flashx.textLayout.compose
 	import flashx.textLayout.formats.LineBreak;
 	import flashx.textLayout.formats.VerticalAlign;
 	import flashx.textLayout.tlf_internal;
+	import flashx.textLayout.utils.Twips;
 	
 	use namespace tlf_internal;
 			
 	[ExcludeClass]
 	/** @private
-	 * Implementation of IParcelList used for composing text containers that have single
-	 * column, no wraps, and no floats.
+	 * Used for composing text containers, keeps track of the areas that text in the 
+	 * flow is composed into.
 	 * 
 	 * ParcelList will always have one parcel, which corresponds to the container's
 	 * bounding box. 
 	 */
-	public class ParcelList implements IParcelList  
+	public class ParcelList
 	{
 		protected var _flowComposer:IFlowComposer;
 		
@@ -47,37 +48,27 @@ package flashx.textLayout.compose
 			They are appear in the array in reading order: the first text goes in the
 			first parcel, when it gets filled later text is flowed into the second 
 			parcel, and so on.  */
-		private var _parcelArray:Array;	/* of Parcel */
-		private var _numParcels:int;
-		private var _singleParcel:Parcel;
+		protected var _parcelArray:Array;	/* of Parcel */
+		protected var _numParcels:int;
+		protected var _singleParcel:Parcel;
 		
 		/** Index of the "current" parcel. These next two variables must be kept in sync. */
 		protected var _currentParcelIndex:int;
 		protected var _currentParcel:Parcel;
 		
-		/** Callback to notify that we're going to the next parcel */
-		protected var _notifyOnParcelChange:Function;
+		protected var _insideListItemMargin:Number;
 		
-		/** Column number of the current parcel */
-		private var _columnIndex:int;
-		private var _columnController:ContainerController;
+		protected var _leftMargin:Number;
+		protected var _rightMargin:Number; 
 		
-		private var _explicitLineBreaks:Boolean;
+		protected var _explicitLineBreaks:Boolean;
+			
+		/** True if text is vertical (as for some Japanese & Chinese, false otherwise */
+		protected var _verticalText:Boolean;
 		
-		/** true if we should include the last line if any part of it fits */
-	//	protected var _includePartialLine:Boolean;
-		
-		
-	//	private var parcel:Parcel;
-	
 		private static const MAX_HEIGHT:Number = 900000000;		// vertical scroll max - capped to prevent loss of precision - what should it be?
 		private static const MAX_WIDTH:Number =  900000000;		// horizontal scroll max - capped to prevent loss of precision - what should it be?
-
-			/** minimum allowable width of a line */
 			
-		/** Writing mode for vertical, left to right and left to right. @see text.formats.BlockProgression */
-		protected var _blockProgression:String;
-		
 		// a single parcellist that is checked out and checked in
 		static private var _sharedParcelList:ParcelList;
 
@@ -90,7 +81,7 @@ package flashx.textLayout.compose
 		}
 		
 		/** @private */
-		static tlf_internal function releaseParcelList(list:IParcelList):void
+		static tlf_internal function releaseParcelList(list:ParcelList):void
 		{
 			if (_sharedParcelList == null)
 			{
@@ -108,7 +99,6 @@ package flashx.textLayout.compose
 		tlf_internal function releaseAnyReferences():void
 		{
 			this._flowComposer = null;
-			this._columnController = null;
 			
 			_numParcels = 0;
 			_parcelArray = null;
@@ -121,111 +111,37 @@ package flashx.textLayout.compose
 		{
 			var boundsArray:Array = [];
 			for (var i:int = 0; i < _numParcels; ++i)
-				boundsArray.push(getParcelAtIndex(i));
+				boundsArray.push(getParcelAt(i));
 			return boundsArray;
 		}
 		
-		protected function get numParcels():int
-		{ return _numParcels; }
-		
-		protected function getParcelAtIndex(idx:int):Parcel
-		{ return _numParcels == 1 ? _singleParcel : _parcelArray[idx]; }
-		
-		protected function insertParcel(startIdx:int, parcel:Parcel):void
-		{
-			if (_numParcels == 0)
-				_singleParcel = parcel;
-			else
-			{
-				if (_numParcels == 1)
-					_parcelArray = [ _singleParcel ];
-				_parcelArray.splice(startIdx, 0, parcel);
-			}
-			_numParcels++;
-		}
-		
-		protected function set parcels(newParcels:Array):void
-		{
-			_numParcels = newParcels.length;
-			if (_numParcels == 0)
-				_parcelArray = null;
-			else if (_numParcels == 1)
-			{
-				_parcelArray = null;
-				_singleParcel = newParcels[0];
-			}
-			else
-				_parcelArray = newParcels;
-		}
-		
-		public function get left():Number
-		{
-			return _currentParcel.left;
-		}
-		
-		public function get right():Number
-		{
-			return _currentParcel.right;
-		}
-		
-		public function get top():Number
-		{
-			return _currentParcel.top;
-		}
-		
-		public function get bottom():Number
-		{
-			return _currentParcel.bottom;
-		}
-		
-		public function get width():Number
-		{
-			return _currentParcel.width;
-		}
-		
-		public function get height():Number
-		{
-			return _currentParcel.height;
-		}
-		
-		public function get fitAny():Boolean
-		{
-			return _currentParcel.fitAny;
-		}
+		public function getParcelAt(idx:int):Parcel
+		{ return _numParcels <= 1 ? _singleParcel : _parcelArray[idx]; }
 				
-		public function get controller():ContainerController
-		{
-			return _columnController;
-		}
-		
-		public function get columnIndex():int
-		{ return _columnIndex; }
+		public function get currentParcelIndex():int
+		{ return _currentParcelIndex; }
 		
 		public function get explicitLineBreaks():Boolean
 		{ 
 			return _explicitLineBreaks;
 		}
 		
-		private function get measureWidth():Boolean
+		private function get measureLogicalWidth():Boolean
 		{
 			if (_explicitLineBreaks)
 				return true;
 			if (!_currentParcel)
 				return false;
-			if (_blockProgression == BlockProgression.TB)
-				return _currentParcel.measureWidth;
-			else
-				return _currentParcel.measureHeight;
+			var controller:ContainerController = _currentParcel.controller;
+			return _verticalText ? controller.measureHeight : controller.measureWidth;
 		}
 
-		private function get measureHeight():Boolean
+		private function get measureLogicalHeight():Boolean
 		{
 			if (!_currentParcel)
 				return false;
-			if (_blockProgression == BlockProgression.TB)
-				return _currentParcel.measureHeight;
-			else
-				return _currentParcel.measureWidth;
+			var controller:ContainerController = _currentParcel.controller;
+			return _verticalText ? controller.measureWidth : controller.measureHeight;
 		}
 		
 		public function get totalDepth():Number
@@ -233,19 +149,8 @@ package flashx.textLayout.compose
 			return _totalDepth;
 		}
 		
-		public function get notifyOnParcelChange():Function
-		{
-			return _notifyOnParcelChange;
-		}
-		
-		public function set notifyOnParcelChange(val:Function):void
-		{
-			_notifyOnParcelChange = val;
-		}
-		
 		public function addTotalDepth(value:Number):Number
 		{
-			_hasContent = true;
 			_totalDepth += value;	
 		//	trace("addTotalDepth", value, "newDepth", totalDepth);
 			return _totalDepth;
@@ -253,33 +158,27 @@ package flashx.textLayout.compose
 		
 		protected function reset():void
 		{
+			// Composition starts with an initial invalid parcel. It will start by calling next(), which will 
+			// advance to the first parcel.
 			_totalDepth = 0;
 			_hasContent = false;
-			_columnIndex = 0;
-			_currentParcelIndex = 0;
+
+			_currentParcelIndex = -1;
+			_currentParcel = null;
 			
-			if (_numParcels != 0)
-			{
-				_currentParcel    = getParcelAtIndex(_currentParcelIndex);
-				_columnController =  _currentParcel.controller;
-				_columnIndex      = 0;
-			}
-			else
-			{
-				_currentParcel = null;
-				_columnController =  null;
-				_columnIndex = -1;
-			}
+			_leftMargin = 0;
+			_rightMargin = 0;
+			_insideListItemMargin = 0;
 		}
 		
-		private function addParcel(column:Rectangle, cont:ContainerController, col:int, colCoverage:int):void
+		private function addParcel(column:Rectangle, controller:ContainerController, columnIndex:int):void
 		{
 			var newParcel:Parcel = _numParcels == 0 && _singleParcel 
-				? _singleParcel.initialize(column.x,column.y,column.width,column.height,cont,col,colCoverage) 
-				: new Parcel(column.x, column.y, column.width, column.height, cont, col, colCoverage)
+				? _singleParcel.initialize(_verticalText, column.x,column.y,column.width,column.height,controller,columnIndex) 
+				: new Parcel(_verticalText, column.x, column.y, column.width, column.height, controller, columnIndex)
 			if (_numParcels == 0)
 				_singleParcel = newParcel;
-			else if (numParcels == 1)
+			else if (_numParcels == 1)
 				_parcelArray = [  _singleParcel, newParcel ];
 			else
 				_parcelArray.push(newParcel);
@@ -294,17 +193,17 @@ package flashx.textLayout.compose
 			{
 				var column:Rectangle = columnState.getColumnAt(columnIndex);
 				if (!column.isEmpty())
-					addParcel(column, controllerToInitialize, columnIndex, Parcel.FULL_COLUMN);
+					addParcel(column, controllerToInitialize, columnIndex);
 			}
 		}
 		
-		public function beginCompose(composer:IFlowComposer, controllerEndIndex:int, composeToPosition:Boolean):void
+		public function beginCompose(composer:IFlowComposer, controllerStartIndex:int, controllerEndIndex:int, composeToPosition:Boolean):void
 		{
 			_flowComposer = composer;
 			
 			var rootFormat:ITextLayoutFormat = composer.rootElement.computedFormat;
 			_explicitLineBreaks = rootFormat.lineBreak == LineBreak.EXPLICIT;
-			_blockProgression   = rootFormat.blockProgression;
+			_verticalText   = (rootFormat.blockProgression == BlockProgression.RL);
 			
 			if (composer.numControllers != 0)
 			{
@@ -313,14 +212,14 @@ package flashx.textLayout.compose
 					controllerEndIndex = composer.numControllers-1;
 				else
 					controllerEndIndex = Math.min(controllerEndIndex,composer.numControllers-1);
-				var idx:int = 0;
+				var idx:int = controllerStartIndex;
 				do
 				{
 					addOneControllerToParcelList(ContainerController(composer.getControllerAt(idx)));
 				} while (idx++ != controllerEndIndex)
 				// adjust the last container for scrolling
 				if (controllerEndIndex == composer.numControllers-1)
-					adjustForScroll(ContainerController(ContainerController(composer.getControllerAt(composer.numControllers-1))), composeToPosition);
+					adjustForScroll(composer.getControllerAt(composer.numControllers-1), composeToPosition);
 			}
 			reset();
 		}
@@ -336,29 +235,31 @@ package flashx.textLayout.compose
 			// fits. This makes lines that are only partially scrolling in appear. We turn on composeToPosition if we're
 			// forcing composition to go through a given position -- this will make all lines fit, and composition will
 			// continue until it is past the supplied position.
-			if (_blockProgression != BlockProgression.RL)
+			if (_verticalText)
 			{
-				if (containerToInitialize.verticalScrollPolicy != ScrollPolicy.OFF)
+				if (containerToInitialize.horizontalScrollPolicy != ScrollPolicy.OFF)
 				{
-					var p:Parcel = getParcelAtIndex(_numParcels-1);
+					p = getParcelAt(_numParcels-1);
 					if (p)
 					{
-						var verticalPaddingAmount:Number = containerToInitialize.effectivePaddingBottom + containerToInitialize.effectivePaddingTop;
-						p.bottom = containerToInitialize.verticalScrollPosition + p.height + verticalPaddingAmount;
+						var horizontalPaddingAmount:Number = containerToInitialize.getTotalPaddingRight() + containerToInitialize.getTotalPaddingLeft();
+						var right:Number = p.right;
+						p.x = containerToInitialize.horizontalScrollPosition - p.width - horizontalPaddingAmount;
+						p.width = right - p.x;
 						p.fitAny = true;
 						p.composeToPosition = composeToPosition;
 					}
 				}
 			}
-			else	// vertical text case
+			else
 			{
-				if (containerToInitialize.horizontalScrollPolicy != ScrollPolicy.OFF)
+				if (containerToInitialize.verticalScrollPolicy != ScrollPolicy.OFF)
 				{
-					p = getParcelAtIndex(_numParcels-1);
+					var p:Parcel = getParcelAt(_numParcels-1);
 					if (p)
 					{
-						var horizontalPaddingAmount:Number = containerToInitialize.effectivePaddingRight + containerToInitialize.effectivePaddingLeft;
-						p.left = containerToInitialize.horizontalScrollPosition - p.width - horizontalPaddingAmount;
+						var verticalPaddingAmount:Number = containerToInitialize.getTotalPaddingBottom() + containerToInitialize.getTotalPaddingTop();
+						p.height = (containerToInitialize.verticalScrollPosition + p.height + verticalPaddingAmount) - p.y;
 						p.fitAny = true;
 						p.composeToPosition = composeToPosition;
 					}
@@ -366,10 +267,47 @@ package flashx.textLayout.compose
 			}
 		}
 
+		public function get leftMargin():Number
+		{
+			return _leftMargin;
+		}
+		
+		public function pushLeftMargin(leftMargin:Number):void
+		{
+			_leftMargin += leftMargin;	
+		}
+		
+		public function popLeftMargin(leftMargin:Number):void
+		{
+			_leftMargin -= leftMargin;	
+		}
+					
+		public function get rightMargin():Number
+		{
+			return _rightMargin;
+		}
+		
+		public function pushRightMargin(rightMargin:Number):void
+		{
+			_rightMargin += rightMargin;	
+		}
+		
+		public function popRightMargin(rightMargin:Number):void
+		{
+			_rightMargin -= rightMargin;	
+		}
+		
+		public function pushInsideListItemMargin(margin:Number):void
+		{ _insideListItemMargin += margin; }
+		public function popInsideListItemMargin(margin:Number):void
+		{ _insideListItemMargin -= margin; }	
+		public function get insideListItemMargin():Number
+		{ return _insideListItemMargin; }
+		
 		public		function getComposeXCoord(o:Rectangle):Number
 		{ 
 			// trace("LPL: getComposeXCoord");
-			return _blockProgression == BlockProgression.RL ? o.right : o.left;
+			return _verticalText ? o.right : o.left;
 		}
 		public		function getComposeYCoord(o:Rectangle):Number
 		{ 
@@ -380,23 +318,19 @@ package flashx.textLayout.compose
 		public function getComposeWidth(o:Rectangle):Number
 		{ 
 			// trace("LPL: getComposeWidth");
-			if (measureWidth)
+			if (measureLogicalWidth)
 				return TextLine.MAX_LINE_WIDTH;
-			return _blockProgression == BlockProgression.RL ? o.height : o.width; 
+			return _verticalText ? o.height : o.width; 
 		}
+
 		public function getComposeHeight(o:Rectangle):Number
 		{ 
 			// trace("LPL: getComposeHeight");
-			if (measureHeight)
+			if (measureLogicalHeight)
 				return TextLine.MAX_LINE_WIDTH;
-			return _blockProgression == BlockProgression.RL ? o.width : o.height; 
+			return _verticalText ? o.width : o.height; 
 		}		
-		/** True if the current parcel is at the top of the column */
-		public function isColumnStart():Boolean
-		{
-			return (!_hasContent && _currentParcel.topOfColumn);
-		}
-		
+
 		/** Returns true if the current parcel is the last.
 		*/
 		public function atLast():Boolean
@@ -411,91 +345,52 @@ package flashx.textLayout.compose
 		
 		public function next():Boolean
 		{
-			CONFIG::debug { assert(_currentParcelIndex >= 0 && _currentParcelIndex < _numParcels, "invalid _currentParcelIndex in ParcelList"); }			
+			CONFIG::debug { assert(_currentParcelIndex >= -1 && _currentParcelIndex < _numParcels, "invalid _currentParcelIndex in ParcelList"); }			
 			var nextParcelIsValid:Boolean = (_currentParcelIndex + 1) < _numParcels;
 
-			_notifyOnParcelChange(nextParcelIsValid ? getParcelAtIndex(_currentParcelIndex + 1) : null)
-			
 			_currentParcelIndex += 1;
 			_totalDepth = 0;
-			_hasContent = false;
-			
+
 			if (nextParcelIsValid)
 			{
-				_currentParcel = getParcelAtIndex(_currentParcelIndex);
+				_currentParcel = getParcelAt(_currentParcelIndex);
 				var nextController:ContainerController = _currentParcel.controller;
-				if (nextController == _columnController)
-					_columnIndex++;
-				else
-				{
-					_columnIndex = 0;
-					_columnController = nextController;
-				}
 			}
 			else
-			{
 				_currentParcel = null;
-				_columnIndex = -1;
-				_columnController = null;
-			}
 	
 			return nextParcelIsValid;
-		}
-		
-		public function createParcel(parcel:Rectangle, blockProgression:String, verticalJump:Boolean):Boolean
-			// If we can get the requested parcel to fit, create it in the parcels list
-		{
-			return false;
-		}
-		
-		public function createParcelExperimental(parcel:Rectangle, wrapType:String):Boolean
-			// If we can get the requested parcel to fit, create it in the parcels list
-		{
-			return false;
 		}
 		
 		public function get currentParcel():Parcel
 		{ return _currentParcel; }
 
-		/**Return the width for a line that goes at the current vertical location,
+		/**Return the slug rectangle for a line that goes at the current vertical location,
 		 * and could extend down for at least height pixels. Note that this function
 		 * can change the current parcel, and the location within the parcel.
+		 * @param slugRect result rectangle where line was fit
 		 * @param height	amount of contiguous vertical space that must be available
 		 * @param minWidth	amount of contiguous horizontal space that must be available 
-		 * @return amount of contiguous horizontal space actually available
+		 * @return true if a line slug was fit horizontal space actually available
 		 */
-		public function getLineSlug(slugRect:Rectangle, height:Number, minWidth:Number = 0):Boolean
+		public function getLineSlug(slug:Slug, height:Number, minWidth:Number, textIndent:Number, directionLTR:Boolean):Boolean
 		{
-			// trace("getLineSlug",slugRect,height,minWidth);
-			if (_currentParcelIndex < _numParcels) 
+			if (currentParcel.getLineSlug(slug, _totalDepth, height, minWidth, currentParcel.fitAny ? 1 : int(height), _leftMargin, _rightMargin, textIndent+_insideListItemMargin, directionLTR,  _explicitLineBreaks))
 			{
-				var tileWidth:Number = getComposeWidth(_currentParcel);
-				if (tileWidth > minWidth)
-				{
-					// Fit the line if any part of the line fits in the height. Observe the cast to int!
-					if (currentParcel.composeToPosition || _totalDepth + (_currentParcel.fitAny ? 1 : int(height)) <= getComposeHeight(_currentParcel))
-					{
-						if (_blockProgression != BlockProgression.RL)
-						{
-							slugRect.x = left;
-							slugRect.y = _currentParcel.top + _totalDepth;
-							slugRect.width = tileWidth;
-							slugRect.height = height;
-						}
-						else
-						{
-							slugRect.x = left;
-							slugRect.y = _currentParcel.top;
-							slugRect.width = _currentParcel.width-_totalDepth;
-							slugRect.height = tileWidth;
-						}
-						return true;
-					}
-				}
-			} 
+				if (totalDepth != slug.depth)
+					_totalDepth = slug.depth;
+				return true;
+			}
 			return false;
 		}
 	
-
+		// Attempts to fit a float of the specified width and height in the current parcel. Float is considered to fit if it
+		// is alone on the line but exceeds the parcel width and fits within the logical height.
+		// Returns success or failure.
+		public function fitFloat(slug:Slug, totalDepth:Number, width:Number, height:Number):Boolean
+		{
+			return currentParcel.getLineSlug(slug, totalDepth, height, width, currentParcel.fitAny ? 1 : int(height), _leftMargin, _rightMargin, 0, true, _explicitLineBreaks);
+		}
+				
 	}	//end class
 } //end package

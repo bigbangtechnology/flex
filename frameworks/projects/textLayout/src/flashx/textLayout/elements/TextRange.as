@@ -1,17 +1,19 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
-	import flashx.textLayout.elements.TextFlow;
+	import flashx.textLayout.tlf_internal;
 	
+	use namespace tlf_internal;
+
 	/**
 	 * A read only class that describes a range of contiguous text. Such a range occurs when you select a
 	 * section of text. The range consists of the anchor point of the selection, <code>anchorPosition</code>,

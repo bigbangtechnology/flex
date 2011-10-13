@@ -1,4 +1,6 @@
-<?xml version="1.0" encoding="utf-8" standalone="no" ?><!DOCTYPE asf SYSTEM "http://ns.adobe.com/asf/asf_1_0.dtd"><asf locale="en_US" version="1.0" xmlns="http://ns.adobe.com/asf">
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE asf SYSTEM "http://ns.adobe.com/asf/asf_1_0.dtd" >
+<asf xmlns="http://ns.adobe.com/asf" version="1.0" locale="tr_TR">
    <str name="ERROR__CAPTION__ADOBE_AIR" translate="yes">
      <val>Adobe AIR</val> 
    </str>
@@ -45,8 +47,7 @@
      <val>Web’de Ara</val> 
    </str>
    <str name="HTML_CONTEXTMENU__SPELLING__SEARCH_IN_DICTIONARY" translate="yes">
-     <val>Sözlüğe Bak</val>
-     <val plat="unix">at</val> 
+     <val>Sözlüğe Bak</val> 
    </str>
    <str name="HTML_CONTEXTMENU__SPELLING__NO_GUESSES_FOUND" translate="yes">
      <val>Tahmin Bulunamadı</val> 
@@ -139,10 +140,10 @@
     <val>Gönder</val>
   </str>
   <str name="HTML_UNKNOWN_FILE_SIZE" translate="yes">
-    <val>Bilinmeyen</val>
+    <val>Unknown</val>
   </str>
   <str name="HTML_UNKNOWN_FILE_SIZE" translate="yes">
-	<val>Bilinmeyen</val>
+	<val>Unknown</val>
   </str>
 	<str name="HTML_SEARCH_MENU__CLEAR_RECENT_SEARCHES" translate="yes">
 		<val>Son aramaları temizle</val>

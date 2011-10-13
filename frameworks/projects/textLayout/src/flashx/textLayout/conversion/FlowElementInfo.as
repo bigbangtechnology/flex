@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.conversion
 {
 	import flash.utils.getQualifiedClassName;
@@ -31,28 +31,18 @@ package flashx.textLayout.conversion
 		/** Class for the object's XFL import/export interface */
 		private var _exporter:Function;
 		
-		/** is this class a ParagraphFormattedElement */
-		private var _isParagraphFormattedElement:Boolean;
-		
 		/** Construct a FlowElementInfo
 		 * @param	flowClass	Class used to represent the FlowElement
 		 * @param 	parser		Function used for parsing XML description of a FlowElement
 		 * @param 	exporter	Class used to represent the FlowElement's exporter
 		 * @param	isParagraphFormattedElement Boolean indicating if this class is a subclass of ParagraphFormattedElement
 		 */
-		public function FlowElementInfo(flowClass:Class, parser:Function, exporter:Function , isParagraphFormattedElement:Boolean)
+		public function FlowElementInfo(flowClass:Class, parser:Function, exporter:Function)
 		{
 			this._flowClass = flowClass;
 			this._parser = parser;
 			this._exporter = exporter;
 			this._flowClassName = getQualifiedClassName(flowClass);
-			this._isParagraphFormattedElement = isParagraphFormattedElement;
-			CONFIG::debug {
-				if (flowClass == null)
-					assert(isParagraphFormattedElement == false,"Bad value supplied for isParagraphFormattedElement"); 
-				else
-					assert(isParagraphFormattedElement == ((new flowClass) is ParagraphFormattedElement),"Bad value supplied for isParagraphFormattedElement"); 
-			}
 		}
 		
 		/** Class used for the FlowElement sub-type */
@@ -68,7 +58,5 @@ package flashx.textLayout.conversion
 		public function get exporter():Function
 		{ return _exporter; }
 		/** Boolean indicating if flowClass is a subclass of ParagraphFormattedElement */
-		public function get isParagraphFormattedElement():Boolean
-		{ return _isParagraphFormattedElement; }
 	}
 }

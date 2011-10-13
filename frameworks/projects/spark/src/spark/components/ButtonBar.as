@@ -39,7 +39,6 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
 
 [IconFile("ButtonBar.png")]
 
-
 /**
  *  The ButtonBar control defines a horizontal group of 
  *  logically related buttons with a common look and navigation.
@@ -56,8 +55,14 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
  *  The ButtonBar control automatically adds or removes the necessary children based on 
  *  changes to the <code>dataProvider</code> property.</p>
  *
- *  <p>You can use the ButtonBar control to set the active child of a ViewStack container, 
- *  as the following example shows:</p>
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
+ *
+ *  <p>For non-mobile projects, you can use the ButtonBar control to set the
+ *  active child of a ViewStack container, as the following example shows:</p>
  *
  *  <p><b>Note: </b>The Spark list-based controls (the Spark ListBase class and its subclasses
  *  such as ButtonBar, ComboBox, DropDownList, List, and TabBar) do not support the BasicLayout class
@@ -201,6 +206,8 @@ public class ButtonBar extends ButtonBarBase implements IFocusManagerComponent
     //  dataProvider
     //----------------------------------
      
+    [Inspectable(category="Data")]
+    
     /**
      *  @private
      */    
@@ -211,7 +218,7 @@ public class ButtonBar extends ButtonBarBase implements IFocusManagerComponent
     
         // not really a default handler, we just want it to run after the datagroup
         if (value)
-            value.addEventListener(CollectionEvent.COLLECTION_CHANGE, resetCollectionChangeHandler, false, EventPriority.DEFAULT_HANDLER);
+            value.addEventListener(CollectionEvent.COLLECTION_CHANGE, resetCollectionChangeHandler, false, EventPriority.DEFAULT_HANDLER, true);
 
         super.dataProvider = value;
     }

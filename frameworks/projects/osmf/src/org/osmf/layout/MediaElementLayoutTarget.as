@@ -24,50 +24,162 @@ package org.osmf.layout
 	import flash.display.DisplayObject;
 	import flash.display.DisplayObjectContainer;
 	import flash.errors.IllegalOperationError;
-	import flash.events.Event;
 	import flash.events.EventDispatcher;
 	import flash.utils.Dictionary;
 	
-	import org.osmf.events.DimensionEvent;
+	import org.osmf.events.DisplayObjectEvent;
 	import org.osmf.events.MediaElementEvent;
-	import org.osmf.events.ViewEvent;
-	import org.osmf.logging.ILogger;
 	import org.osmf.media.MediaElement;
-	import org.osmf.metadata.Metadata;
-	import org.osmf.metadata.MetadataNamespaces;
-	import org.osmf.traits.ISpatial;
-	import org.osmf.traits.IViewable;
+	import org.osmf.traits.DisplayObjectTrait;
 	import org.osmf.traits.MediaTraitType;
 	import org.osmf.utils.OSMFStrings;
-
-	/**
-	 * Dispatched when a layout child's _view has changed.
-	 * 
-	 * @eventType org.osmf.events.ViewEvent.VIEW_CHANGE
-	 */	
-	[Event(name="viewChange",type="org.osmf.events.ViewEvent")]
 	
 	/**
-	 * Dispatched when a layout element's intrinsical width and height changed.
+	 * @private
 	 * 
-	 * @eventType org.osmf.events.DimensionEvent.DIMENSION_CHANGE
+	 * Dispatched when a layout target is being set as a layout renderer's container.
+	 *
+	 * LayoutRendererBase dispatches this event on the target being set as its container.
+	 * 
+	 * Implementations that are to be used as layout renderer containers are required
+	 * to listen to the event in order to maintain a reference to their layout
+	 * renderer, so it can be correctly parented on the container becoming a child
+	 * of another container.
+	 *  
+	 * @eventType org.osmf.layout.LayoutTargetEvent.SET_AS_LAYOUT_RENDERER_CONTAINER
 	 *  
 	 *  @langversion 3.0
 	 *  @playerversion Flash 10
-	 *  @playerversion AIR 1.0
-	 *  @productversion OSMF 4.0
-	 */	
-	[Event(name="dimensionChange",type="org.osmf.events.DimensionEvent")]
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
+	[Event(name="setAsLayoutRendererContainer",type="org.osmf.layout.LayoutTargetEvent")]
+	
+	/**
+	 * @private
+	 * 
+	 * Dispatched when a layout target is being un-set as a layout renderer's container.
+	 * 
+	 * LayoutRendererBase dispatches this event on the target being unset as its container.
+	 * 
+	 * Implementations that are to be used as layout renderer containers are required
+	 * to listen to the event in order to reset the reference to their layout renderer. 
+	 * 
+	 * @eventType org.osmf.layout.LayoutTargetEvent.UNSET_AS_LAYOUT_RENDERER_CONTAINER
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
+	[Event(name="unsetAsLayoutRendererContainer",type="org.osmf.layout.LayoutTargetEvent")]
+	
+	/**
+	 * @private
+	 * 
+	 * Dispatched when a layout target is added as a target to a layout renderer.
+	 * 
+	 * LayoutRendererBase dispatches this event on a target when it gets added to
+	 * its list of targets.
+	 * 
+	 * Implementations that are to be used as layout renderer containers
+	 * are required to listen to the event in order to invoke <code>setParent</code>
+	 * on the renderer that they are the container for.
+	 * 
+	 * Failing to do so will break the rendering tree, resulting in unneccasary
+	 * layout recalculations, as well as unexpected size and positioning of the target.
+	 * 
+	 * @eventType org.osmf.layout.LayoutTargetEvent.ADD_TO_LAYOUT_RENDERER
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
+	[Event(name="addToLayoutRenderer",type="org.osmf.layout.LayoutTargetEvent")]
 
 	/**
+	 * @private
+	 * 
+	 * Dispatched when a layout target is removed as a target from a layout renderer.
+	 * 
+	 * LayoutRendererBase dispatches this event on a target when it gets removed from
+	 * its list of targets.
+	 *
+	 * Implementations that are to be used as layout renderer containers
+	 * are required to listen to the event in order to invoke <code>setParent</code>
+	 * on the renderer that they are the container for. In case of removal, the
+	 * parent should be set to null, unless the target has already been assigned
+	 * as the container of another renderer.
+	 * 
+	 * Failing to do so will break the rendering tree, resulting in unneccasary
+	 * layout recalculations, as well as unexpected size and positioning of the target.
+	 * 
+	 * @eventType org.osmf.layout.LayoutTargetEvent.REMOVE_FROM_LAYOUT_RENDERER
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
+	[Event(name="removeFromLayoutRenderer",type="org.osmf.layout.LayoutTargetEvent")]
+
+	/**
+	 * @private
+	 * 
+	 * Dispatched when a layout renderer wishes its layout target container to
+	 * stage a display object for one of its targets.
+	 * 
+	 * @eventType org.osmf.layout.LayoutTargetEvent.ADD_CHILD_AT
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
+	[Event(name="addChildAt",type="org.osmf.layout.LayoutTargetEvent")]
+	
+	/**
+	 * @private
+	 * 
+	 * Dispatched when a layout renderer wishes its layout target container to
+	 * change the display index of the display object for one of its targets.
+	 * 
+	 * @eventType org.osmf.layout.LayoutTargetEvent.SET_CHILD_INDEX
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
+	[Event(name="setChildIndex",type="org.osmf.layout.LayoutTargetEvent")]
+
+	/**
+	 * @private
+	 * 
+	 * Dispatched when a layout renderer wishes its layout target container to
+	 * remove the display object for one of its targets.
+	 * 
+	 * @eventType org.osmf.layout.LayoutTargetEvent.REMOVE_CHILD
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
+	[Event(name="removeChild",type="org.osmf.layout.LayoutTargetEvent")]
+
+	/**
+	 * @private
+	 * 
 	 * Class wraps a MediaElement into a ILayoutChild.
 	 *  
 	 *  @langversion 3.0
 	 *  @playerversion Flash 10
-	 *  @playerversion AIR 1.0
-	 *  @productversion OSMF 4.0
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */	
-	public class MediaElementLayoutTarget extends EventDispatcher implements ILayoutTarget, ILayoutContext
+	public class MediaElementLayoutTarget extends EventDispatcher implements ILayoutTarget
 	{
 		/**
 		 * @private
@@ -83,269 +195,26 @@ package org.osmf.layout
 		{
 			if (constructorLock != ConstructorLock)
 			{
-				throw new IllegalOperationError(OSMFStrings.getString(OSMFStrings.ILLEGAL_CONSTRUCTOR_INVOKATION));
+				throw new IllegalOperationError(OSMFStrings.getString(OSMFStrings.ILLEGAL_CONSTRUCTOR_INVOCATION));
 			}
 			else
 			{
-				this._mediaElement = mediaElement;
-				
+				_mediaElement = mediaElement;
 				_mediaElement.addEventListener(MediaElementEvent.TRAIT_ADD, onMediaElementTraitsChange);
 				_mediaElement.addEventListener(MediaElementEvent.TRAIT_REMOVE, onMediaElementTraitsChange);
+				_mediaElement.addEventListener(MediaElementEvent.METADATA_ADD, onMetadataAdd);
+				_mediaElement.addEventListener(MediaElementEvent.METADATA_REMOVE, onMetadataRemove);
 				
-				updateViewableTrait();
-				updateSpatialTrait();
+				renderers = new LayoutTargetRenderers(this);
+				
+				_layoutMetadata = _mediaElement.getMetadata(LayoutMetadata.LAYOUT_NAMESPACE) as LayoutMetadata;
+				
+				addEventListener(LayoutTargetEvent.ADD_CHILD_AT, onAddChildAt);
+				addEventListener(LayoutTargetEvent.SET_CHILD_INDEX, onSetChildIndex);
+				addEventListener(LayoutTargetEvent.REMOVE_CHILD, onRemoveChild);
+				
+				onMediaElementTraitsChange();
 			}
-		}
-		
-		// ILayoutTarget
-		//
-
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get layoutRenderer():ILayoutRenderer
-		{
-			return viewLayoutTarget ? viewLayoutTarget.layoutRenderer : null;
-		}
-		
-		public function set layoutRenderer(value:ILayoutRenderer):void
-		{
-			if (viewLayoutTarget)
-			{
-				viewLayoutTarget.layoutRenderer = value;
-			}
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get metadata():Metadata
-		{
-			return _mediaElement.metadata;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get view():DisplayObject
-		{
-			return _view;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get container():DisplayObjectContainer
-		{
-			return viewLayoutTarget ? viewLayoutTarget.container : null; 
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get firstChildIndex():uint
-		{
-			return viewLayoutTarget ? viewLayoutTarget.firstChildIndex : 0;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get intrinsicWidth():Number
-		{
-			return viewLayoutTarget
-					? viewLayoutTarget.intrinsicWidth
-				 	: spatialTrait 
-				 		? spatialTrait.width
-				 		: NaN;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get intrinsicHeight():Number
-		{
-			return viewLayoutTarget
-					? viewLayoutTarget.intrinsicHeight
-					: spatialTrait
-						? spatialTrait.height
-						: NaN;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function updateIntrinsicDimensions():void
-		{
-			if (viewLayoutTarget)
-			{
-				viewLayoutTarget.updateIntrinsicDimensions();
-			}
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-	 	public function set calculatedWidth(value:Number):void
-	 	{
-	 		if (viewLayoutTarget)
-	 		{
-	 			viewLayoutTarget.calculatedWidth = value;
-	 		}
-	 		else
-	 		{
-	 			_calculatedWidth = value;
-	 		}
-	 	}
-	 	public function get calculatedWidth():Number
-	 	{
-	 		return viewLayoutTarget
-	 				? viewLayoutTarget.calculatedWidth
-	 				: _calculatedWidth;
-	 	}
-	 	
-	 	/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function set calculatedHeight(value:Number):void
-		{
-			_calculatedHeight = value;
-			if (viewLayoutTarget)
-	 		{
-	 			viewLayoutTarget.calculatedHeight = value;
-	 		}
-		}
-		public function get calculatedHeight():Number
-		{
-			return viewLayoutTarget
-					? viewLayoutTarget.calculatedHeight
-					: _calculatedHeight;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function set projectedWidth(value:Number):void
-	 	{
-	 		if (viewLayoutTarget)
-	 		{
-	 			viewLayoutTarget.projectedWidth = value;
-	 		}
-	 		else
-	 		{
-	 			_projectedWidth = value;
-	 		}
-	 	}
-	 	public function get projectedWidth():Number
-	 	{
-	 		return viewLayoutTarget
-	 				? viewLayoutTarget.projectedWidth
-	 				: _projectedWidth;
-	 	}
-	 	
-	 	/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function set projectedHeight(value:Number):void
-		{
-	 		_projectedHeight = value;
-			if (viewLayoutTarget)
-	 		{
-	 			viewLayoutTarget.projectedHeight = value;
-	 		}
-		}
-		public function get projectedHeight():Number
-		{
-			return viewLayoutTarget
-					? viewLayoutTarget.projectedHeight
-					: _projectedHeight;
-		}
-		
-		// Public interface
-		//
-		
-		/* Static */
-		
-		public static function getInstance(mediaElement:MediaElement):MediaElementLayoutTarget
-		{
-			var instance:* = layoutTargets[mediaElement];
-			
-			CONFIG::LOGGING 
-			{
-				logger.debug
-					( "getInstance, elem.ID: {0}, instance: {1}"
-					, mediaElement.metadata.getFacet(MetadataNamespaces.ELEMENT_ID)
-					, instance
-					);
-			}
-			
-			if (instance == undefined)
-			{
-				instance = new MediaElementLayoutTarget(mediaElement, ConstructorLock);
-				layoutTargets[mediaElement] = instance;
-			}
-			
-			return instance;
 		}
 		
 		public function get mediaElement():MediaElement
@@ -353,122 +222,284 @@ package org.osmf.layout
 			return _mediaElement;
 		}
 		
+		// ILayoutTarget
+		//
+		
+		/**
+		 * @private
+		 */
+		public function get layoutMetadata():LayoutMetadata
+		{
+			// Make sure we always return a non-null value.
+			if (_layoutMetadata == null)
+			{
+				_layoutMetadata = new LayoutMetadata();
+				_mediaElement.addMetadata(LayoutMetadata.LAYOUT_NAMESPACE, _layoutMetadata);
+			}
+
+			return _layoutMetadata;
+		}
+
+		/**
+		 * @private
+		 */
+		public function get displayObject():DisplayObject
+		{
+			return _displayObject;
+		}
+		
+		/**
+		 * @private
+		 */
+		public function get measuredWidth():Number
+		{
+			return displayObjectTrait
+				 ? displayObjectTrait.mediaWidth
+				 : NaN;
+		}
+		
+		/**
+		 * @private
+		 */
+		public function get measuredHeight():Number
+		{
+			return displayObjectTrait
+				 ? displayObjectTrait.mediaHeight
+				 : NaN;
+		}
+		
+		/**
+		 * @private
+		 */
+		public function measure(deep:Boolean = true):void
+		{
+			if (_displayObject is ILayoutTarget)
+			{
+				ILayoutTarget(_displayObject).measure(deep);
+			}
+		}
+		
+		/**
+		 * @private
+		 */
+		public function layout(availableWidth:Number, availableHeight:Number, deep:Boolean = true):void
+		{
+			if (_displayObject is ILayoutTarget)
+			{
+				ILayoutTarget(_displayObject).layout(availableWidth, availableHeight, deep);
+			}
+			else if (_displayObject != null && renderers.containerRenderer == null)
+			{
+				_displayObject.width = availableWidth;
+				_displayObject.height = availableHeight;
+			} 
+		}
+		
+		// Public interface
+		//
+		
+		public static function getInstance(mediaElement:MediaElement):MediaElementLayoutTarget
+		{
+			var instance:*;
+			for (instance in layoutTargets)
+			{
+				if (instance.mediaElement == mediaElement)
+				{
+					break;
+				}
+				else
+				{
+					instance = null;
+				}
+			}
+			
+			if (instance == null)
+			{
+				instance = new MediaElementLayoutTarget(mediaElement, ConstructorLock);
+				layoutTargets[instance] = true;
+			}
+			
+			return instance;
+		}
+		
 		// Internals
 		//
+		
+		private var _mediaElement:MediaElement;
+		private var _layoutMetadata:LayoutMetadata;
+		
+		private var displayObjectTrait:DisplayObjectTrait;
+		private var _displayObject:DisplayObject;
+		
+		private var renderers:LayoutTargetRenderers;
+		
+		// Event Handlers
+		//
+		
+		private function onMediaElementTraitsChange(event:MediaElementEvent = null):void
+		{
+			if ( event == null || (event && event.traitType == MediaTraitType.DISPLAY_OBJECT))
+			{
+				var newDisplayObjectTrait:DisplayObjectTrait 
+					= (event && event.type == MediaElementEvent.TRAIT_REMOVE)
+						? null
+						: _mediaElement.getTrait(MediaTraitType.DISPLAY_OBJECT) as DisplayObjectTrait;
+								
+				if (newDisplayObjectTrait != displayObjectTrait)
+				{
+					if (displayObjectTrait)
+					{
+						displayObjectTrait.removeEventListener
+							( DisplayObjectEvent.DISPLAY_OBJECT_CHANGE
+							, onDisplayObjectTraitDisplayObjecChange
+							);
+						
+						displayObjectTrait.removeEventListener
+							( DisplayObjectEvent.MEDIA_SIZE_CHANGE
+							, onDisplayObjectTraitMediaSizeChange
+							);
+					}
+					
+					displayObjectTrait = newDisplayObjectTrait;
+					
+					if (displayObjectTrait)
+					{
+						displayObjectTrait.addEventListener
+							( DisplayObjectEvent.DISPLAY_OBJECT_CHANGE
+							, onDisplayObjectTraitDisplayObjecChange
+							);
+						
+						displayObjectTrait.addEventListener
+							( DisplayObjectEvent.MEDIA_SIZE_CHANGE
+							, onDisplayObjectTraitMediaSizeChange
+							);
+					}
+					
+					updateDisplayObject
+						( displayObjectTrait
+							? displayObjectTrait.displayObject
+							: null
+						);
+				}
+			}
+		}
+		
+		private function onMetadataAdd(event:MediaElementEvent):void
+		{
+			if (event.namespaceURL == LayoutMetadata.LAYOUT_NAMESPACE)
+			{
+				_layoutMetadata = event.metadata as LayoutMetadata;
+			}
+		}
+
+		private function onMetadataRemove(event:MediaElementEvent):void
+		{
+			if (event.namespaceURL == LayoutMetadata.LAYOUT_NAMESPACE)
+			{
+				_layoutMetadata = null;
+			}
+		}
+		
+		private function updateDisplayObject(newDisplayObject:DisplayObject):void
+		{
+			var oldDisplayObject:DisplayObject = _displayObject;
+			if (newDisplayObject != displayObject)
+			{
+				_displayObject = newDisplayObject;
+				dispatchEvent
+					( new DisplayObjectEvent
+						( DisplayObjectEvent.DISPLAY_OBJECT_CHANGE
+						, false, false
+						, oldDisplayObject
+						, newDisplayObject
+						)
+					);	
+			}
+			
+			if	(	newDisplayObject is ILayoutTarget
+				&&	renderers.parentRenderer
+				)
+			{
+				// This media element is targetted by a renderer. Send a 
+				// fake event to the target, indicating that the target
+				// has now become the child of this very same renderer.
+				// This will make sure that the target's renderer gets
+				// parented correctly:
+				ILayoutTarget(newDisplayObject).dispatchEvent
+					( new LayoutTargetEvent
+						( LayoutTargetEvent.ADD_TO_LAYOUT_RENDERER
+						, false, false, renderers.parentRenderer
+						)
+					);
+			}
+		}
+		
+		private function onDisplayObjectTraitDisplayObjecChange(event:DisplayObjectEvent):void
+		{
+			updateDisplayObject(event.newDisplayObject);
+		}
+		
+		private function onDisplayObjectTraitMediaSizeChange(event:DisplayObjectEvent):void
+		{
+			dispatchEvent(event.clone());	
+		}
+		
+		private function onAddChildAt(event:LayoutTargetEvent):void
+		{
+			if (_displayObject is ILayoutTarget)
+			{
+				ILayoutTarget(_displayObject)
+					.dispatchEvent(event.clone());
+			}
+			else if (_displayObject is DisplayObjectContainer)
+			{
+				DisplayObjectContainer(_displayObject)
+					.addChildAt(event.displayObject, event.index);
+			}
+		}
+		
+		private function onRemoveChild(event:LayoutTargetEvent):void
+		{
+			if (_displayObject is ILayoutTarget)
+			{
+				ILayoutTarget(_displayObject)
+					.dispatchEvent(event.clone());
+			}
+			else if (_displayObject is DisplayObjectContainer)
+			{
+				DisplayObjectContainer(_displayObject)
+					.removeChild(event.displayObject);
+			}	
+		}
+		
+		private function onSetChildIndex(event:LayoutTargetEvent):void
+		{
+			if (_displayObject is ILayoutTarget)
+			{
+				ILayoutTarget(_displayObject)
+					.dispatchEvent(event.clone());
+			}
+			else if (_displayObject is DisplayObjectContainer)
+			{
+				DisplayObjectContainer(_displayObject)
+					.setChildIndex(event.displayObject, event.index);
+			}	
+		}
 		
 		/* Static */
 		
 		private static const layoutTargets:Dictionary = new Dictionary(true);
-		
-		private function onMediaElementTraitsChange(event:MediaElementEvent):void
-		{
-			if (event.traitType == MediaTraitType.VIEWABLE)
-			{
-				updateViewableTrait();
-			}
-			else if (event.traitType == MediaTraitType.SPATIAL)
-			{
-				updateSpatialTrait();
-			}
-		}
-		
-		private function updateViewableTrait():void
-		{
-			var oldTrait:IViewable = viewableTrait;
-			var oldView:DisplayObject = _view;
-			
-			viewableTrait = _mediaElement.getTrait(MediaTraitType.VIEWABLE) as IViewable;
-			
-			if (oldTrait)
-			{
-				oldTrait.removeEventListener(ViewEvent.VIEW_CHANGE, viewChangeEventHandler);
-			}
-			
-			if (viewableTrait)
-			{
-				processViewChange(viewableTrait.view);
-				viewableTrait.addEventListener(ViewEvent.VIEW_CHANGE, viewChangeEventHandler, false, 0, true);
-			}
-			else
-			{
-				processViewChange(null);
-			}
-			
-			if 	(oldView != _view)
-			{
-				dispatchEvent(new ViewEvent(ViewEvent.VIEW_CHANGE, false, false, oldView, _view));
-			}
-		}
-		
-		private function updateSpatialTrait():void
-		{
-			var oldTrait:ISpatial = spatialTrait;
-			var oldWidth:Number = intrinsicWidth;
-			var oldHeight:Number = intrinsicHeight;
-			
-			spatialTrait = _mediaElement.getTrait(MediaTraitType.SPATIAL) as ISpatial;
-			
-			if (oldTrait)
-			{
-				oldTrait.removeEventListener(DimensionEvent.DIMENSION_CHANGE, dimensionChangeEventHandler);
-			}
-			
-			if (spatialTrait)
-			{
-				spatialTrait.addEventListener(DimensionEvent.DIMENSION_CHANGE, dimensionChangeEventHandler, false, 0, true);
-			}
-			
-			if 	(	oldWidth != intrinsicWidth
-				||	oldHeight != intrinsicHeight
-				)
-			{
-				dispatchEvent(new DimensionEvent(DimensionEvent.DIMENSION_CHANGE, false, false, oldWidth, oldHeight, intrinsicWidth, intrinsicHeight));
-			}
-		}
-		
-		private function viewChangeEventHandler(event:ViewEvent):void
-		{
-			processViewChange(event.newView);
-			
-			dispatchEvent(event.clone());
-		}
-		
-		private function dimensionChangeEventHandler(event:Event):void
-		{
-			dispatchEvent(event.clone());
-		}
-		
-		private function processViewChange(newView:DisplayObject):void
-		{
-			_view = newView;
-			viewLayoutTarget = _view as ILayoutContext;
-		}
-		
-		private var _mediaElement:MediaElement;
-		private var _view:DisplayObject;
-		private var viewLayoutTarget:ILayoutContext;
-		
-		private var viewableTrait:IViewable;
-		private var spatialTrait:ISpatial;
-		
-		private var _calculatedWidth:Number;
-		private var _calculatedHeight:Number;
-		
-		private var _projectedWidth:Number;
-		private var _projectedHeight:Number;
-		
-		CONFIG::LOGGING private static const logger:org.osmf.logging.ILogger = org.osmf.logging.Log.getLogger("MediaElementLayoutTarget");
 	}
 }
-
+	
 /**
  * Internal class, used to prevent the MediaElementLayoutTarget constructor
  * to run successfully on being invoked outside of this class.
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10
- *  @playerversion AIR 1.0
- *  @productversion OSMF 4.0
+ *  @playerversion AIR 1.5
+ *  @productversion OSMF 1.0
  */
 class ConstructorLock
 {

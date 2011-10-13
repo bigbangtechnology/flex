@@ -212,8 +212,6 @@ public class DropDownListBase extends List
     {
         super();
 
-        super.allowMultipleSelection = false;
-        
         dropDownController = new DropDownController();
     }
     
@@ -300,6 +298,8 @@ public class DropDownListBase extends List
     //  dataProvider
     //----------------------------------
     
+    [Inspectable(category="Data")]
+    
     /**
      *  @private
      *  Update the label if the dataProvider has changed
@@ -354,6 +354,8 @@ public class DropDownListBase extends List
     //  labelField
     //----------------------------------
     
+    [Inspectable(category="Data", defaultValue="label")]
+    
     /**
      *  @private
      */
@@ -370,6 +372,8 @@ public class DropDownListBase extends List
     //----------------------------------
     //  labelFunction
     //----------------------------------
+    
+    [Inspectable(category="Data")]
     
     /**
      *  @private
@@ -837,7 +841,10 @@ public class DropDownListBase extends List
                 proposedNewIndex = Math.min(proposedNewIndex, maxIndex);
                 
                 if (proposedNewIndex >= 0)
+                {
+                    userProposedSelectedIndex = proposedNewIndex;
                     setSelectedIndex(proposedNewIndex, true);
+                }
             }
         }
         else

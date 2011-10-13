@@ -24,11 +24,11 @@
 
 	<target name="doc">
 
-	    <condition property="asdoc.jvm.args" value="-Xmx384m">
+	    <condition property="asdoc.jvm.args" value="-Xmx512m">
 	        <os family="windows"/>
 	    </condition>
 
-	    <condition property="asdoc.jvm.args" value="-Xmx512m">
+	    <condition property="asdoc.jvm.args" value="-Xmx1024m">
 	        <os family="mac"/>
 	    </condition>
 
@@ -48,13 +48,15 @@
 			<!-- top level class to include in asdoc -->
 		    <doc-classes class="AIRFrameworkClasses"/>
 		    <doc-classes class="AIRSparkClasses"/>
-		    <doc-classes class="FlexClasses"/>
+		    <doc-classes class="CoreClasses"/>
 		    <doc-classes class="SparkClasses"/>
 		    <doc-classes class="FrameworkClasses"/>
-		<!--    <doc-classes class="HaloClasses"/> -->
-		    <doc-classes class="OSMFClasses"/>
+			<doc-classes class="MxClasses"/>
 		    <doc-classes class="SparkSkinsClasses"/>
 		    <doc-classes class="RPCClasses"/>
+		    <doc-classes class="MobileComponentsClasses"/>		    
+		    <doc-classes class="SparkDmvClasses"/>
+	    		    
 			<doc-classes class="flashx.textLayout.CoreClasses"/>
 			<doc-classes class="flashx.textLayout.EditClasses"/>
 			<doc-classes class="flashx.textLayout.ConversionClasses"/>
@@ -62,15 +64,19 @@
 			<!-- source path for asdoc -->
 			<compiler.source-path path-element="${flexlib}/projects/airframework/src"/>
 			<compiler.source-path path-element="${flexlib}/projects/airspark/src"/>
-			<compiler.source-path path-element="${flexlib}/projects/flex/src"/>
+			<compiler.source-path path-element="${flexlib}/projects/core/src"/>
 			<compiler.source-path path-element="${flexlib}/projects/spark/src"/>
 			<compiler.source-path path-element="${flexlib}/projects/framework/src"/>
-<!--			<compiler.source-path path-element="${flexlib}/projects/halo/src"/> -->
+			<compiler.source-path path-element="${flexlib}/projects/mx/src"/>
 			<compiler.source-path path-element="${flexlib}/projects/sparkskins/src"/>
-			<compiler.source-path path-element="${flexlib}/projects/osmf/src"/>
 			<compiler.source-path path-element="${flexlib}/projects/rpc/src"/>
 		    <compiler.source-path path-element="${flexlib}/projects/textLayout/src"/>
-
+			<compiler.source-path path-element="${flexlib}/projects/osmf/src"/>
+			<compiler.source-path path-element="${flexlib}/projects/advancedgrids/src"/>
+			<compiler.source-path path-element="${flexlib}/projects/charts/src"/>
+			<compiler.source-path path-element="${flexlib}/projects/mobilecomponents/src"/>
+			<compiler.source-path path-element="${flexlib}/projects/spark_dmv/src"/>
+						
 			<!-- namespaces to include in asdoc -->
 		    <doc-namespaces uri="http://www.adobe.com/2006/airmxml"/>
 		    <doc-namespaces uri="http://www.adobe.com/2006/airspark"/>
@@ -78,20 +84,36 @@
 		    <doc-namespaces uri="http://www.adobe.com/2006/mxml"/>
 		    <doc-namespaces uri="http://www.adobe.com/2006/rpcmxml"/>
  			<doc-namespaces uri="library://ns.adobe.com/flashx/textLayout"/>
+ 			<doc-namespaces uri="http://ns.adobe.com/2009/mx-mxml"/>
+ 			<doc-namespaces uri="http://www.adobe.com/2006/advancedgridsmxml"/>
+ 			<doc-namespaces uri="http://www.adobe.com/2006/charts"/>
+ 			<doc-namespaces uri="library://ns.adobe.com/flex/spark-mobilecomponents"/>
+ 			<doc-namespaces uri="library://ns.adobe.com/flex/spark-dmv"/>
+ 			
 		    <namespace uri="library://ns.adobe.com/flashx/textLayout" manifest="${flexlib}/projects/textLayout/manifest.xml"/>
 
 			<!-- namespace declaration for asdoc -->
 		    <namespace uri="http://www.adobe.com/2006/airmxml" manifest="${flexlib}/projects/airframework/manifest.xml"/>
 		    <namespace uri="http://www.adobe.com/2006/airspark" manifest="${flexlib}/projects/airspark/manifest.xml"/>
 		    <namespace uri="http://www.adobe.com/2006/rpcmxml" manifest="${flexlib}/projects/rpc/manifest.xml"/>
+		    <namespace uri="http://ns.adobe.com/2009/mx-mxml" manifest="${flexlib}/projects/mx/manifest.xml"/>
+		    <namespace uri="http://www.adobe.com/2006/advancedgridsmxml" manifest="${flexlib}/projects/advancedgrids/manifest_advancedgrids.xml"/>
+		    <namespace uri="http://www.adobe.com/2006/charts" manifest="${flexlib}/projects/charts/manifest_charts.xml"/>
+		    		    
 		    <namespace uri="http://www.adobe.com/2006/mxml" manifest="${flexlib}/mxml-manifest.xml"/>
 		    <namespace uri="library://ns.adobe.com/flex/spark" manifest="${flexlib}/projects/spark/manifest.xml"/>
 		    <namespace uri="library://ns.adobe.com/flex/mx" manifest="${flexlib}/mxml-manifest.xml"/>
+			<namespace uri="library://ns.adobe.com/flex/spark-mobilecomponents" manifest="${flexlib}/projects/mobilecomponents/manifest.xml"/>
+			<namespace uri="library://ns.adobe.com/flex/spark-dmv" manifest="${flexlib}/projects/spark_dmv/manifest_spark_dmv.xml"/>
 
 			<library-path/>
 			<external-library-path dir="${flexlib}/libs/air">
 		    	<include name="airglobal.swc" />
 		    </external-library-path>
+			<external-library-path dir="${flexlib}/libs">
+		    	<include name="framework.swc" />
+		    </external-library-path>
+
 
 			<jvmarg line="${asdoc.jvm.args}"/>
 
@@ -99,6 +121,7 @@
 			<define name="CONFIG::release" value="true"/>
 			<define name="CONFIG::FLASH_10_1" value="false"/>
             <define name="CONFIG::LOGGING" value="false"/>
+			<define name="CONFIG::performanceInstrumentation" value="false"/>            
 		</asdoc>
 	</target>
 </project>

@@ -1,25 +1,16 @@
-//========================================================================================
-//  $File: //a3t/argon/branches/v1/1.1/dev/textLayout_core/src/flashx/textLayout/factory/TextLineFactoryBase.as $
-//  $DateTime: 2010/03/15 11:44:20 $
-//  $Revision: #1 $
-//  $Change: 744811 $
-//  
-//  ADOBE CONFIDENTIAL
-//  
-//  Copyright 2008 Adobe Systems Incorporated. All rights reserved.
-// 
-//  NOTICE:  All information contained herein is, and remains
-//  the property of Adobe Systems Incorporated and its suppliers,
-//  if any.  The intellectual and technical concepts contained
-//  herein are proprietary to Adobe Systems Incorporated and its
-//  suppliers, and are protected by trade secret or copyright law.
-//  Dissemination of this information or reproduction of this material
-//  is strictly forbidden unless prior written permission is obtained
-//  from Adobe Systems Incorporated.
-//  
-//========================================================================================
+////////////////////////////////////////////////////////////////////////////////
+//
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
+//
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
+//
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.factory
 {
+	import flash.display.Shape;
 	import flash.display.Sprite;
 	import flash.geom.Rectangle;
 	import flash.text.engine.TextBlock;
@@ -80,12 +71,38 @@ package flashx.textLayout.factory
 		private var _swfContext:ISWFContext;
 		
 		/** @private */
-		static tlf_internal var _factoryComposer:SimpleCompose= new SimpleCompose();
+		static private      var _savedFactoryComposer:SimpleCompose;
+		/** @private */
+		static tlf_internal var _factoryComposer:SimpleCompose;
 
 		/** @private */		
 		static protected var _truncationLineIndex:int; 	// used during truncation
 		/** @private */		
 		static protected var _pass0Lines:Array; 		// used during truncation
+		
+		/** @private return the next factory composer that will be used */
+		static tlf_internal function peekFactoryCompose():SimpleCompose
+		{
+			if (_savedFactoryComposer == null)
+				_savedFactoryComposer = new SimpleCompose();
+			return _savedFactoryComposer;
+		}
+		
+		/** @private support recursive calls into the factory */
+		static tlf_internal function beginFactoryCompose():SimpleCompose
+		{
+			var rslt:SimpleCompose = _factoryComposer;
+			_factoryComposer = peekFactoryCompose();
+			_savedFactoryComposer = null;
+			return rslt;
+		}
+		
+		/** @private support recursive calls into the factory */
+		static tlf_internal function endFactoryCompose(prevComposer:SimpleCompose):void
+		{
+			_savedFactoryComposer = _factoryComposer;
+			_factoryComposer = prevComposer;
+		}
 		
 		/** 
 		 * Base-class constructor for text line factories.
@@ -97,7 +114,7 @@ package flashx.textLayout.factory
 		 * @playerversion AIR 1.5
 		 * @langversion 3.0
 		 */
-		public function TextLineFactoryBase():void
+		public function TextLineFactoryBase()
 		{
 			_containerController = new ContainerController(_tc);
 			_horizontalScrollPolicy = _verticalScrollPolicy = String(ScrollPolicy.scrollPolicyPropertyDefinition.defaultValue);
@@ -392,65 +409,26 @@ package flashx.textLayout.factory
 			if (lineCountLimit != TruncationOptions.NO_LINE_COUNT_LIMIT && lineCountLimit <= _truncationLineIndex)
 				_truncationLineIndex = lineCountLimit - 1;
 		}
+		
+		
+		/** @private helper to process the background colors.  default implementation creates a shape and passes it to the callback */
+		tlf_internal function processBackgroundColors(textFlow:TextFlow,callback:Function,x:Number,y:Number,constrainWidth:Number,constrainHeight:Number):*
+		{
+			CONFIG::debug { assert(textFlow.backgroundManager != null,"Bad call to processBackgroundColors"); }
+			var bgShape:Shape = new Shape();
+			textFlow.backgroundManager.drawAllRects(textFlow,bgShape,constrainWidth,constrainHeight);
+			bgShape.x = x;
+			bgShape.y = y;
+			callback(bgShape);
+			textFlow.clearBackgroundManager();
+		}
 	}
 
 } // end package
 
-import flash.geom.Rectangle;
 
-import flashx.textLayout.compose.StandardFlowComposer;
-import flashx.textLayout.compose.SimpleCompose;
-import flashx.textLayout.debug.assert;
-import flashx.textLayout.elements.BackgroundManager;
-import flashx.textLayout.elements.FlowLeafElement;
-import flashx.textLayout.compose.TextFlowLine;
-import flashx.textLayout.factory.TextLineFactoryBase;
-import flashx.textLayout.tlf_internal;
-import flash.text.engine.TextLine;
-import flashx.textLayout.container.ContainerController;
-import flashx.textLayout.compose.TextFlowLine;
-use namespace tlf_internal;
 
-class FactoryDisplayComposer extends StandardFlowComposer
-{
-	tlf_internal override function callTheComposer(absoluteEndPosition:int, controllerEndIndex:int):ContainerController
-	{
-		// always do a full compose
-		clearCompositionResults();
-		
-		var state:SimpleCompose = TextLineFactoryBase._factoryComposer;
-		state.composeTextFlow(textFlow, -1, -1);
-		state.releaseAnyReferences()
-		return getControllerAt(0);
-	}
-		
-	/** Returns true if composition is necessary, false otherwise */
-	protected override function preCompose():Boolean
-	{
-		return true;
-	}
-	
-	/** @private */
-	public override function createBackgroundManager():BackgroundManager
-	{ return new FactoryBackgroundManager(); }
-}
 
-class FactoryBackgroundManager extends BackgroundManager
-{
 
-	public override function finalizeLine(line:TextFlowLine):void
-	{
-		var textLine:TextLine = line.getTextLine();
-		
-		var array:Array = lineDict[textLine];
-		if (array)
-		{
-			// attach the columnRect and the TextLine to the first object in the Array
-			var obj:Object = array[0];
-			
-			if (obj)	// check not needed?
-				obj.columnRect = line.controller.columnState.getColumnAt(line.columnIndex);
-		}
-	}
-}
+
 

@@ -1,19 +1,20 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
 	import flash.geom.Rectangle;
 	import flash.text.engine.TextLine;
 	import flash.text.engine.TextRotation;
 	
+	import flashx.textLayout.debug.Debugging;
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.formats.BlockProgression;
 	import flashx.textLayout.tlf_internal;
@@ -21,7 +22,7 @@ package flashx.textLayout.elements
 	use namespace tlf_internal;
 	
 	/** 
-	 * The TCYElement (Tatechuuyoko - ta-tae-chu-yo-ko) class is a subclass of SubParagraphGroupElement that causes
+	 * The TCYElement (Tatechuuyoko - ta-tae-chu-yo-ko) class is a subclass of SubParagraphGroupElementBase that causes
 	 * text to draw horizontally within a vertical line.  Traditionally, it is used to make small
 	 * blocks of non-Japanese text or numbers, such as dates, more readable.  TCY can be applied to 
 	 * horizontal text, but has no effect on drawing style unless and until it is turned vertically.
@@ -41,7 +42,7 @@ package flashx.textLayout.elements
 	 * @see ParagraphElement
 	 * @see SpanElement
 	 */
-	public final class TCYElement extends SubParagraphGroupElement
+	public final class TCYElement extends SubParagraphGroupElementBase
 	{
 		/** Constructor - creates a new TCYElement instance.
 		 *
@@ -64,9 +65,12 @@ package flashx.textLayout.elements
 		
 		/** @private */
 		override protected function get abstract():Boolean
-		{
-			return false;
-		}		
+		{ return false; }
+		
+		/** @private */
+		tlf_internal override function get defaultTypeName():String
+		{ return "tcy"; }
+		
 		/** @private */
         tlf_internal override function get precedence():uint { return 100; }
 		
@@ -117,21 +121,21 @@ package flashx.textLayout.elements
 		}
 		
 		/** @private */
-		tlf_internal function calculateAdornmentBounds(spg:SubParagraphGroupElement, tLine:TextLine, blockProgression:String, spgRect:Rectangle):void
+		tlf_internal function calculateAdornmentBounds(spg:SubParagraphGroupElementBase, tLine:TextLine, blockProgression:String, spgRect:Rectangle):void
 		{
 			var childCount:int = 0;
 			while(childCount < spg.numChildren)
 			{
 				var curChild:FlowElement = spg.getChildAt(childCount) as FlowElement;
 				var curFlowLeaf:FlowLeafElement = curChild as FlowLeafElement;
-				if(!curFlowLeaf && curChild is SubParagraphGroupElement)
+				if(!curFlowLeaf && curChild is SubParagraphGroupElementBase)
 				{
-					calculateAdornmentBounds(curChild as SubParagraphGroupElement, tLine, blockProgression, spgRect);
+					calculateAdornmentBounds(curChild as SubParagraphGroupElementBase, tLine, blockProgression, spgRect);
 					++childCount;
 					continue;
 				}
 				
-				CONFIG::debug{ assert(curFlowLeaf != null, "The TCY contains a non-FlowLeafElement!  Cannot calculate mirror!")};
+				CONFIG::debug{ assert(curFlowLeaf != null, "The TCY contains a non-FlowLeafElement!  Cannot calculate mirror!");}
 				var curBounds:Rectangle = null;
 				if(!(curFlowLeaf is InlineGraphicElement))
 					curBounds = curFlowLeaf.getSpanBoundsOnLine(tLine, blockProgression)[0];
@@ -166,7 +170,10 @@ package flashx.textLayout.elements
 		{
 			var contElement:ContainerFormattedElement = getAncestorWithContainer();
 			if (groupElement)
-				groupElement.textRotation = (contElement && contElement.computedFormat.blockProgression == BlockProgression.RL) ? TextRotation.ROTATE_270 : TextRotation.ROTATE_0;	
+			{
+				groupElement.textRotation = (contElement && contElement.computedFormat.blockProgression == BlockProgression.RL) ? TextRotation.ROTATE_270 : TextRotation.ROTATE_0;
+				CONFIG::debug { Debugging.traceFTEAssign(groupElement,"textRotation",groupElement.textRotation); }
+			}
 		}
 	}
 	

@@ -37,6 +37,7 @@ import mx.resources.ResourceManager;
 import mx.styles.IStyleModule;
 import mx.styles.IStyleManager2;
 import mx.events.Request;
+import mx.utils.MediaQueryParser;
 import flash.events.Event;
 
 use namespace mx_internal;
@@ -140,6 +141,11 @@ public class StyleManagerImpl extends EventDispatcher implements IStyleManager2
 
     /**
      *  @private
+     */
+    private var mqp:MediaQueryParser;
+    
+    /**
+     *  @private
      *  Set of inheriting non-color styles.
      *  This is not the complete set from CSS.
      *  Some of the omitted we don't support at all,
@@ -203,6 +209,9 @@ public class StyleManagerImpl extends EventDispatcher implements IStyleManager2
             lineBreak: true,
             lineHeight: true,
             lineThrough: true,
+            listAutoPadding: true,
+            listStylePosition: true,
+            listStyleType: true,
             locale: true,
             marginBottom: true,
             marginLeft: true,
@@ -233,6 +242,7 @@ public class StyleManagerImpl extends EventDispatcher implements IStyleManager2
             typographicCase: true,
             verticalAlign: true,
             verticalGap: true,
+            wordSpacing:true,
             whitespaceCollapse: true
         }
     
@@ -1613,6 +1623,23 @@ public class StyleManagerImpl extends EventDispatcher implements IStyleManager2
         dispatchEvent(event);
     }
 
+    /**
+     *  @private
+     */  
+    public function acceptMediaList(value:String):Boolean
+    {
+        if (!mqp)
+        {
+            mqp = MediaQueryParser.instance;
+            if (!mqp)
+            {
+                mqp = new MediaQueryParser(moduleFactory);
+                MediaQueryParser.instance = mqp;
+            }
+        }
+        return mqp.parse(value);
+    }
+    
     //--------------------------------------------------------------------------
     //
     //  Event handlers

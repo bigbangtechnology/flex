@@ -64,6 +64,8 @@ include "../styles/metadata/AdvancedNonInheritingTextStyles.as"
 
 [IconFile("RichText.png")]
 
+[DiscouragedForProfile("mobileDevice")]
+
 /**
  *  RichText is a low-level UIComponent that can display one or more lines
  *  of richly-formatted text and embedded images.
@@ -189,11 +191,11 @@ include "../styles/metadata/AdvancedNonInheritingTextStyles.as"
  *  For performance, its TextLines do not contain information
  *  about individual glyphs; for more info, see the TextLineValidity class.</p>
  *
- *  @see spark.components.RichEditableText
- *  @see spark.components.Label
- *  @see flash.text.engine.TextLineValidity
- *  
- *  @includeExample examples/RichTextExample.mxml
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *  
  *  @mxml
  *
@@ -215,6 +217,12 @@ include "../styles/metadata/AdvancedNonInheritingTextStyles.as"
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
+ *
+ *  @see spark.components.RichEditableText
+ *  @see spark.components.Label
+ *  @see flash.text.engine.TextLineValidity
+ *  
+ *  @includeExample examples/RichTextExample.mxml
  */
 public class RichText extends TextBase
 {
@@ -231,64 +239,64 @@ public class RichText extends TextBase
      */
     private static var classInitialized:Boolean = false;
     
-	/**
-	 *  @private
-	 *  This TLF object composes TextLines from a text String.
-	 *  We use it when the 'text' property is set to a String
-	 *  that doesn't contain linebreaks.
-	 */
-	private static var staticStringFactory:StringTextLineFactory;
-	
-	/**
-	 *  @private
-	 *  This TLF object composes TextLines from a TextFlow.
-	 *  We use it when the 'textFlow' or 'content' property is set,
-	 *  and when the 'text' property is set to a String
-	 *  that contains linebreaks (and therefore is interpreted
-	 *  as multiple paragraphs).
-	 */
-	private static var staticTextFlowFactory:TextFlowTextLineFactory;
-	
-	/**
-	 *  @private
-	 *  This TLF object is used to import a 'text' String
-	 *  containing linebreaks to create a multiparagraph TextFlow.
-	 */
-	private static var staticPlainTextImporter:ITextImporter;
-	
-	/**
-	 *  @private
-	 *  This TLF object is used to export a TextFlow as plain 'text',
-	 *  by walking the leaf FlowElements in the TextFlow.
-	 */
-	private static var staticPlainTextExporter:ITextExporter;
-	
-	//--------------------------------------------------------------------------
-	//
-	//  Class methods
-	//
-	//--------------------------------------------------------------------------
-	
-	/**
-	 *  @private
-	 *  This method initializes the static vars of this class.
-	 *  Rather than calling it at static initialization time,
-	 *  we call it in the constructor to do the class initialization
-	 *  when the first instance is created.
-	 *  (It does an immediate return if it has already run.)
-	 *  By doing so, we avoid any static initialization issues
-	 *  related to whether this class or the TLF classes
-	 *  that it uses are initialized first.
-	 */
-	private static function initClass():void
-	{
-		if (classInitialized)
-			return;
-			
+    /**
+     *  @private
+     *  This TLF object composes TextLines from a text String.
+     *  We use it when the 'text' property is set to a String
+     *  that doesn't contain linebreaks.
+     */
+    private static var staticStringFactory:StringTextLineFactory;
+    
+    /**
+     *  @private
+     *  This TLF object composes TextLines from a TextFlow.
+     *  We use it when the 'textFlow' or 'content' property is set,
+     *  and when the 'text' property is set to a String
+     *  that contains linebreaks (and therefore is interpreted
+     *  as multiple paragraphs).
+     */
+    private static var staticTextFlowFactory:TextFlowTextLineFactory;
+    
+    /**
+     *  @private
+     *  This TLF object is used to import a 'text' String
+     *  containing linebreaks to create a multiparagraph TextFlow.
+     */
+    private static var staticPlainTextImporter:ITextImporter;
+    
+    /**
+     *  @private
+     *  This TLF object is used to export a TextFlow as plain 'text',
+     *  by walking the leaf FlowElements in the TextFlow.
+     */
+    private static var staticPlainTextExporter:ITextExporter;
+    
+    //--------------------------------------------------------------------------
+    //
+    //  Class methods
+    //
+    //--------------------------------------------------------------------------
+    
+    /**
+     *  @private
+     *  This method initializes the static vars of this class.
+     *  Rather than calling it at static initialization time,
+     *  we call it in the constructor to do the class initialization
+     *  when the first instance is created.
+     *  (It does an immediate return if it has already run.)
+     *  By doing so, we avoid any static initialization issues
+     *  related to whether this class or the TLF classes
+     *  that it uses are initialized first.
+     */
+    private static function initClass():void
+    {
+        if (classInitialized)
+            return;
+            
         // Set the TLF hook used for localizing runtime error messages.
-		// TLF itself has English-only messages,
-		// but higher layers like Flex can provide localized versions.
-		GlobalSettings.resourceStringFunction = TextUtil.getResourceString;
+        // TLF itself has English-only messages,
+        // but higher layers like Flex can provide localized versions.
+        GlobalSettings.resourceStringFunction = TextUtil.getResourceString;
 
         // Set the TLF hook used to specify the callback used for changing 
         // the FontLookup based on SWFContext.  
@@ -299,19 +307,19 @@ public class RichText extends TextBase
         // measure as the rest of the remaining width up to 10000.
         GlobalSettings.enableDefaultTabStops = !Configuration.playerEnablesArgoFeatures;
         
-		staticStringFactory = new StringTextLineFactory();
-		
-		staticTextFlowFactory = new TextFlowTextLineFactory();
-		
-		staticPlainTextImporter =
-			TextConverter.getImporter(TextConverter.PLAIN_TEXT_FORMAT);
-		
-		staticPlainTextExporter =
-			TextConverter.getExporter(TextConverter.PLAIN_TEXT_FORMAT);
-			
-		classInitialized = true;
-	}
-	
+        staticStringFactory = new StringTextLineFactory();
+        
+        staticTextFlowFactory = new TextFlowTextLineFactory();
+        
+        staticPlainTextImporter =
+            TextConverter.getImporter(TextConverter.PLAIN_TEXT_FORMAT);
+        
+        staticPlainTextExporter =
+            TextConverter.getExporter(TextConverter.PLAIN_TEXT_FORMAT);
+            
+        classInitialized = true;
+    }
+    
     //--------------------------------------------------------------------------
     //
     //  Constructor
@@ -358,23 +366,23 @@ public class RichText extends TextBase
      */
     private var lastGeneration:uint = 0;    // 0 means not set
         
-	/**
+    /**
      *  @private
      *  Holds the last recorded value of the module factory
      *  used to create the font.
      */
     mx_internal var embeddedFontContext:IFlexModuleFactory;
     
-	/**
-	 *  @private
-	 *  Specifies whether the StringTextLineFactory
-	 *  or the TextFlowTextLineFactory is used to create the TextLines.
-	 *  A StringTextLineFactory is more efficient; it is used
-	 *  by default to render the default text ""
-	 *  and when 'text' is set to a string without linebreaks;
-	 *  otherwise, a TextFlowTextLineFactory is used.
-	 */
-	private var factory:TextLineFactoryBase;
+    /**
+     *  @private
+     *  Specifies whether the StringTextLineFactory
+     *  or the TextFlowTextLineFactory is used to create the TextLines.
+     *  A StringTextLineFactory is more efficient; it is used
+     *  by default to render the default text ""
+     *  and when 'text' is set to a string without linebreaks;
+     *  otherwise, a TextFlowTextLineFactory is used.
+     */
+    private var factory:TextLineFactoryBase;
 
     /**
      *  @private
@@ -391,25 +399,24 @@ public class RichText extends TextBase
     //----------------------------------
     //  text
     //----------------------------------
-    [Inspectable(category="General")]
 
     // Compiler will strip leading and trailing whitespace from text string.
     [CollapseWhiteSpace]
     
     // The _text storage var is mx_internal in TextBase.
     
-	/**
-	 *  @private
-	 */
-	private var textChanged:Boolean = false;
-	
-	/**
-	 *  @private
-	 *  Source of text: one of "text", "textFlow" or "content".* 
-	 */
+    /**
+     *  @private
+     */
+    private var textChanged:Boolean = false;
+    
+    /**
+     *  @private
+     *  Source of text: one of "text", "textFlow" or "content".* 
+     */
     private var source:String = "";
-	
-	/**
+    
+    /**
      *  @private
      */
     override public function get text():String
@@ -421,17 +428,17 @@ public class RichText extends TextBase
         // (or mutate the TextFlow), and then get the 'text'.
         if (_text == null)
         {
-        	// If 'content' was last set,
-        	// we have to first turn that into a TextFlow.
-        	if (_content != null)
+            // If 'content' was last set,
+            // we have to first turn that into a TextFlow.
+            if (contentChanged)
             {
-	        	_textFlow = createTextFlowFromContent(_content);
+                _textFlow = createTextFlowFromContent(_content);
                 lastGeneration = _textFlow.generation;
             }
-	        		
+                    
             // Once we have a TextFlow, we can export its plain text.
             _text = staticPlainTextExporter.export(
-            	_textFlow, ConversionType.STRING_TYPE) as String;
+                _textFlow, ConversionType.STRING_TYPE) as String;
         }
 
         return _text;
@@ -446,49 +453,49 @@ public class RichText extends TextBase
      */
     override public function set text(value:String):void
     {
-    	// Treat setting the 'text' to null
-    	// as if it were set to the empty String
-    	// (which is the default state).
-    	if (value == null)
-    		value = "";
-		
-		// If the most recent change to _text was caused by calling this method,
-		// then it's safe to short-cicuit in the same way that TextBase does.
-		if ((source == "text") && (value == _text))
-			return;
-    	
-    	// Don't return early if value is the same as _text,
-    	// because _text might have been produced from setting
-    	// 'textFlow' or 'content'.
-    	// For example, if you set a TextFlow corresponding to
-    	// "Hello <span color="OxFF0000">World</span>"
-    	// and then get the 'text', it will be the String "Hello World"
-    	// But if you then set the 'text' to "Hello World"
-    	// this represents a change: the "World" should no longer be red.
-    	
-    	_text = value;
-    	textChanged = true;
-		source = "text";
-    	
-    	// If more than one of 'text', 'textFlow', and 'content' is set,
-    	// the last one set wins.
-    	textFlowChanged = false;
-    	contentChanged = false;
-    	
+        // Treat setting the 'text' to null
+        // as if it were set to the empty String
+        // (which is the default state).
+        if (value == null)
+            value = "";
+        
+        // If the most recent change to _text was caused by calling this method,
+        // then it's safe to short-cicuit in the same way that TextBase does.
+        if ((source == "text") && (value == _text))
+            return;
+        
+        // Don't return early if value is the same as _text,
+        // because _text might have been produced from setting
+        // 'textFlow' or 'content'.
+        // For example, if you set a TextFlow corresponding to
+        // "Hello <span color="OxFF0000">World</span>"
+        // and then get the 'text', it will be the String "Hello World"
+        // But if you then set the 'text' to "Hello World"
+        // this represents a change: the "World" should no longer be red.
+        
+        _text = value;
+        textChanged = true;
+        source = "text";
+        
+        // If more than one of 'text', 'textFlow', and 'content' is set,
+        // the last one set wins.
+        textFlowChanged = false;
+        contentChanged = false;
+        
         // If there was a textFlow remove its damage handler.
         removeDamageHandler();
 
         // The other two are now invalid and must be recalculated when needed.
-		_textFlow = null;
-    	_content = null;
-    	
-    	factory = staticStringFactory;
-    	
-		invalidateTextLines();
-		invalidateProperties();
-		invalidateSize();
-		invalidateDisplayList();
-	}
+        _textFlow = null;
+        _content = null;
+        
+        factory = staticStringFactory;
+        
+        invalidateTextLines();
+        invalidateProperties();
+        invalidateSize();
+        invalidateDisplayList();
+    }
     
     //--------------------------------------------------------------------------
     //
@@ -506,11 +513,11 @@ public class RichText extends TextBase
      */
     protected var _content:Object;
     
-	/**
-	 *  @private
-	 */
-	private var contentChanged:Boolean = false;
-	
+    /**
+     *  @private
+     */
+    private var contentChanged:Boolean = false;
+    
     /**
      *  @private
      *  This metadata tells the MXML compiler to disable some of its default
@@ -528,45 +535,45 @@ public class RichText extends TextBase
      */
     [RichTextContent]
     
-	/**
-	 *  This property is intended for use in MXML at compile time;
-	 *  to get or set rich text content at runtime,
-	 *  please use the <code>textFlow</code> property instead.
-	 *
-	 *  <p>The <code>content</code> property is the default property
-	 *  for RichText, so that you can write MXML such as
-	 *  <pre>
-	 *  &lt;s:RichText&gt;Hello &lt;s:span fontWeight="bold"/&gt;World&lt;/s:span&gt;&lt;/s:RichText&gt;
-	 *  </pre>
-	 *  and have the String and SpanElement that you specify
-	 *  as the content be used to create a TextFlow.</p>
-	 *
-	 *  <p>This property is typed as Object because you can set it to
-	 *  to a String, a FlowElement, or an Array of Strings and FlowElements.
-	 *  In the example above, you are specifying the content
-	 *  to be a 2-element Array whose first element is the String
-	 *  "Hello" and whose second element is a SpanElement with the text
-	 *  "World" in boldface.</p>
-	 * 
-	 *  <p>No matter how you specify the content, it gets converted
-	 *  into a TextFlow, and when you get this property, you will get
-	 *  the resulting TextFlow.</p>
-	 * 
-	 *  <p>Adobe recommends using <code>textFlow</code> property
-	 *  to get and set rich text content at runtime,
-	 *  because it is strongly typed as a TextFlow
-	 *  rather than as an Object.
-	 *  A TextFlow is the canonical representation
-	 *  for rich text content in the Text Layout Framework.</p>
-	 * 
-	 *  @langversion 3.0
-	 *  @playerversion Flash 10
-	 *  @playerversion AIR 1.5
-	 *  @productversion Flex 4
-	 */
+    /**
+     *  This property is intended for use in MXML at compile time;
+     *  to get or set rich text content at runtime,
+     *  please use the <code>textFlow</code> property instead.
+     *
+     *  <p>The <code>content</code> property is the default property
+     *  for RichText, so that you can write MXML such as
+     *  <pre>
+     *  &lt;s:RichText&gt;Hello &lt;s:span fontWeight="bold"/&gt;World&lt;/s:span&gt;&lt;/s:RichText&gt;
+     *  </pre>
+     *  and have the String and SpanElement that you specify
+     *  as the content be used to create a TextFlow.</p>
+     *
+     *  <p>This property is typed as Object because you can set it to
+     *  to a String, a FlowElement, or an Array of Strings and FlowElements.
+     *  In the example above, you are specifying the content
+     *  to be a 2-element Array whose first element is the String
+     *  "Hello" and whose second element is a SpanElement with the text
+     *  "World" in boldface.</p>
+     * 
+     *  <p>No matter how you specify the content, it gets converted
+     *  into a TextFlow, and when you get this property, you will get
+     *  the resulting TextFlow.</p>
+     * 
+     *  <p>Adobe recommends using <code>textFlow</code> property
+     *  to get and set rich text content at runtime,
+     *  because it is strongly typed as a TextFlow
+     *  rather than as an Object.
+     *  A TextFlow is the canonical representation
+     *  for rich text content in the Text Layout Framework.</p>
+     * 
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
     public function get content():Object
     {
-    	return textFlow;
+        return textFlow;
     }
     
     /**
@@ -574,40 +581,40 @@ public class RichText extends TextBase
      */   
     public function set content(value:Object):void
     {
-    	// Treat setting the 'content' to null
-    	// as if 'text' were being set to the empty String
-    	// (which is the default state).
-    	if (value == null)
-    	{
-    		text = "";
-    		return;
-    	}
-    	
-    	if (value == _content)
-    		return;
-    	
+        // Treat setting the 'content' to null
+        // as if 'text' were being set to the empty String
+        // (which is the default state).
+        if (value == null)
+        {
+            text = "";
+            return;
+        }
+        
+        if (value == _content)
+            return;
+        
         _content = value;
         contentChanged = true;
-		source = "content";
+        source = "content";
         
-		// If more than one of 'text', 'textFlow', and 'content' is set,
-		// the last one set wins.
-		textChanged = false;
+        // If more than one of 'text', 'textFlow', and 'content' is set,
+        // the last one set wins.
+        textChanged = false;
         textFlowChanged = false;
         
         // If there was a textFlow remove its damage handler.
         removeDamageHandler();
 
         // The other two are now invalid and must be recalculated when needed.
-		_text = null;
-		_textFlow = null;
-		        
-		factory = staticTextFlowFactory;
-		
-		invalidateTextLines();
-		invalidateProperties();
-		invalidateSize();
-		invalidateDisplayList();
+        _text = null;
+        _textFlow = null;
+                
+        factory = staticTextFlowFactory;
+        
+        invalidateTextLines();
+        invalidateProperties();
+        invalidateSize();
+        invalidateDisplayList();
     }
     
     //----------------------------------
@@ -662,6 +669,8 @@ public class RichText extends TextBase
      */
     private var maskTypeChanged:Boolean;
     
+    [Inspectable(defaultValue="clip", enumeration="clip,alpha,luminosity")]
+
     /**
      *  <p>The maskType defines how the mask is applied to the component.</p> 
      * 
@@ -766,6 +775,8 @@ public class RichText extends TextBase
      */
     private var luminositySettingsChanged:Boolean;
 
+    [Inspectable(defaultValue="false")]
+
     /**
      *  A property that controls the calculation of the RGB 
      *  color value of a graphic element being masked by 
@@ -810,6 +821,8 @@ public class RichText extends TextBase
      */
     private var _luminosityClip:Boolean = false; 
         
+    [Inspectable(defaultValue="false")]
+
     /**
      *  A property that controls whether the luminosity 
      *  mask clips the masked content. This property can 
@@ -842,215 +855,205 @@ public class RichText extends TextBase
         luminositySettingsChanged = true; 
     }
     
-	//----------------------------------
-	//  textFlow
-	//----------------------------------
-	
-	/**
-	 *  @private
-	 *  Storage for the textFlow property.
-	 */
-	private var _textFlow:TextFlow;
-	
-	/**
-	 *  @private
-	 */
-	private var textFlowChanged:Boolean = false;
-	
-	/**
+    //----------------------------------
+    //  textFlow
+    //----------------------------------
+    
+    /**
+     *  @private
+     *  Storage for the textFlow property.
+     */
+    private var _textFlow:TextFlow;
+    
+    /**
+     *  @private
+     */
+    private var textFlowChanged:Boolean = false;
+    
+    /**
      *  The TextFlow representing the rich text displayed by this component.
      * 
      *  <p>A TextFlow is the most important class
      *  in the Text Layout Framework (TLF).
      *  It is the root of a tree of FlowElements
      *  representing rich text content.</p>
-	 *
-	 *  <p>You normally create a TextFlow from TLF markup
-	 *  using the <code>TextFlowUtil.importFromString()</code>
-	 *  or <code>TextFlowUtil.importFromXML()</code> methods.
-	 *  Alternately, you can use TLF's TextConverter class
-	 *  (which can import a subset of HTML) or build a TextFlow
-	 *  using methods like <code>addChild()</code> on TextFlow.</p>
+     *
+     *  <p>You normally create a TextFlow from TLF markup
+     *  using the <code>TextFlowUtil.importFromString()</code>
+     *  or <code>TextFlowUtil.importFromXML()</code> methods.
+     *  Alternately, you can use TLF's TextConverter class
+     *  (which can import a subset of HTML) or build a TextFlow
+     *  using methods like <code>addChild()</code> on TextFlow.</p>
      * 
-	 *  <p>Setting this property affects the <code>text</code> property
+     *  <p>Setting this property affects the <code>text</code> property
      *  and vice versa.</p>
      *
      *  <p>If you set the <code>textFlow</code> and get the <code>text</code>,
-	 *  the text in each paragraph will be separated by a single
+     *  the text in each paragraph will be separated by a single
      *  LF (<code>\n</code>).</p>
      *
      *  <p>If you set the <code>text</code> to a String such as
-	 *  <code>"Hello World"</code> and get the <code>textFlow</code>,
-	 *  it will be a TextFlow containing a single ParagraphElement
-	 *  with a single SpanElement.</p>
+     *  <code>"Hello World"</code> and get the <code>textFlow</code>,
+     *  it will be a TextFlow containing a single ParagraphElement
+     *  with a single SpanElement.</p>
      *
      *  <p>If the text contains explicit line breaks --
      *  CR (<code>\r</code>), LF (<code>\n</code>), or CR+LF (<code>\r\n</code>) --
      *  then the content will be set to a TextFlow
      *  which contains multiple paragraphs, each with one span.</p>
      *
-	 *  <p>To turn a TextFlow object into TLF markup,
-	 *  use the markup returned from the <code>TextFlowUtil.export()</code> method.</p>
-	 *
-	 *  @see spark.utils.TextFlowUtil#importFromString()
-	 *  @see spark.utils.TextFlowUtil#importFromXML()
+     *  <p>To turn a TextFlow object into TLF markup,
+     *  use the markup returned from the <code>TextFlowUtil.export()</code> method.</p>
+     *
+     *  @see spark.utils.TextFlowUtil#importFromString()
+     *  @see spark.utils.TextFlowUtil#importFromXML()
      *  @see spark.components.RichEditableText#text
-	 */
-	public function get textFlow():TextFlow
-	{
-		// We might not have a valid _textFlow for two reasons:
-		// either because the 'text' was set (which is the state
-		// after construction) or because the 'content' was set.
-		if (!_textFlow)
-		{
-			if (_content != null)
-				_textFlow = createTextFlowFromContent(_content);
-			else
-				_textFlow = staticPlainTextImporter.importToFlow(_text);
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     */
+    public function get textFlow():TextFlow
+    {
+        // We might not have a valid _textFlow for two reasons:
+        // either because the 'text' was set (which is the state
+        // after construction) or because the 'content' was set.
+        if (!_textFlow)
+        {
+            if (_content != null)
+                _textFlow = createTextFlowFromContent(_content);
+            else
+                _textFlow = staticPlainTextImporter.importToFlow(_text);
             
             lastGeneration = _textFlow ? _textFlow.generation : 0;
-		}
-		
-		_textFlow.addEventListener(DamageEvent.DAMAGE,
-								   textFlow_damageHandler);
-		
-		return _textFlow;
-	}
-	
-	/**
-	 *  @private
-	 */
-	public function set textFlow(value:TextFlow):void
-	{
-		// Treat setting the 'textFlow' to null
-		// as if 'text' were being set to the empty String
-		// (which is the default state).
-		if (value == null)
-		{
-			text = "";
-			return;
-		}
-		
-		if (value == _textFlow)
-			return;
-			        
+        }
+        
+        _textFlow.addEventListener(DamageEvent.DAMAGE,
+                                   textFlow_damageHandler);
+              
+        // Ensure our textFlow has the most appropriate
+        // swf context associated with it.                           
+        if (_textFlow.flowComposer)
+        {
+            _textFlow.flowComposer.swfContext = 
+                ISWFContext(getEmbeddedFontContext());  
+        }                    
+        
+        return _textFlow;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set textFlow(value:TextFlow):void
+    {
+        // Treat setting the 'textFlow' to null
+        // as if 'text' were being set to the empty String
+        // (which is the default state).
+        if (value == null)
+        {
+            text = "";
+            return;
+        }
+        
+        if (value == _textFlow)
+            return;
+                    
         // If there was a textFlow remove its damage handler.
         removeDamageHandler();
         
-		_textFlow = value;
-		textFlowChanged = true;
-		source = "textFlow";
-		
-		// If more than one of 'text', 'textFlow', and 'content' is set,
-		// the last one set wins.
-		textChanged = false;
-		contentChanged = false;
-		
-		// The other two are now invalid and must be recalculated when needed.
-		_text = null
-		_content = null;
-		
-		factory = staticTextFlowFactory;
+        _textFlow = value;
+        textFlowChanged = true;
+        source = "textFlow";
+        
+        // If more than one of 'text', 'textFlow', and 'content' is set,
+        // the last one set wins.
+        textChanged = false;
+        contentChanged = false;
+        
+        // The other two are now invalid and must be recalculated when needed.
+        _text = null
+        _content = null;
+        
+        factory = staticTextFlowFactory;
 
-		invalidateTextLines();
-		invalidateProperties();
-		invalidateSize();
-		invalidateDisplayList();
-	}
-	
+        invalidateTextLines();
+        invalidateProperties();
+        invalidateSize();
+        invalidateDisplayList();
+    }
+    
     //--------------------------------------------------------------------------
     //
     //  Overridden methods: UIComponent
     //
     //--------------------------------------------------------------------------
     
-	/**
-	 *  @private
-	 */
-	override protected function commitProperties():void
+    /**
+     *  @private
+     */
+    override protected function commitProperties():void
     {
-    	super.commitProperties();
-    	
-    	// Only one of textChanged, textFlowChanged, and contentChanged
-    	// will be true; the other two will be false because each setter
-    	// guarantees this.
-    	if (textChanged)
-    	{
-			// If the text has linebreaks (CR, LF, or CF+LF)
-			// create a multi-paragraph TextFlow from it
-			// and use the TextFlowTextLineFactory to render it.
-			// Otherwise the StringTextLineFactory will put
-			// all of the lines into a single paragraph
-			// and FTE performance will degrade on a large paragraph.
-			if (_text.indexOf("\n") != -1 || _text.indexOf("\r") != -1)
-			{
-				_textFlow = staticPlainTextImporter.importToFlow(_text);
-				factory = staticTextFlowFactory;
-			}
-			textChanged = false;
-    	}
-    	else if (textFlowChanged)
-    	{
-    		// Nothing to do at commitProperties() time.
-    		textFlowChanged = false;
-    	}
-    	else if (contentChanged)
-    	{
-			_textFlow = createTextFlowFromContent(_content);
-			contentChanged = false;
-    	}
+        super.commitProperties();
+        
+        // Only one of textChanged, textFlowChanged, and contentChanged
+        // will be true; the other two will be false because each setter
+        // guarantees this.
+        if (textChanged)
+        {
+            // If the text has linebreaks (CR, LF, or CF+LF)
+            // create a multi-paragraph TextFlow from it
+            // and use the TextFlowTextLineFactory to render it.
+            // Otherwise the StringTextLineFactory will put
+            // all of the lines into a single paragraph
+            // and FTE performance will degrade on a large paragraph.
+            if (_text.indexOf("\n") != -1 || _text.indexOf("\r") != -1)
+            {
+                _textFlow = staticPlainTextImporter.importToFlow(_text);
+                factory = staticTextFlowFactory;
+            }
+            textChanged = false;
+        }
+        else if (textFlowChanged)
+        {
+            // Nothing to do at commitProperties() time.
+            textFlowChanged = false;
+        }
+        else if (contentChanged)
+        {
+            _textFlow = createTextFlowFromContent(_content);
+            contentChanged = false;
+        }
     
         lastGeneration = _textFlow ? _textFlow.generation : 0;
         
-    	// At this point we know which TextLineFactory we're going to use
-    	// and we know the _text or _textFlow that it will compose.
-
-		var oldEmbeddedFontContext:IFlexModuleFactory = embeddedFontContext;
-		
-		// If the CSS styles for this component specify an embedded font,
-		// embeddedFontContext will be set to the module factory that
-		// should create TextLines (since they must be created in the
-		// SWF where the embedded font is.)
-		// Otherwise, this will be null.
-		embeddedFontContext = getEmbeddedFontContext();
-		
-		if (embeddedFontContext != oldEmbeddedFontContext)
-		{
-			staticTextFlowFactory.swfContext =
-				ISWFContext(embeddedFontContext)
-			staticStringFactory.swfContext = 
-				ISWFContext(embeddedFontContext)
-		}
-				
-		// If the styles have changed, hostFormat will have
-		// been set to null to indicate that it is invalid.
-		// In that case, create a new one.
-		if (!hostFormat)
-		{
-			hostFormat = new CSSTextLayoutFormat(this);
-			// Note: CSSTextLayoutFormat has special processing
-			// for the fontLookup style. If it is "auto",
-			// the fontLookup format is set to either
-			// "device" or "embedded" depending on whether
-			// embeddedFontContext is null or non-null.
-		}
-		
-		if (_textFlow)
-		{
-			// We might have a new TextFlow, or a new hostFormat,
-			// so attach the latter to the former.
-			_textFlow.hostFormat = hostFormat;
-		
-			if (_textFlow.flowComposer)
-			{
-				_textFlow.flowComposer.swfContext = 
-					staticTextFlowFactory.swfContext;
-			}
-            
+        // At this point we know which TextLineFactory we're going to use
+        // and we know the _text or _textFlow that it will compose.
+                    
+        // If the styles have changed, hostFormat will have
+        // been set to null to indicate that it is invalid.
+        // In that case, create a new one.
+        if (!hostFormat)
+        {
+            hostFormat = new CSSTextLayoutFormat(this);
+            // Note: CSSTextLayoutFormat has special processing
+            // for the fontLookup style. If it is "auto",
+            // the fontLookup format is set to either
+            // "device" or "embedded" depending on whether
+            // embeddedFontContext is null or non-null.
+        }
+        
+        if (_textFlow)
+        {
+            // We might have a new TextFlow, or a new hostFormat,
+            // so attach the latter to the former.
+            _textFlow.hostFormat = hostFormat;
+    
             // Add a damage handler.
             _textFlow.addEventListener(DamageEvent.DAMAGE, 
                                        textFlow_damageHandler);
-		}
+        }
         
         if (maskChanged)
         {
@@ -1077,7 +1080,7 @@ public class RichText extends TextBase
 
             maskTypeChanged = false;
         }
-	}
+    }
     
     /**
      *  @private
@@ -1086,9 +1089,9 @@ public class RichText extends TextBase
     {
         super.stylesInitialized();
 
-		// The old hostFormat is invalid
-		// and a new one must be created.
-		hostFormat = null;
+        // The old hostFormat is invalid
+        // and a new one must be created.
+        hostFormat = null;
     }
 
     /**
@@ -1102,11 +1105,11 @@ public class RichText extends TextBase
         // and a new one must be created.
         hostFormat = null;
         
-		invalidateTextLines();
-		invalidateProperties();
-		invalidateSize();
-		invalidateDisplayList();
-	}
+        invalidateTextLines();
+        invalidateProperties();
+        invalidateSize();
+        invalidateDisplayList();
+    }
 
     /**
      *  @private
@@ -1127,47 +1130,47 @@ public class RichText extends TextBase
 
         super.updateDisplayList(unscaledWidth, unscaledHeight);
     }    
-	//--------------------------------------------------------------------------
-	//
-	//  Overridden methods: TextBase
-	//
-	//--------------------------------------------------------------------------
-	
-	/**
-	 *  @private
-	 *  Returns true to indicate all lines were composed.
-	 */
-	override mx_internal function composeTextLines(width:Number = NaN,
-												   height:Number = NaN):Boolean
-	{   
+    //--------------------------------------------------------------------------
+    //
+    //  Overridden methods: TextBase
+    //
+    //--------------------------------------------------------------------------
+    
+    /**
+     *  @private
+     *  Returns true to indicate all lines were composed.
+     */
+    override mx_internal function composeTextLines(width:Number = NaN,
+                                                   height:Number = NaN):Boolean
+    {   
         // If there is no explicit width but there is an explicit
         // maxWidth use that.
         if (isNaN(width) && !isNaN(explicitMaxWidth))
             width = explicitMaxWidth;
         
-		super.composeTextLines(width, height);
-		
-		// Ignore damage events while we're re-composing the text lines.
+        super.composeTextLines(width, height);
+        
+        // Ignore damage events while we're re-composing the text lines.
         ignoreDamageEvent = true;
 
-		// Set the composition bounds to be used by createTextLines().
+        // Set the composition bounds to be used by createTextLines().
         // If there is no explicit width, and there is no explicit maxWidth,
         // the width will be computed by this method.
-		// If the height is NaN, it will be computed by this method
-		// by the time it returns.
-		// The bounds are then used by the addTextLines() method
-		// to determine the isOverset flag.
-		// The composition bounds are also reported by the measure() method.
+        // If the height is NaN, it will be computed by this method
+        // by the time it returns.
+        // The bounds are then used by the addTextLines() method
+        // to determine the isOverset flag.
+        // The composition bounds are also reported by the measure() method.
         
-		bounds.x = 0;
-		bounds.y = 0;
+        bounds.x = 0;
+        bounds.y = 0;
         bounds.width = width;
-		bounds.height = height;
-		
-		removeTextLines();
-		releaseTextLines();
-		
-		createTextLines();
+        bounds.height = height;
+        
+        removeTextLines();
+        releaseTextLines();
+        
+        createTextLines();
         
         // Truncation only done if not measuring width and line breaks are
         // toFit.  So if we are measuring, create the text lines to figure
@@ -1184,24 +1187,24 @@ public class RichText extends TextBase
                 createTextLines();
             }
         }
-		
+        
         // Add the new text lines to the container.
         addTextLines();
-		
-		// Figure out if the text overruns the available space for composition.
-		isOverset = isTextOverset(width, height);
-		
-		// Just recomposed so reset.
-		invalidateCompose = false;
-		
-		// Listen for "damage" events in case the textFlow is 
-		// modified programatically.
+        
+        // Figure out if the text overruns the available space for composition.
+        isOverset = isTextOverset(width, height);
+        
+        // Just recomposed so reset.
+        invalidateCompose = false;
+        
+        // Listen for "damage" events in case the textFlow is 
+        // modified programatically.
         ignoreDamageEvent = false;
-		
-		// Created all lines.
-		return true;      
-	}
-	
+        
+        // Created all lines.
+        return true;      
+    }
+    
     //--------------------------------------------------------------------------
     //
     //  Methods
@@ -1211,48 +1214,48 @@ public class RichText extends TextBase
     /**
      *  @private
      */
-	private function createTextFlowFromContent(content:Object):TextFlow
-	{
-		var textFlow:TextFlow ;
-		
-		if (content is TextFlow)
-		{
-			textFlow = content as TextFlow;
-		}
-		else if (content is Array)
-		{
-			textFlow = new TextFlow();
-			textFlow.whiteSpaceCollapse = getStyle("whiteSpaceCollapse");
-			textFlow.mxmlChildren = content as Array;
-			textFlow.whiteSpaceCollapse = undefined;
-		}
-		else
-		{
-			textFlow = new TextFlow();
-			textFlow.whiteSpaceCollapse = getStyle("whiteSpaceCollapse");
-			textFlow.mxmlChildren = [ content ];
-			textFlow.whiteSpaceCollapse = undefined;
-		}
-		
-		return textFlow;
-	}
-	
-	/**
-	 *  @private
-	 *  Uses TextLineFactory to compose the textFlow
-	 *  into as many TextLines as fit into the bounds.
-	 */
-	private function createTextLines():void
-	{
-		// Clear any previously generated TextLines from the textLines Array.
-		textLines.length = 0;
-		
-		// Note: Even if we have nothing to compose, we nevertheless
-		// use the StringTextLineFactory to compose an empty string.
-		// Since it appends the paragraph terminator "\u2029",
-		// it actually creates and measures one TextLine.
-		// Its width is 0 but its height is equal to the font's
-		// ascent plus descent.
+    private function createTextFlowFromContent(content:Object):TextFlow
+    {
+        var textFlow:TextFlow ;
+        
+        if (content is TextFlow)
+        {
+            textFlow = content as TextFlow;
+        }
+        else if (content is Array)
+        {
+            textFlow = new TextFlow();
+            textFlow.whiteSpaceCollapse = getStyle("whiteSpaceCollapse");
+            textFlow.mxmlChildren = content as Array;
+            textFlow.whiteSpaceCollapse = undefined;
+        }
+        else
+        {
+            textFlow = new TextFlow();
+            textFlow.whiteSpaceCollapse = getStyle("whiteSpaceCollapse");
+            textFlow.mxmlChildren = [ content ];
+            textFlow.whiteSpaceCollapse = undefined;
+        }
+        
+        return textFlow;
+    }
+    
+    /**
+     *  @private
+     *  Uses TextLineFactory to compose the textFlow
+     *  into as many TextLines as fit into the bounds.
+     */
+    private function createTextLines():void
+    {
+        // Clear any previously generated TextLines from the textLines Array.
+        textLines.length = 0;
+        
+        // Note: Even if we have nothing to compose, we nevertheless
+        // use the StringTextLineFactory to compose an empty string.
+        // Since it appends the paragraph terminator "\u2029",
+        // it actually creates and measures one TextLine.
+        // Its width is 0 but its height is equal to the font's
+        // ascent plus descent.
         
         factory.compositionBounds = bounds;   
         
@@ -1265,17 +1268,31 @@ public class RichText extends TextBase
             truncationOptions.truncationIndicator =
                 TextBase.truncationIndicatorResource;
         }        
-		factory.truncationOptions = truncationOptions;
-		
+        factory.truncationOptions = truncationOptions;
+        
+        // If the CSS styles for this component specify an embedded font,
+        // embeddedFontContext will be set to the module factory that
+        // should create TextLines (since they must be created in the
+        // SWF where the embedded font is). Otherwise, this will be null.
+        embeddedFontContext = getEmbeddedFontContext();
+       
         if (factory is StringTextLineFactory)
         {
-			// We know text is non-null since it got this far.
-			staticStringFactory.text = _text;
-			staticStringFactory.textFlowFormat = hostFormat;
-			staticStringFactory.createTextLines(addTextLine);
-		}
+            // We know text is non-null since it got this far.
+            staticStringFactory.text = _text;
+            staticStringFactory.textFlowFormat = hostFormat;
+            staticStringFactory.swfContext = ISWFContext(embeddedFontContext);
+            staticStringFactory.createTextLines(addTextLine);
+        }
         else if (factory is TextFlowTextLineFactory)
         {
+            if (_textFlow && _textFlow.flowComposer)
+            {
+                _textFlow.flowComposer.swfContext = 
+                    ISWFContext(embeddedFontContext);
+            }
+            
+            staticTextFlowFactory.swfContext = ISWFContext(embeddedFontContext);
             staticTextFlowFactory.createTextLines(addTextLine, _textFlow);
         }
         
@@ -1301,8 +1318,12 @@ public class RichText extends TextBase
         // it actually creates and measures one TextLine.
         // Its width is 0 but its height is equal to the font's
         // ascent plus descent.
+        // Note:  Prior to TLF2, the factory would callback addTextLine 
+        // when width=0 but that has been optimized out.  Now width to NaN.
         
-        bounds.width = width;
+        bounds.x = 0;
+        bounds.y = 0;
+        bounds.width = width ? width : NaN;
         bounds.height = height;
         
         staticStringFactory.compositionBounds = bounds;   

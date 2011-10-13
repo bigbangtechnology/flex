@@ -1,20 +1,22 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit
 {
 	import flash.desktop.Clipboard;
 	import flash.desktop.ClipboardFormats;
+	import flash.system.System;
 	
 	import flashx.textLayout.conversion.*;
 	import flashx.textLayout.debug.assert;
+	import flashx.textLayout.elements.Configuration;
 	import flashx.textLayout.elements.FlowElement;
 	import flashx.textLayout.elements.FlowGroupElement;
 	import flashx.textLayout.elements.FlowLeafElement;
@@ -48,13 +50,6 @@ package flashx.textLayout.edit
 		/** @private */
 		static tlf_internal const TEXT_LAYOUT_MARKUP:String = "TEXT_LAYOUT_MARKUP";
 		
-		/** @private */
-		static tlf_internal function getTextOnClipboardForFormat(format:String):String
-		{
-			var systemClipboard:Clipboard = Clipboard.generalClipboard;
-			return (systemClipboard.hasFormat(format)) ? String(systemClipboard.getData(format)) : null;
-		}
-		
 		/**
 		 * Gets any text on the system clipboard as a TextScrap object.
 		 *  
@@ -74,123 +69,36 @@ package flashx.textLayout.edit
 		 */										
 		public static function getContents():TextScrap
 		{
-			var retTextScrap:TextScrap = null;
-			var textFlow:TextFlow;
-			var textOnClipboard:String;
-			
-			// first look for text_layout_markup
-			textOnClipboard = getTextOnClipboardForFormat(TEXT_LAYOUT_MARKUP);
-			
-			if ((textOnClipboard != null) && (textOnClipboard != ""))
-			{
-				var originalSettings:Object = XML.settings();
-				try {
-					XML.ignoreProcessingInstructions = false;
-					XML.ignoreWhitespace = false;
-					var xmlTree:XML = new XML(textOnClipboard);
-					var beginArrayChild:XML = xmlTree..*::BeginMissingElements[0];
-					var endArrayChild:XML = xmlTree..*::EndMissingElements[0];
-					var textLayoutMarkup:XML = xmlTree..*::TextFlow[0];
-					
-					textFlow = TextConverter.importToFlow(textLayoutMarkup, TextConverter.TEXT_LAYOUT_FORMAT);
-					
-					if (textFlow != null)
-					{
-						retTextScrap = new TextScrap(textFlow);
-						retTextScrap.beginMissingArray = getBeginArray(beginArrayChild, textFlow);
-						retTextScrap.endMissingArray = getEndArray(endArrayChild, textFlow);
-					}
-				}
-				finally
-				{
-					XML.setSettings(originalSettings);
-				}			
-			}
-			
-			// if there is no retTextScrap let's get the text_format and try that
-			if (retTextScrap == null)
-			{
-				textOnClipboard = getTextOnClipboardForFormat(ClipboardFormats.TEXT_FORMAT);
+			var systemClipboard:Clipboard = Clipboard.generalClipboard;	
+			return importScrap(getFromClipboard);
 
-				if (textOnClipboard != null && textOnClipboard != "")
-				{
-					textFlow = TextConverter.importToFlow(textOnClipboard, TextConverter.PLAIN_TEXT_FORMAT);
-					if (textFlow)
-					{
-						retTextScrap = new TextScrap(textFlow);
-						var firstLeaf:FlowLeafElement = textFlow.getFirstLeaf();
-						if (firstLeaf)
-						{
-							retTextScrap.beginMissingArray.push(firstLeaf);
-							retTextScrap.beginMissingArray.push(firstLeaf.parent);
-							retTextScrap.beginMissingArray.push(textFlow);
-							
-							var lastLeaf:FlowLeafElement = textFlow.getLastLeaf();
-							retTextScrap.endMissingArray.push(lastLeaf);
-							retTextScrap.endMissingArray.push(lastLeaf.parent);
-							retTextScrap.endMissingArray.push(textFlow);
-						}
-					}
-				}
-			}
-			return retTextScrap;
-		}
-		
-		/** @private */
-		tlf_internal static function createTextFlowExportString(scrap:TextScrap):String
-		{
-			var textFlowExportString:String = "";
-			var originalSettings:Object = XML.settings();
-			try
+			function getFromClipboard(clipboardFormat:String):String
 			{
-				XML.ignoreProcessingInstructions = false;		
-				XML.ignoreWhitespace = false;
-				XML.prettyPrinting = false;
-					
-				var exporter:ITextExporter = TextConverter.getExporter(TextConverter.TEXT_LAYOUT_FORMAT);
-				var result:String = '<?xml version="1.0" encoding="utf-8"?>\n';
-				result += "<TextScrap>\n";
-				result += getPartialElementString(scrap);
-				
-				var xmlExport:XML = exporter.export(scrap.textFlow, ConversionType.XML_TYPE) as XML;
-				result += xmlExport;
-				result += "</TextScrap>\n";				
-				textFlowExportString = result.toString();
-				XML.setSettings(originalSettings);
-			}				
-			catch(e:Error)
-			{
-				XML.setSettings(originalSettings);
+				return (systemClipboard.hasFormat(clipboardFormat)) ? String(systemClipboard.getData(clipboardFormat)) : null;
 			}
-			return textFlowExportString;
-		}
-		
-		/** @private */
-		tlf_internal static function createPlainTextExportString(scrap:TextScrap):String
-		{
-			// At some point, import/export filters will be installable. We want our clipboard fomat to be
-			// predictable, so we explicitly use the PlainTextExporter 
-			// var plainTextExporter:ITextExporter = TextConverter.getExporter(TextConverter.PLAIN_TEXT_FORMAT);
-			var plainTextExporter:PlainTextExporter = new PlainTextExporter();
-			var plainTextExportString:String = plainTextExporter.export(scrap.textFlow, ConversionType.STRING_TYPE) as String;
 			
-			// The plain text exporter does not append the paragraph separator after the last paragraph
-			// When putting text on the clipboard, the last paragraph should get a separator if it was 
-			// copied through its end, i.e., if its end is not missing 
-			var lastPara:ParagraphElement = scrap.textFlow.getLastLeaf().getParagraph();
-			if (!scrap.isEndMissing(lastPara))
-				plainTextExportString += plainTextExporter.paragraphSeparator;
-			return plainTextExportString;
 		}
-		
-		/** @private */
-		tlf_internal static function setClipboardContents(textFlowExportString:String,plainTextExportString:String):void
-		{	
-			var systemClipboard:Clipboard = Clipboard.generalClipboard;
-			systemClipboard.clear();
-			systemClipboard.setData(TEXT_LAYOUT_MARKUP, textFlowExportString);
-			systemClipboard.setData(ClipboardFormats.TEXT_FORMAT, plainTextExportString);
+				
+		/** @private 
+		 * Internal function to import a scrap to available clipboard formats. It abstracts 
+		 * out the actual clipboard access so it can be called from testing code.
+		 **/
+		tlf_internal static function importScrap(importFunctor:Function):TextScrap
+		{
+			var textScrap:TextScrap;
+			var textOnClipboard:String;
+
+			var numFormats:int = TextConverter.numFormats;
+			for (var i:int = 0; i < numFormats && !textScrap; ++i)
+			{
+				var descriptor:FormatDescriptor = TextConverter.getFormatDescriptorAt(i);
+				textOnClipboard = importFunctor(descriptor.clipboardFormat);
+				if (textOnClipboard && (textOnClipboard != ""))
+					textScrap = importToScrap(textOnClipboard, descriptor.format);
+			}
+			return textScrap;
 		}
+
 		/**
 		 * Puts a TextScrap onto the system clipboard.  
 		 * 
@@ -210,69 +118,121 @@ package flashx.textLayout.edit
 		 * @playerversion AIR 1.5
 	 	 * @langversion 3.0
  		 */										
-		public static function setContents(scrap:TextScrap):void
-		{
-			if (scrap == null) 
+		public static function setContents(textScrap:TextScrap):void
+		{ 
+			if (!textScrap) 
 				return;
-			var textFlowExportString:String = createTextFlowExportString(scrap);
-			var plainTextExportString:String = createPlainTextExportString(scrap);
-			setClipboardContents(textFlowExportString,plainTextExportString);
+
+			var systemClipboard:Clipboard = Clipboard.generalClipboard;
+			systemClipboard.clear();
+			
+			exportScrap(textScrap, addToClipboard);
+
+			function addToClipboard(clipboardFormat:String, clipboardData:String):void 
+			{ 						
+				systemClipboard.setData(clipboardFormat, clipboardData); 
+			}
 		}
 		
-		private static function getPartialElementString(scrap:TextScrap):String
+		/** @private 
+		 * Internal function to export a scrap to available clipboard formats. It abstracts 
+		 * out the actual clipboard access so it can be called from testing code.
+		 **/
+		tlf_internal static function exportScrap(scrap:TextScrap, exportFunctor:Function):void
 		{
-			var beginMissingArray:Array = scrap.beginMissingArray;
-			var endMissingArray:Array = scrap.endMissingArray;
-			var beginMissingString:String = "";
-			var endMissingString:String = "";
-			var resultString:String = "";
+			var formatsPosted:Array = [];	// one clipboardFormat may have multiple formats, but we only post one result per clipboardFormat
 			
-			var curPos:int = beginMissingArray.length - 2;
-			var curFlElement:FlowElement;
-			var curFlElementIndex:int;
-			
-			if (beginMissingArray.length > 0)
+			var numFormats:int = TextConverter.numFormats;
+			for (var i:int = 0; i < numFormats; i++)
 			{
-				beginMissingString = "0";
-				while (curPos >= 0)
+				var descriptor:FormatDescriptor = TextConverter.getFormatDescriptorAt(i);
+				if (descriptor.clipboardFormat && formatsPosted.indexOf(descriptor.clipboardFormat) < 0)
 				{
-					curFlElement = beginMissingArray[curPos];
-					curFlElementIndex = curFlElement.parent.getChildIndex(curFlElement);
-					beginMissingString = beginMissingString + "," + curFlElementIndex;
-					curPos--;
+					var exportString:String = exportForClipboard(scrap, descriptor.format);
+					if (exportString)
+					{
+						exportFunctor(descriptor.clipboardFormat, exportString);
+						formatsPosted.push(descriptor.clipboardFormat);
+					}
 				}
 			}
-			
-			curPos = endMissingArray.length - 2;
-			if (endMissingArray.length > 0)
+		}
+		
+		/** @private */
+		tlf_internal static function importToScrap(textOnClipboard:String, format:String):TextScrap
+		{
+			var textScrap:TextScrap;
+			var importer:ITextImporter = TextConverter.getImporter(format);
+			if (importer)
 			{
-				endMissingString = "0";
+				importer.useClipboardAnnotations = true;
+				var textFlow:TextFlow = importer.importToFlow(textOnClipboard);
+				if (textFlow)
+					textScrap = new TextScrap(textFlow);
 				
-				while (curPos >= 0)
-				{
-					curFlElement = endMissingArray[curPos];
-					curFlElementIndex = curFlElement.parent.getChildIndex(curFlElement);
-					endMissingString = endMissingString + "," + curFlElementIndex;
-					curPos--;					
+				/** Hint to the scrap about whether text is plain or formatted. If not set, scrap will inspect text for attributes. */
+				if (format == TextConverter.PLAIN_TEXT_FORMAT)
+					textScrap.setPlainText(true);
+				else if (format == TextConverter.TEXT_LAYOUT_FORMAT)
+					textScrap.setPlainText(false);
+				
+				// Backwards compatibility: check for older scrap format
+				if (!textScrap && format == TextConverter.TEXT_LAYOUT_FORMAT)
+					textScrap = importOldTextLayoutFormatToScrap(textOnClipboard);
+			}
+			
+			return textScrap;
+		}
+		
+		/** @private */
+		tlf_internal static function importOldTextLayoutFormatToScrap(textOnClipboard:String):TextScrap
+		{
+			var textScrap:TextScrap;
+			
+			// The clipboard format for TLF 1.0 and 1.1 had a root "TextScrap" object with a TextFlow child and
+			// encodings for the begin partial elements and the end partial elements. Convert the string to an XML object, 
+			// and then translate the children.
+			var originalSettings:Object = XML.settings();
+			try {
+				XML.ignoreProcessingInstructions = false;
+				XML.ignoreWhitespace = false;
+				var xmlTree:XML = new XML(textOnClipboard);
+				if (xmlTree.localName() == "TextScrap")
+				{		// read the old clipboard format
+					var beginArrayChild:XML = xmlTree..*::BeginMissingElements[0];
+					var endArrayChild:XML = xmlTree..*::EndMissingElements[0];
+					var textLayoutMarkup:XML = xmlTree..*::TextFlow[0];
+					var textFlow:TextFlow = TextConverter.importToFlow(textLayoutMarkup, TextConverter.TEXT_LAYOUT_FORMAT);
+					if (textFlow)
+					{
+						textScrap = new TextScrap(textFlow);
+						var element:FlowElement;
+						var endMissingArray:Array = getEndArray(endArrayChild, textFlow);
+						for each (element in endMissingArray)
+							element.setStyle(ConverterBase.MERGE_TO_NEXT_ON_PASTE, "true");
+					}
 				}
+				if (Configuration.playerEnablesArgoFeatures)
+					System["disposeXML"](xmlTree);
+
 			}
-			
-			if (beginMissingString != "")
+			finally
 			{
-				resultString = '<BeginMissingElements value="';
-				resultString += beginMissingString;
-				resultString += '"';
-				resultString += '/>\n';
-			}
-			
-			if (endMissingString != "")
+				XML.setSettings(originalSettings);
+			}		
+			return textScrap;
+		}
+		
+		/** @private */
+		tlf_internal static function exportForClipboard(scrap:TextScrap, format:String):String
+		{
+			var exporter:ITextExporter = TextConverter.getExporter(format);
+			if (exporter)
 			{
-				resultString += '<EndMissingElements value="';
-				resultString += endMissingString;
-				resultString += '"';
-				resultString += '/>\n';				
+				exporter.useClipboardAnnotations = true;
+				return exporter.export(scrap.textFlow, ConversionType.STRING_TYPE) as String;
 			}
-			return resultString;
+			return null;
 		}
 		
 		private static function getBeginArray(beginArrayChild:XML, textFlow:TextFlow):Array

@@ -53,6 +53,7 @@ import mx.graphics.shaderClasses.SaturationShader;
 import mx.graphics.shaderClasses.SoftLightShader;
 import mx.managers.ILayoutManagerClient;
 import mx.utils.MatrixUtil;
+import mx.utils.TransformUtil;
 
 import spark.components.ResizeMode;
 import spark.utils.MaskUtil;
@@ -136,18 +137,12 @@ public class SpriteVisualElement extends FlexSprite
 
     /**
      *  @private
-     *  Static point for use in transformPointToParent
-     */
-    private static var xformPt:Point;
-
-    /**
-     *  @private
      *  Initializes the implementation and storage of some of the less
      *  frequently used advanced layout features of a component.
      *  Call this function before attempting to use any of the
      *  features implemented by the AdvancedLayoutFeatures object.
      */
-    private function initAdvancedLayoutFeatures():void
+    private function initAdvancedLayoutFeatures():AdvancedLayoutFeatures
     {
         var features:AdvancedLayoutFeatures = new AdvancedLayoutFeatures();
 
@@ -162,13 +157,14 @@ public class SpriteVisualElement extends FlexSprite
         features.layoutX = x;
         features.layoutY = y;
         features.layoutZ = z;
-		features.layoutWidth = _width;  // for the mirror transform		
+        features.layoutWidth = _width;  // for the mirror transform     
 
         // Initialize the internal variable last,
         // since the transform getters depend on it.
         _layoutFeatures = features;
 
         invalidateTransform();
+        return features;
     }
 
     /**
@@ -226,12 +222,12 @@ public class SpriteVisualElement extends FlexSprite
      */
     private function setActualSize(width:Number, height:Number):void
     {
-		if ((_width != width)  && _layoutFeatures)
-		{
-			_layoutFeatures.layoutWidth = width;
-			invalidateTransform();
-		}
-			
+        if ((_width != width)  && _layoutFeatures)
+        {
+            _layoutFeatures.layoutWidth = width;
+            invalidateTransform();
+        }
+            
         _width = width;
         _height = height;
 
@@ -356,9 +352,9 @@ public class SpriteVisualElement extends FlexSprite
      *  @copy mx.core.IVisualElement#postLayoutTransformOffsets
      *
      *  @langversion 3.0
-     *  @playerversion Flash 9
-     *  @playerversion AIR 1.1
-     *  @productversion Flex 3
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function get postLayoutTransformOffsets():TransformOffsets
     {
@@ -713,6 +709,70 @@ public class SpriteVisualElement extends FlexSprite
         invalidateParentSizeAndDisplayList();
     }
 
+    //----------------------------------
+    //  minHeight
+    //----------------------------------
+    
+    /**
+     *  @private
+     *
+     *  The minimum height explicitly set by the user.
+     */
+    private var _explicitMinHeight:Number = NaN;
+    
+    /**
+     *  @private
+     */
+    public function get minHeight():Number
+    {
+        if (!isNaN(_explicitMinHeight))
+            return _explicitMinHeight;
+        return resizeMode == ResizeMode.SCALE ? 0 : preferredHeight;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set minHeight(value:Number):void
+    {
+        if (_explicitMinHeight == value)
+            return;
+        _explicitMinHeight = value;
+        invalidateParentSizeAndDisplayList();
+    }
+    
+    //----------------------------------
+    //  maxHeight
+    //----------------------------------
+    
+    /**
+     *  @private
+     *
+     *  The maximum height explicitly set by the user.
+     */
+    private var _explicitMaxHeight:Number = NaN;
+    
+    /**
+     *  @private
+     */
+    public function get maxHeight():Number
+    {
+        if (!isNaN(_explicitMaxHeight))
+            return _explicitMaxHeight;
+        return DEFAULT_MAX_HEIGHT;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set maxHeight(value:Number):void
+    {
+        if (_explicitMaxHeight == value)
+            return;
+        _explicitMaxHeight = value;
+        invalidateParentSizeAndDisplayList();
+    }
+    
     //----------------------------------
     //  horizontalCenter
     //----------------------------------
@@ -1109,8 +1169,8 @@ public class SpriteVisualElement extends FlexSprite
     [Inspectable(category="General")]
     /**
      *  @copy spark.components.supportClasses.GroupBase#mask
-	 * 
-	 *  @langversion 3.0
+     * 
+     *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
@@ -1151,9 +1211,9 @@ public class SpriteVisualElement extends FlexSprite
     [Inspectable(category="General", enumeration="clip,alpha,luminosity", defaultValue="clip")]
     
     /**
-	 * @copy spark.components.supportClasses.GroupBase#maskType
-	 *
-	 *  @langversion 3.0
+     * @copy spark.components.supportClasses.GroupBase#maskType
+     *
+     *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
@@ -1670,6 +1730,11 @@ public class SpriteVisualElement extends FlexSprite
 
     /**
      *  @inheritDoc
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
     override public function get visible():Boolean
     {
@@ -1725,6 +1790,70 @@ public class SpriteVisualElement extends FlexSprite
         invalidateParentSizeAndDisplayList();
     }
 
+    //----------------------------------
+    //  minWidth
+    //----------------------------------
+    
+    /**
+     *  @private
+     *
+     *  The minimum width explicitly set by the user.
+     */
+    private var _explicitMinWidth:Number = NaN;
+    
+    /**
+     *  @private
+     */
+    public function get minWidth():Number
+    {
+        if (!isNaN(_explicitMinWidth))
+            return _explicitMinWidth;
+        return resizeMode == ResizeMode.SCALE ? 0 : preferredWidth;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set minWidth(value:Number):void
+    {
+        if (_explicitMinWidth == value)
+            return;
+        _explicitMinWidth = value;
+        invalidateParentSizeAndDisplayList();
+    }
+    
+    //----------------------------------
+    //  maxWidth
+    //----------------------------------
+    
+    /**
+     *  @private
+     *
+     *  The maximum width explicitly set by the user.
+     */
+    private var _explicitMaxWidth:Number = NaN;
+    
+    /**
+     *  @private
+     */
+    public function get maxWidth():Number
+    {
+        if (!isNaN(_explicitMaxWidth))
+            return _explicitMaxWidth;
+        return DEFAULT_MAX_WIDTH;
+    }
+
+    /**
+     *  @private
+     */
+    public function set maxWidth(value:Number):void
+    {
+        if (_explicitMaxWidth == value)
+            return;
+        _explicitMaxWidth = value;
+        invalidateParentSizeAndDisplayList();
+    }
+    
     //----------------------------------
     //  viewWidth
     //----------------------------------
@@ -1886,9 +2015,9 @@ public class SpriteVisualElement extends FlexSprite
      *  @see spark.effects.AnimateTransform#transformX
      *
      *  @langversion 3.0
-     *  @playerversion Flash 9
-     *  @playerversion AIR 1.1
-     *  @productversion Flex 3
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function get transformX():Number
     {
@@ -1930,9 +2059,9 @@ public class SpriteVisualElement extends FlexSprite
      *  @see spark.effects.AnimateTransform#transformY
      *
      *  @langversion 3.0
-     *  @playerversion Flash 9
-     *  @playerversion AIR 1.1
-     *  @productversion Flex 3
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function get transformY():Number
     {
@@ -1974,9 +2103,9 @@ public class SpriteVisualElement extends FlexSprite
      *  @see spark.effects.AnimateTransform#transformZ
      *
      *  @langversion 3.0
-     *  @playerversion Flash 9
-     *  @playerversion AIR 1.1
-     *  @productversion Flex 3
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function get transformZ():Number
     {
@@ -1997,40 +2126,50 @@ public class SpriteVisualElement extends FlexSprite
         invalidateParentSizeAndDisplayList();
     }
 
-	//----------------------------------
-	//  layoutDirection
-	//----------------------------------
-	
-	private var _layoutDirection:String = null;
-	
+    //----------------------------------
+    //  layoutDirection
+    //----------------------------------
+    
+    private var _layoutDirection:String = null;
+    
     [Inspectable(category="General", enumeration="ltr,rtl")]
     
     /**
      *  @inheritDoc
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
-	public function get layoutDirection():String
-	{
+    public function get layoutDirection():String
+    {
         if (_layoutDirection != null)
             return _layoutDirection;
         
         const parentElt:ILayoutDirectionElement = parent as ILayoutDirectionElement;
         return (parentElt) ? parentElt.layoutDirection : LayoutDirection.LTR;   
-	}
-	
-	/**
-	 *  @private
-	 */
-	public function set layoutDirection(value:String):void
-	{
-		if (_layoutDirection == value)
-			return;
-		
-		_layoutDirection = value;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set layoutDirection(value:String):void
+    {
+        if (_layoutDirection == value)
+            return;
+        
+        _layoutDirection = value;
         invalidateLayoutDirection();
-	}
+    }
     
     /**
      * @inheritDoc 
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
     public function invalidateLayoutDirection():void
     {
@@ -2042,7 +2181,9 @@ public class SpriteVisualElement extends FlexSprite
         // set the _layoutFeatures.mirror flag.  Similarly, if mirroring isn't 
         // required, then clear the _layoutFeatures.mirror flag.
         
-        const mirror:Boolean = (_layoutDirection != null) && (_layoutDirection != parentElt.layoutDirection);        
+        const mirror:Boolean = (parentElt.layoutDirection != null && _layoutDirection != null) 
+            && (_layoutDirection != parentElt.layoutDirection);
+        
         if ((_layoutFeatures) ? (mirror != _layoutFeatures.mirror) : mirror)
         {
             if (_layoutFeatures == null)
@@ -2052,7 +2193,7 @@ public class SpriteVisualElement extends FlexSprite
             invalidateParentSizeAndDisplayList();            
         }
     }        
-	
+    
     //--------------------------------------------------------------------------
     //
     //  Overridden methods
@@ -2336,7 +2477,7 @@ public class SpriteVisualElement extends FlexSprite
      */
     public function getMaxBoundsWidth(postLayoutTransform:Boolean = true):Number
     {
-        return transformWidthForLayout(DEFAULT_MAX_WIDTH, DEFAULT_MAX_HEIGHT, postLayoutTransform);
+        return transformWidthForLayout(maxWidth, maxHeight, postLayoutTransform);
     }
 
     /**
@@ -2349,7 +2490,7 @@ public class SpriteVisualElement extends FlexSprite
      */
     public function getMaxBoundsHeight(postLayoutTransform:Boolean = true):Number
     {
-        return transformHeightForLayout(DEFAULT_MAX_WIDTH, DEFAULT_MAX_HEIGHT, postLayoutTransform);
+        return transformHeightForLayout(maxWidth, maxHeight, postLayoutTransform);
     }
 
     /**
@@ -2362,7 +2503,7 @@ public class SpriteVisualElement extends FlexSprite
      */
     public function getMinBoundsWidth(postLayoutTransform:Boolean = true):Number
     {
-        return resizeMode == ResizeMode.SCALE ? 0 : getPreferredBoundsWidth(postLayoutTransform);
+        return transformWidthForLayout(minWidth, minHeight, postLayoutTransform);
     }
 
     /**
@@ -2375,7 +2516,7 @@ public class SpriteVisualElement extends FlexSprite
      */
     public function getMinBoundsHeight(postLayoutTransform:Boolean = true):Number
     {
-        return resizeMode == ResizeMode.SCALE ? 0 : getPreferredBoundsHeight(postLayoutTransform);
+        return transformHeightForLayout(minWidth, minHeight, postLayoutTransform);
     }
 
     /**
@@ -2510,12 +2651,14 @@ public class SpriteVisualElement extends FlexSprite
         }
 
         var fitSize:Point = MatrixUtil.fitBounds(width, height, m,
+            _explicitWidth,
+            _explicitHeight,
             preferredWidth,
             preferredHeight,
-            getMinBoundsWidth(false),
-            getMinBoundsHeight(false),
-            getMaxBoundsWidth(false),
-            getMaxBoundsWidth(false));
+            minWidth,
+            minHeight,
+            maxWidth,
+            maxHeight);
 
         // If we couldn't fit at all, default to the minimum size
         if (!fitSize)
@@ -2681,9 +2824,9 @@ public class SpriteVisualElement extends FlexSprite
      *  @copy mx.core.ILayoutElement#transformAround()
      *
      *  @langversion 3.0
-     *  @playerversion Flash 9
-     *  @playerversion AIR 1.1
-     *  @productversion Flex 3
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function transformAround(transformCenter:Vector3D,
                                     scale:Vector3D = null,
@@ -2703,83 +2846,24 @@ public class SpriteVisualElement extends FlexSprite
             _includeInLayout = false;
         }
         
-        if (_layoutFeatures == null)
+        TransformUtil.transformAround(this,
+                                      transformCenter,
+                                      scale,
+                                      rotation,
+                                      translation,
+                                      postLayoutScale,
+                                      postLayoutRotation,
+                                      postLayoutTranslation,
+                                      _layoutFeatures,
+                                      initAdvancedLayoutFeatures);
+        
+        if (_layoutFeatures != null)
         {
-            // TODO (chaase): should provide a way to return to having no
-            // layoutFeatures if we call this later with a more trivial
-            // situation
-            var needAdvancedLayout:Boolean =
-                (scale != null && ((!isNaN(scale.x) && scale.x != 1) ||
-                    (!isNaN(scale.y) && scale.y != 1) ||
-                    (!isNaN(scale.z) && scale.z != 1))) ||
-                (rotation != null && ((!isNaN(rotation.x) && rotation.x != 0) ||
-                    (!isNaN(rotation.y) && rotation.y != 0) ||
-                    (!isNaN(rotation.z) && rotation.z != 0))) ||
-                (translation != null && translation.z != 0 && !isNaN(translation.z)) ||
-                postLayoutScale != null ||
-                postLayoutRotation != null ||
-                (postLayoutTranslation != null &&
-                    (postLayoutTranslation.x != translation.x ||
-                        postLayoutTranslation.y != translation.y ||
-                        postLayoutTranslation.z != translation.z));
-            if (needAdvancedLayout)
-                initAdvancedLayoutFeatures();
-        }
-        if (_layoutFeatures)
-        {
-            _layoutFeatures.transformAround(transformCenter, scale, rotation, translation,
-                postLayoutScale, postLayoutRotation, postLayoutTranslation);
             invalidateTransform();
 
             // Will not invalidate parent if we have set _includeInLayout to false
             // in the beginning of the method
             invalidateParentSizeAndDisplayList();
-        }
-        else
-        {
-            if (translation == null && transformCenter != null)
-            {
-                if (xformPt == null)
-                    xformPt = new Point();
-                xformPt.x = transformCenter.x;
-                xformPt.y = transformCenter.y;
-                var xformedPt:Point =
-                    transform.matrix.transformPoint(xformPt);
-            }
-            if (rotation != null && !isNaN(rotation.z))
-                this.rotation = rotation.z;
-            if (scale != null)
-            {
-                scaleX = scale.x;
-                scaleY = scale.y;
-            }
-            if (transformCenter == null)
-            {
-                if (translation != null)
-                {
-                    x = translation.x;
-                    y = translation.y;
-                }
-            }
-            else
-            {
-                if (xformPt == null)
-                    xformPt = new Point();
-                xformPt.x = transformCenter.x;
-                xformPt.y = transformCenter.y;
-                var postXFormPoint:Point =
-                    transform.matrix.transformPoint(xformPt);
-                if (translation != null)
-                {
-                    x += translation.x - postXFormPoint.x;
-                    y += translation.y - postXFormPoint.y;
-                }
-                else
-                {
-                    x += xformedPt.x - postXFormPoint.x;
-                    y += xformedPt.y - postXFormPoint.y;
-                }
-            }
         }
         
         if (!invalidateLayout)
@@ -2787,18 +2871,18 @@ public class SpriteVisualElement extends FlexSprite
     }
 
     /**
-     * A utility method to transform a point specified in the local
-     * coordinates of this object to its location in the object's parent's
-     * coordinates. The pre-layout and post-layout result will be set on
-     * the <code>position</code> and <code>postLayoutPosition</code>
-     * parameters, if they are non-null.
-     *
-     * @param localPosition The point to be transformed, specified in the
-     * local coordinates of the object.
-     * @param position A Vector3D point that will hold the pre-layout
-     * result. If null, the parameter is ignored.
-     * @param postLayoutPosition A Vector3D point that will hold the post-layout
-     * result. If null, the parameter is ignored.
+     *  A utility method to transform a point specified in the local
+     *  coordinates of this object to its location in the object's parent's
+     *  coordinates. The pre-layout and post-layout result will be set on
+     *  the <code>position</code> and <code>postLayoutPosition</code>
+     *  parameters, if they are non-null.
+     *  
+     *  @param localPosition The point to be transformed, specified in the
+     *  local coordinates of the object.
+     *  @param position A Vector3D point that will hold the pre-layout
+     *  result. If null, the parameter is ignored.
+     *  @param postLayoutPosition A Vector3D point that will hold the post-layout
+     *  result. If null, the parameter is ignored.
      *
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -2809,50 +2893,27 @@ public class SpriteVisualElement extends FlexSprite
                                            position:Vector3D,
                                            postLayoutPosition:Vector3D):void
     {
-        if (_layoutFeatures != null)
-        {
-            _layoutFeatures.transformPointToParent(true, localPosition,
-                position, postLayoutPosition);
-        }
-        else
-        {
-            if (xformPt == null)
-                xformPt = new Point();
-            if (localPosition)
-            {
-                xformPt.x = localPosition.x;
-                xformPt.y = localPosition.y;
-            }
-            else
-            {
-                xformPt.x = 0;
-                xformPt.y = 0;
-            }
-            var tmp:Point = (transform.matrix != null) ?
-                transform.matrix.transformPoint(xformPt) :
-                xformPt;
-            if (position != null)
-            {
-                position.x = tmp.x;
-                position.y = tmp.y;
-                position.z = 0;
-            }
-            if (postLayoutPosition != null)
-            {
-                postLayoutPosition.x = tmp.x;
-                postLayoutPosition.y = tmp.y;
-                postLayoutPosition.z = 0;
-            }
-        }
+        TransformUtil.transformPointToParent(this,
+                                             localPosition,
+                                             position,
+                                             postLayoutPosition,
+                                             _layoutFeatures);
     }
 
     /**
      *  Transform the element's size.
      *
+     *  <p>This method calculates the bounding box of the graphic element as if the element’s width/height properties were set to the passed in values.
+     *  The method returns the width of the bounding box.</p>
+     * 
+     *  <p>In general, this method is not for use by developers. Instead, you should implement or override the methods defined by the ILayoutElement interface.</p>
+     * 
      *  @param width The target pre-transform width.
      *
      *  @param height The target pre-transform height.
      *
+     *  @param postLayoutTransform When <code>true</code>, the returned bounding box is around the transformed element in its parent space (the element's transform is applied first).  
+     *  
      *  @return Returns the transformed width. Transformation is this element's
      *  layout transformation matrix.
      *
@@ -2878,10 +2939,17 @@ public class SpriteVisualElement extends FlexSprite
     /**
      *  Transform the element's size.
      *
+     *  <p>This method calculates the bounding box of the graphic element as if the element’s width/height properties were set to the passed in values.
+     *  The method returns the height of the bounding box.</p>
+     * 
+     *  <p>In general, this method is not for use by developers. Instead, you should implement or override the methods defined by the ILayoutElement interface.</p>
+     *  
      *  @param width The target pre-transform width.
      *
      *  @param height The target pre-transform height.
      *
+     *  @param postLayoutTransform When <code>true</code>, the returned bounding box is around the transformed element in its parent space (the element's transform is applied first).  
+     *  
      *  @return Returns the transformed height. Transformation is this element's
      *  layout transformation matrix.
      *

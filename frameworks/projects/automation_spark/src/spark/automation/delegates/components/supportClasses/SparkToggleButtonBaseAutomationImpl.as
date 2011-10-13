@@ -32,6 +32,7 @@ package spark.automation.delegates.components.supportClasses
      *  @playerversion Flash 9
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
+     *
      */
     public class SparkToggleButtonBaseAutomationImpl extends SparkButtonBaseAutomationImpl 
     {
@@ -48,7 +49,7 @@ package spark.automation.delegates.components.supportClasses
          *  Registers the delegate class for a component class with automation manager.
          *  
          *  @param root The SystemManger of the application.
-         *  
+         *
          *  @langversion 3.0
          *  @playerversion Flash 9
          *  @playerversion AIR 1.5
@@ -61,9 +62,8 @@ package spark.automation.delegates.components.supportClasses
         
         /**
          *  Constructor.
-         * 
          *  @param obj ToggleButtonBase object to be automated.     
-         *  
+         *
          *  @langversion 3.0
          *  @playerversion Flash 9
          *  @playerversion AIR 1.5

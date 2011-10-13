@@ -1,29 +1,25 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
-	import flash.display.DisplayObject;
-	import flash.display.DisplayObjectContainer;
 	import flash.display.Shape;
-	import flash.geom.Point;
+	import flash.display.Sprite;
 	import flash.geom.Rectangle;
 	import flash.text.engine.TextLine;
 	import flash.utils.Dictionary;
 	
 	import flashx.textLayout.compose.TextFlowLine;
 	import flashx.textLayout.container.ContainerController;
-	import flashx.textLayout.events.DamageEvent;
-	import flashx.textLayout.formats.BackgroundColor;
+	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.tlf_internal;
-	import flashx.textLayout.utils.GeometryUtil;
 	
 	use namespace tlf_internal;
 	
@@ -31,88 +27,98 @@ package flashx.textLayout.elements
 	/** @private Manages bounds calculation and rendering of backgroundColor character format. */
 	public class BackgroundManager
 	{
-		private var _textFlow:TextFlow;
-		private var _lineDict:Dictionary;
+		protected var _lineDict:Dictionary;
 
-		public function BackgroundManager():void
-		{
-			_lineDict = new Dictionary(true);
-		}	
-			
-		public function set textFlow(t:TextFlow):void
-		{
-			_textFlow = t;
-		}
+		public function BackgroundManager()
+		{ _lineDict = new Dictionary(true);	}
 		
-		public function get textFlow():TextFlow
+		public function addRect(tl:TextLine, fle:FlowLeafElement, r:Rectangle, color:uint, alpha:Number):void
 		{
-			return _textFlow;
-		}
-		
-		public function addRect(line:TextFlowLine, fle:FlowLeafElement, r:Rectangle, color:uint, alpha:Number):void
-		{
-			var tl:TextLine = line.getTextLine();
+			var entry:Array = _lineDict[tl];
+			if (entry == null)
+				entry = _lineDict[tl] = new Array();
 			
-			if(_lineDict[tl] == null)
-			{
-				_lineDict[tl] = new Array();
-			}
-			var obj:Object = new Object();
-			obj.rect = r;
-			obj.fle = fle;
-			obj.color = color;
-			obj.alpha = alpha;
-			var insert:Boolean = true;
+			var record:Object = new Object();
+			record.rect = r;
+			record.fle = fle;
+			record.color = color;
+			record.alpha = alpha;
 			var fleAbsoluteStart:int = fle.getAbsoluteStart();
 			
-			for(var i:int = 0; i < _lineDict[tl].length; ++i)
+			for (var i:int = 0; i < entry.length; ++i)
 			{
-				if(_lineDict[tl][i].fle.getAbsoluteStart() == fleAbsoluteStart)
+				var currRecord:Object = entry[i];
+				if (currRecord.hasOwnProperty("fle") && currRecord.fle.getAbsoluteStart() == fleAbsoluteStart)
 				{
-					_lineDict[tl][i] = obj;
-					insert = false;
+					// replace it
+					entry[i] = record;
+					return;
 				}
 			}
-			if(insert)
-			{
-				_lineDict[tl].push(obj);
-			}
+			entry.push(record);
 		}
+		
+		public function addNumberLine(tl:TextLine, numberLine:TextLine):void
+		{
+			var entry:Array = _lineDict[tl];
+			if (entry == null)
+				entry = _lineDict[tl] = new Array();
+			entry.push({numberLine:numberLine});
+		}
+
 		
 		public function finalizeLine(line:TextFlowLine):void
 		{ return; }	// nothing to do here
 		
 		/** @private */
-		tlf_internal function get lineDict():Dictionary
+		tlf_internal function getEntry(line:TextLine):*
 		{
-			return _lineDict;
+			return _lineDict ? _lineDict[line] : undefined; 
 		}
 		
 		// This version is used for the TextLineFactory
-		public function drawAllRects(bgShape:Shape,controller:ContainerController):void
+		public function drawAllRects(textFlow:TextFlow,bgShape:Shape,constrainWidth:Number,constrainHeight:Number):void
 		{
 			for (var line:Object in _lineDict)
 			{
-				var a:Array = _lineDict[line];
-				if(a.length)
+				var entry:Array = _lineDict[line];
+				if (entry.length)
 				{
-					var columnRect:Rectangle = a[0].columnRect;	// set in TextLineFactoryBase.finalizeLine
+					var columnRect:Rectangle = entry[0].columnRect;	// set in TextLineFactoryBase.finalizeLine
 					var r:Rectangle;
-					var obj:Object;
-					for(var i:int = 0; i<a.length; ++i)
+					var record:Object;
+					for(var i:int = 0; i<entry.length; ++i)
 					{
-						obj = a[i];
-						r = obj.rect;
-						r.x += line.x;
-						r.y += line.y;
-						TextFlowLine.constrainRectToColumn(textFlow, r, columnRect, 0, 0, controller.compositionWidth, controller.compositionHeight)						
-						
-						bgShape.graphics.beginFill(obj.color, obj.alpha);
-						bgShape.graphics.moveTo(r.left, r.top);
-						bgShape.graphics.lineTo(r.right, r.top);
-						bgShape.graphics.lineTo(r.right, r.bottom);
-						bgShape.graphics.lineTo(r.left, r.bottom);
-						bgShape.graphics.endFill();
+						record = entry[i];
+						if (record.hasOwnProperty("numberLine"))
+						{
+							var numberLine:TextLine = record.numberLine;
+							var backgroundManager:BackgroundManager = TextFlowLine.getNumberLineBackground(numberLine);
+							var numberEntry:Array = backgroundManager._lineDict[numberLine];
+							for (var ii:int = 0; ii < numberEntry.length; ii++)
+							{
+								var numberRecord:Object = numberEntry[ii];
+								r = numberRecord.rect;
+								r.x += line.x + numberLine.x;
+								r.y += line.y + numberLine.y;
+								TextFlowLine.constrainRectToColumn(textFlow, r, columnRect, 0, 0, constrainWidth, constrainHeight)						
+								
+								bgShape.graphics.beginFill(numberRecord.color, numberRecord.alpha);
+								bgShape.graphics.drawRect(r.x,r.y,r.width,r.height);
+								bgShape.graphics.endFill();
+							}
+						}
+						else
+						{
+							r = record.rect;
+							r.x += line.x;
+							r.y += line.y;
+							TextFlowLine.constrainRectToColumn(textFlow, r, columnRect, 0, 0, constrainWidth, constrainHeight)						
+							
+							bgShape.graphics.beginFill(record.color, record.alpha);
+							bgShape.graphics.drawRect(r.x,r.y,r.width,r.height);
+							bgShape.graphics.endFill();
+						}
 					}
 				}
 			}
@@ -126,7 +132,7 @@ package flashx.textLayout.elements
 		// This version is used for the TextFlow/flowComposer standard model
 		public function onUpdateComplete(controller:ContainerController):void
 		{
-			var container:DisplayObjectContainer = controller.container as DisplayObjectContainer;
+			var container:Sprite = controller.container;
 			var bgShape:Shape;
 			
 			if(container && container.numChildren)
@@ -137,28 +143,46 @@ package flashx.textLayout.elements
 				for(var childIdx:int = 0; childIdx<controller.textLines.length; ++childIdx)
 				{
 					var tl:TextLine = controller.textLines[childIdx];
+					var entry:Array = _lineDict[tl];
 		
-					if(_lineDict[tl])
+					if (entry)
 					{
-						if(!_lineDict[tl].length) 
-						{
-							continue;
-						}	
+						var r:Rectangle;
+						var tfl:TextFlowLine = tl.userData as TextFlowLine;
+						// assert we actually got a tlf from the userData
+						CONFIG::debug { assert(tfl != null, "BackgroundManager missing TextFlowLine!"); }
 						
-						for(var i:int = 0; i<_lineDict[tl].length; ++i)
+						for(var i:int = 0; i < entry.length; i++)
 						{
-							var r:Rectangle = _lineDict[tl][i].rect.clone();
-							var tfl:TextFlowLine = tl.userData as TextFlowLine;
-							//make sure we actually got a tlf from the userData
-							if(tfl)
+							var record:Object = entry[i];
+							// two kinds of records - numberLines and regular
+							if (record.hasOwnProperty("numberLine"))
+							{
+								var numberLine:TextLine = record.numberLine;
+								var backgroundManager:BackgroundManager = TextFlowLine.getNumberLineBackground(numberLine);
+								var numberEntry:Array = backgroundManager._lineDict[numberLine];
+								for (var ii:int = 0; ii < numberEntry.length; ii++)
+								{
+									var numberRecord:Object = numberEntry[ii];
+									r = numberRecord.rect.clone();
+									r.x += numberLine.x;
+									r.y += numberLine.y;
+									tfl.convertLineRectToContainer(r, true);
+									
+									bgShape.graphics.beginFill(numberRecord.color, numberRecord.alpha);
+									bgShape.graphics.drawRect(r.x,r.y,r.width,r.height);
+									bgShape.graphics.endFill();
+								}
+							}
+							else
+							{
+								r = record.rect.clone();
 								tfl.convertLineRectToContainer(r, true);
-							
-							bgShape.graphics.beginFill(_lineDict[tl][i].color, _lineDict[tl][i].alpha);
-							bgShape.graphics.moveTo(r.left, r.top);
-							bgShape.graphics.lineTo(r.right, r.top);
-							bgShape.graphics.lineTo(r.right, r.bottom);
-							bgShape.graphics.lineTo(r.left, r.bottom);
-							bgShape.graphics.endFill();
+								
+								bgShape.graphics.beginFill(record.color, record.alpha);
+								bgShape.graphics.drawRect(r.x,r.y,r.width,r.height);
+								bgShape.graphics.endFill();
+							}
 						}
 					}
 				}

@@ -21,49 +21,30 @@
 *****************************************************/
 package org.osmf.net
 {
+	[ExcludeClass]
+	
 	/**
+	 * @private
+	 * 
 	 * The NetConnectionCodes class provides static constants for event types
 	 * that a NetConnection dispatches as NetStatusEvents.
 	 * @see flash.net.NetConnection
 	 * @see flash.events.NetStatusEvent    
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */ 
-	public class NetConnectionCodes
+	public final class NetConnectionCodes
 	{
-		/**
-		 * "error"	Packet encoded in an unidentified format.
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public static const CALL_BADVERSION:String = "NetConnection.Call.BadVersion";  		
-		
-		/**
-		 * "error"	The NetConnection.call method was not able to invoke the server-side method or command.
-		 * */
-		public static const CALL_FAILED:String = "NetConnection.Call.Failed";	    	
-	
-		/**
-		 * "error"	An Action Message Format (AMF) operation is prevented for security reasons. 
-		 * Either the AMF URL is not in the same domain as the file containing the code calling the NetConnection.call() method, 
-		 * or the AMF server does not have a policy file that trusts the domain of the the
-		 * file containing the code calling the NetConnection.call() method.		
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public static const CALL_PROHIBITED:String = "NetConnection.Call.Prohibited"; 	
-		
 		/** 
 		 * "status"	The connection was closed successfully.	
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public static const CONNECT_CLOSED:String = "NetConnection.Connect.Closed"; 	
 		
@@ -72,8 +53,8 @@ package org.osmf.net
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */ 
 		public static const CONNECT_FAILED:String = "NetConnection.Connect.Failed"		
 		
@@ -82,8 +63,8 @@ package org.osmf.net
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */ 
 		public static const CONNECT_SUCCESS:String = "NetConnection.Connect.Success";		
 		
@@ -92,28 +73,18 @@ package org.osmf.net
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public static const CONNECT_REJECTED:String = "NetConnection.Connect.Rejected";		
-		
-		/**
-		 * 	"error"	The specified application is shutting down.
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */ 
-		public static const CONNECT_APPSHUTDOWN:String = "NetConnection.Connect.AppShutdown";
-		
+				
 		/** 
 		 * "error"	The application name specified during connect is invalid.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public static const CONNECT_INVALIDAPP:String = "NetConnection.Connect.InvalidApp";	
 	}

@@ -485,6 +485,8 @@ public class Window extends SkinnableContainer implements IWindow
      *  Returns the Window to which a component is parented.
      *
      *  @param component The component whose Window you wish to find.
+     *
+     *  @return An IWindow object.
      *  
      *  @langversion 3.0
      *  @playerversion AIR 1.5
@@ -1476,6 +1478,8 @@ public class Window extends SkinnableContainer implements IWindow
      */
     private var _systemChrome:String = NativeWindowSystemChrome.STANDARD;
     
+    [Inspectable(enumeration="none,standard", defaultValue="standard" )]
+
     /**
      *  Specifies the type of system chrome (if any) the window has.
      *  The set of possible values is defined by the constants
@@ -2009,6 +2013,7 @@ public class Window extends SkinnableContainer implements IWindow
             stage.nativeWindow.dispatchEvent(e);
             if (!(e.isDefaultPrevented()))
             {
+                removeEventListener(Event.ENTER_FRAME, enterFrameHandler);
                 stage.nativeWindow.close();
                 _nativeWindow = null;
                 systemManager.removeChild(this);
@@ -2131,7 +2136,13 @@ public class Window extends SkinnableContainer implements IWindow
     public function activate():void
     {
         if (!nativeWindow.closed)
+        {
             _nativeWindow.activate();   
+            
+            // activate makes the native window visible so this 
+            // component should become visible as well.
+            visible = true;             
+        }
     }
 
     /**
@@ -2438,6 +2449,7 @@ public class Window extends SkinnableContainer implements IWindow
     }
 
     /**
+     *  @private
      *  Manages mouse down events on the window border.
      *  
      *  @langversion 3.0
@@ -2483,11 +2495,11 @@ public class Window extends SkinnableContainer implements IWindow
         if (event.target is DisplayObject && event.target != contentGroup)
         {
            var o:DisplayObject = DisplayObject(event.target);
-            while (o != contentGroup && o != this)
-                o = o.parent;
-    
-            if (o == contentGroup)
-                return NativeWindowResize.NONE;
+           while (o && o != contentGroup && o != this)
+               o = o.parent;
+           
+           if (o == null || o == contentGroup)
+               return NativeWindowResize.NONE;
         }
             
         var hitTestResults:String = NativeWindowResize.NONE;

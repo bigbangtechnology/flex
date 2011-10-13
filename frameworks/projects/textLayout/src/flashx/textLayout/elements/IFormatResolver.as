@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
 	import flashx.textLayout.formats.ITextLayoutFormat;
@@ -33,7 +33,7 @@ package flashx.textLayout.elements
 		function invalidateAll(textFlow:TextFlow):void;
 		
 		/** Invalidates cached formatting information on this element because, for example, the <code>parent</code> changed, 
-		 *  or the <code>id</code> or the <code>styleName</code> changed. 
+		 *  or the <code>id</code> or the <code>styleName</code> changed or the <code>typeName</code> changed. 
 		 *
 		 * @playerversion Flash 10
 	 	 * @playerversion AIR 1.5

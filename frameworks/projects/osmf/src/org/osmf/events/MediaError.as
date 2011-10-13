@@ -22,66 +22,57 @@
 package org.osmf.events
 {
 	/**
-	 * A MediaError encapsulates an error.  Errors are represented as error
-	 * codes with corresponding descriptions.  Error codes zero through 999
-	 * are reserved for use by the framework.
+	 * A MediaError encapsulates an error related to a MediaElement.  Errors are
+	 * represented as error IDs with corresponding messages.  Error IDs zero
+	 * through 999 are reserved for use by the framework.
 	 * 
 	 * <p>A list of all possible framework-level errors can be found in the
-	 * <code>MediaErrorCodes</code> class.</p>
+	 * MediaErrorCodes class.</p>
 	 * 
 	 * <p>For custom errors, clients should subclass MediaError and override
-	 * <code>getDescriptionForErrorCode</code> to return descriptions for
-	 * the custom errors.</p>
-	 **/
-	public class MediaError
+	 * <code>getMessageForErrorID</code> to return messages for the custom
+	 * errors.</p>
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
+	public class MediaError extends Error
 	{
 		/**
 		 * Constructor.
 		 * 
-		 * @param errorCode The error code for the error.  Used to look up a
-		 * corresponding description.  Error codes 0-999 are reserved for use
-		 * by the framework.
+		 * @param errorID The ID for the error.  Used to look up a corresponding
+		 * message.  Error IDs 0-999 are reserved for use by the framework,
+		 * and are defined in <code>MediaErrorCodes</code>.
+		 * 
 		 * @param detail An optional string that contains supporting detail
 		 * for the error.  Typically this string is simply the error detail
 		 * provided by a Flash Player API.
-		 **/
-		public function MediaError(errorCode:int, detail:String=null)
-		{
-			_errorCode = errorCode;
-			_detail = detail;
-			_description = getDescriptionForErrorCode(errorCode);
-		}
-		
-		/**
-		 * The error code for the error.
-		 * 
-		 * <p>Framework error codes are defined in <code>MediaErrorCodes</code>.</p>
-		 */
-		public function get errorCode():int
-		{
-			return _errorCode;
-		}
-		
-		/**
-		 * The description for the error.
-		 * 
-		 * <p>Framework error descriptions are defined in <code>MediaErrorCodes</code>.</p>
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
-		public function get description():String
+		public function MediaError(errorID:int, detail:String=null)
 		{
-			return _description;
+			super(getMessageForErrorID(errorID), errorID);
+			
+			_detail = detail;
 		}
 		
 		/**
 		 * An optional string that contains supporting detail for the error.
 		 * Typically this string is simply the error detail provided by a
 		 * Flash Player API.
-		 **/
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		public function get detail():String
 		{
 			return _detail;
@@ -91,27 +82,30 @@ package org.osmf.events
 		//
 		
 		/**
-		 * Returns a description of the error for the specified error code.  If
-		 * the error code is unknown, returns the empty string.
+		 * Returns the message for the error with the specified ID.  If
+		 * the error ID is unknown, returns the empty string.
 		 * 
-		 * <p>Subclasses should override to provide descriptions for their
+		 * <p>Subclasses should override to provide messages for their
 		 * custom errors, as this method returns the value that is exposed in
-		 * the <code>description</code> property.</p>
+		 * the <code>message</code> property.</p>
 		 * 
-		 * @param errorCode The error code for the error.
+		 * @param errorID The ID for the error.
 		 * 
-		 * @return A description of the error with the specified error code.
-		 **/
-		protected function getDescriptionForErrorCode(errorCode:int):String
+		 * @return The message for the error with the specified error ID.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		protected function getMessageForErrorID(errorID:int):String
 		{
-			return MediaErrorCodes.getDescriptionForErrorCode(errorCode);
+			return MediaErrorCodes.getMessageForErrorID(errorID);
 		}
 		
 		// Internals
 		//
 		
-		private var _errorCode:int;
-		private var _description:String;
 		private var _detail:String;
 	}
 }

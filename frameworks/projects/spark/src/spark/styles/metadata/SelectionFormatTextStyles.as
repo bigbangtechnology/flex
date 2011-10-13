@@ -12,6 +12,8 @@
 /**
  *  The color of text when the component is enabled and has focus.
  *  
+ *  <p><b>For the Mobile theme, this is not supported.</b></p>
+ * 
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
@@ -22,6 +24,9 @@
 /**
  *  The color of text when the component is disabled.
  *  
+ *  <p><b>For the Mobile theme, this is not supported.</b></p>
+ * 
+ *  
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
@@ -31,6 +36,8 @@
 
 /**
  *  The color of text when the component is enabled but does not have focus.
+ *  
+ *  <p><b>For the Mobile theme, this is not supported.</b></p>
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10

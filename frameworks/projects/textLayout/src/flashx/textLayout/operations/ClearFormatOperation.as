@@ -1,25 +1,25 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
 
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.edit.ElementRange;
 	import flashx.textLayout.edit.ParaEdit;
+	import flashx.textLayout.edit.PointFormat;
 	import flashx.textLayout.edit.SelectionState;
 	import flashx.textLayout.elements.TextFlow;
 	import flashx.textLayout.formats.Category;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
 	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 	use namespace tlf_internal;
@@ -166,7 +166,7 @@ package flashx.textLayout.operations
 					// This is only a partial implementation - see watson bug 
 					// here if the format is pending we can clear it
 					// The bug is that we don't remember any pending clear that's not set in pointFormat on the next character typed
-					var newFormat:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder(anyNewSelectionState.pointFormat);
+					var newFormat:PointFormat = new PointFormat(anyNewSelectionState.pointFormat);
 					for (var prop:String in TextLayoutFormat.description)
 					{
 						if (applyLeafFormat[prop] !== undefined)
@@ -227,7 +227,7 @@ package flashx.textLayout.operations
 
 			// Undo container format changes
 			for each (obj in undoContainerArray)
-				ParaEdit.setContainerStyleChange(textFlow,obj);
+				ParaEdit.setContainerStyleChange(obj);
 
 			return originalSelectionState;
 		}

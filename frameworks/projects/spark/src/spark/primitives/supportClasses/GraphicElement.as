@@ -58,11 +58,12 @@ import mx.graphics.shaderClasses.SoftLightShader;
 import mx.managers.ILayoutManagerClient;
 import mx.utils.MatrixUtil;
 
-import spark.components.Group;
 import spark.components.supportClasses.InvalidatingSprite;
 import spark.core.DisplayObjectSharingMode;
 import spark.core.IGraphicElement;
+import spark.core.IGraphicElementContainer;
 import spark.core.MaskType;
+import spark.utils.FTETextUtil;
 import spark.utils.MaskUtil;
 
 use namespace mx_internal;
@@ -256,7 +257,7 @@ public class GraphicElement extends EventDispatcher
         layoutFeatures = new AdvancedLayoutFeatures();
         layoutFeatures.layoutX = _x;
         layoutFeatures.layoutY = _y;
-		layoutFeatures.layoutWidth = _width;  // for the mirror transform		
+        layoutFeatures.layoutWidth = _width;  // for the mirror transform       
     }
     
     /**
@@ -367,6 +368,42 @@ public class GraphicElement extends EventDispatcher
     }
 
     //----------------------------------
+    //  alwaysCreateDisplayObject
+    //----------------------------------
+    
+    private var _alwaysCreateDisplayObject:Boolean;
+    
+    /**
+     *  Specifies that this GraphicElement is to be associated with and be rendered 
+     *  to its own DisplayObject.
+     * 
+     *  @default false
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4.5
+     */
+    public function get alwaysCreateDisplayObject():Boolean
+    {
+        return _alwaysCreateDisplayObject;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set alwaysCreateDisplayObject(value:Boolean):void
+    {
+        if (value != _alwaysCreateDisplayObject)
+        {
+            var previous:Boolean = needsDisplayObject;
+            _alwaysCreateDisplayObject = value;
+            if (previous != needsDisplayObject)
+                invalidateDisplayObjectSharing();
+        }
+    }
+    
+    //----------------------------------
     //  baseline
     //----------------------------------
     
@@ -422,6 +459,16 @@ public class GraphicElement extends EventDispatcher
     {    
         // Subclasses of GraphicElement should return something 
         // here as appropriate (e.g. text centric GraphicElements).
+        var parentUIC:UIComponent = parent as UIComponent;
+        
+        if (parentUIC)
+        {
+            if (!parentUIC.validateBaselinePosition())
+                return NaN;
+            
+            return FTETextUtil.calculateFontBaseline(parentUIC, height, parentUIC.moduleFactory);
+        }
+        
         return 0;
     }
     
@@ -613,7 +660,7 @@ public class GraphicElement extends EventDispatcher
      *  @private
      *  Storage for the parent property.
      */
-    private var _parent:DisplayObjectContainer;
+    private var _parent:IGraphicElementContainer;
 
     /**
      *  @inheritDoc
@@ -625,7 +672,7 @@ public class GraphicElement extends EventDispatcher
      */
     public function get parent():DisplayObjectContainer
     {
-        return _parent;
+        return _parent as DisplayObjectContainer;
     }
     
     /**
@@ -636,10 +683,21 @@ public class GraphicElement extends EventDispatcher
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-    public function parentChanged(value:Group):void
+    public function parentChanged(value:IGraphicElementContainer):void
     {
         _parent = value;
         invalidateLayoutDirection();
+        
+        // if we now have a parent and we need to do some invalidation, let our parent know
+        if (parent)
+        {
+            if (invalidatePropertiesFlag)
+                IGraphicElementContainer(parent).invalidateGraphicElementProperties(this);
+            if (invalidateSizeFlag)
+                IGraphicElementContainer(parent).invalidateGraphicElementSize(this);
+            if (invalidateDisplayListFlag)
+                IGraphicElementContainer(parent).invalidateGraphicElementDisplayList(this);
+        }
     }
 
     //----------------------------------
@@ -997,36 +1055,36 @@ public class GraphicElement extends EventDispatcher
         invalidateParentSizeAndDisplayList();
     }
 
-	//----------------------------------
-	//  id
-	//----------------------------------
+    //----------------------------------
+    //  id
+    //----------------------------------
 
-	/**
-	 *  @private
-	 *  Storage for the id property.
-	 */
-	private var _id:String;
+    /**
+     *  @private
+     *  Storage for the id property.
+     */
+    private var _id:String;
 
-	/**
-	 *  The identity of the component.
-	 *  
-	 *  @langversion 3.0
-	 *  @playerversion Flash 10
-	 *  @playerversion AIR 1.5
-	 *  @productversion Flex 4
-	 */ 
-	public function get id():String
-	{
-		return _id;
-	}
+    /**
+     *  The identity of the component.
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */ 
+    public function get id():String
+    {
+        return _id;
+    }
 
-	/**
-	 *  @private
-	 */ 
-	public function set id(value:String):void
-	{
-		_id = value;
-	}
+    /**
+     *  @private
+     */ 
+    public function set id(value:String):void
+    {
+        _id = value;
+    }
 
     //----------------------------------
     //  left
@@ -2418,14 +2476,14 @@ public class GraphicElement extends EventDispatcher
         var oldValue:Number = _width;
         _width = value;
 
-		// The width is needed for the mirroring transform.
-		if (layoutFeatures)
-		{
-			layoutFeatures.layoutWidth = value;
-			invalidateTransform();
-		}        
+        // The width is needed for the mirroring transform.
+        if (layoutFeatures)
+        {
+            layoutFeatures.layoutWidth = value;
+            invalidateTransform();
+        }        
 
-		dispatchPropertyChangeEvent("width", oldValue, value);
+        dispatchPropertyChangeEvent("width", oldValue, value);
 
         // Invalidate the display list, since we're changing the actual width
         // and we're not going to correctly detect whether the layout sets
@@ -2780,7 +2838,7 @@ public class GraphicElement extends EventDispatcher
     [Inspectable(category="General", defaultValue="true")]
 
     /**
-     *  Specifies whether this element is included in the layout of the group.
+     *  Specifies whether this element is included in the layout of the parent.
      *
      *  @default true
      *  
@@ -2816,6 +2874,8 @@ public class GraphicElement extends EventDispatcher
 
     private var _displayObjectSharingMode:String;
     
+    [Inspectable(category="General", enumeration="ownsUnsharedObject,ownsSharedObject,usesSharedObject")]
+    
     /**
      *  @private
      */
@@ -2848,41 +2908,51 @@ public class GraphicElement extends EventDispatcher
     {
         return _displayObjectSharingMode;    
     }
-	
-	//----------------------------------
-	//  layoutDirection
-	//----------------------------------
-	
-	private var _layoutDirection:String = null;
-	
+    
+    //----------------------------------
+    //  layoutDirection
+    //----------------------------------
+    
+    private var _layoutDirection:String = null;
+    
     [Inspectable(category="General", enumeration="ltr,rtl")]
     
     /**
      *  @inheritDoc
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function get layoutDirection():String
-	{
+    {
         if (_layoutDirection != null)
             return _layoutDirection;
         
         const parentElt:ILayoutDirectionElement = parent as ILayoutDirectionElement;
         return (parentElt) ? parentElt.layoutDirection : LayoutDirection.LTR; 
     }
-	
-	/**
-	 *  @private
-	 */
-	public function set layoutDirection(value:String):void
-	{
-		if (_layoutDirection == value)
-			return;
-		
-		_layoutDirection = value;
+    
+    /**
+     *  @private
+     */
+    public function set layoutDirection(value:String):void
+    {
+        if (_layoutDirection == value)
+            return;
+        
+        _layoutDirection = value;
         invalidateLayoutDirection();
     }
     
     /**
      * @inheritDoc
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function invalidateLayoutDirection():void
     {
@@ -2894,7 +2964,9 @@ public class GraphicElement extends EventDispatcher
         // set the layoutFeatures.mirror flag.  Similarly, if mirroring isn't 
         // required, then clear the layoutFeatures.mirror flag.
         
-        const mirror:Boolean = (_layoutDirection != null) && (_layoutDirection != parentElt.layoutDirection);
+        const mirror:Boolean = (parentElt.layoutDirection != null && _layoutDirection != null) 
+            && (_layoutDirection != parentElt.layoutDirection);
+        
         if ((layoutFeatures) ? (mirror != layoutFeatures.mirror) : mirror)
         {
             if (layoutFeatures == null)
@@ -2911,24 +2983,24 @@ public class GraphicElement extends EventDispatcher
     //
     //--------------------------------------------------------------------------
 
-	/**
-	 *  Called automatically by the MXML compiler when the GraphicElement
-	 *  is created using an MXML tag.
-	 *  If you create the GraphicElement through ActionScript you must set the
-	 * <code>id</code> property manually.
-	 *
-	 *  @param document The MXML document containing this GraphicElement (not used).
-	 *  @param id The MXML id for this GraphicElement.
-	 *  
+    /**
+     *  Called automatically by the MXML compiler when the GraphicElement
+     *  is created using an MXML tag.
+     *  If you create the GraphicElement through ActionScript you must set the
+     * <code>id</code> property manually.
+     *
+     *  @param document The MXML document containing this GraphicElement (not used).
+     *  @param id The MXML id for this GraphicElement.
+     *  
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
-	 */
-	public function initialized(document:Object, id:String):void
-	{
-		this.id = id;
-	}
+     */
+    public function initialized(document:Object, id:String):void
+    {
+        this.id = id;
+    }
 
     /**
      * Converts the point object from the object's (local) coordinates 
@@ -2993,25 +3065,6 @@ public class GraphicElement extends EventDispatcher
         return displayObject;
     }
     
-    private var _alwaysCreateDisplayObject:Boolean;
-    
-    // Used by the design tool to get bitmap captures
-    mx_internal function set alwaysCreateDisplayObject(value:Boolean):void
-    {
-        if (value != _alwaysCreateDisplayObject)
-        {
-            var previous:Boolean = needsDisplayObject;
-            _alwaysCreateDisplayObject = value;
-            if (previous != needsDisplayObject)
-                invalidateDisplayObjectSharing();
-        }
-    }
-    
-    mx_internal function get alwaysCreateDisplayObject():Boolean
-    {
-        return _alwaysCreateDisplayObject;
-    }
-
     /**
      *  True if the element requires an exclusive DisplayObject.
      *
@@ -3132,7 +3185,7 @@ public class GraphicElement extends EventDispatcher
      *  If you do not supply this value, no clipping occurs and the entire source object is drawn.
      *  The clipRect should be defined in the coordinate space specified by useLocalSpace
      * 
-     *  @return A bitmap snapshot of the GraphicElement. 
+     *  @return A bitmap snapshot of the GraphicElement or null if the input element has no visible bounds.
      *  
      *  
      *  @langversion 3.0
@@ -3152,7 +3205,10 @@ public class GraphicElement extends EventDispatcher
                 restoreDisplayObject = true;
                 oldDisplayObject = displayObject;
                 setDisplayObject(new InvalidatingSprite());
-                UIComponent(parent).$addChild(displayObject);
+                if (parent is UIComponent)
+                    UIComponent(parent).$addChild(displayObject);
+                else
+                    parent.addChild(displayObject);
                 invalidateDisplayList();
                 validateDisplayList();
             }
@@ -3161,12 +3217,16 @@ public class GraphicElement extends EventDispatcher
             var rectBounds:Rectangle = useLocalSpace ? 
                         new Rectangle(getLayoutBoundsX(), getLayoutBoundsY(), getLayoutBoundsWidth(), getLayoutBoundsHeight()) :
                         displayObject.getBounds(topLevel); 
+            
+            if (rectBounds.width == 0 || rectBounds.height == 0)
+                return null;
+            
             var bitmapData:BitmapData = new BitmapData(Math.ceil(rectBounds.width), Math.ceil(rectBounds.height), transparent, fillColor);
                 
             // Can't use target's concatenatedMatrix, as it is sometimes wrong
             var m:Matrix = useLocalSpace ? 
                 displayObject.transform.matrix : 
-                MatrixUtil.getConcatenatedMatrix(displayObject);
+                MatrixUtil.getConcatenatedMatrix(displayObject, null);
             
             if (m)
                 m.translate(-rectBounds.x, -rectBounds.y);
@@ -3175,7 +3235,10 @@ public class GraphicElement extends EventDispatcher
            
             if (restoreDisplayObject)
             {
-                UIComponent(parent).$removeChild(displayObject);
+                if (parent is UIComponent)
+                    UIComponent(parent).$removeChild(displayObject);
+                else
+                    parent.removeChild(displayObject);
                 setDisplayObject(oldDisplayObject);
             }
             return bitmapData;
@@ -3213,11 +3276,11 @@ public class GraphicElement extends EventDispatcher
         
         
         // Remove the target from its current parent, making sure to store the child index
-        var childIndex:int = dispObjParent.getChildIndex(displayObject);
-        if (dispObjParent is Group)
-            Group(dispObjParent).$removeChild(displayObject);
+        var displayObjectIndex:int = parent.getChildIndex(displayObject);
+        if (parent is UIComponent)
+            UIComponent(parent).$removeChild(displayObject);
         else
-            dispObjParent.removeChild(displayObject);
+            parent.removeChild(displayObject);
         
         // Parent the target to the drawSprite and then attach the drawSprite to the stage
         topLevel.addChild(drawSprite);
@@ -3246,10 +3309,10 @@ public class GraphicElement extends EventDispatcher
         topLevel.removeChild(drawSprite);
         
         // Reattach the target to its original parent at its original child position
-        if (dispObjParent is Group)
-            Group(dispObjParent).$addChildAt(displayObject, childIndex);
+        if (parent is UIComponent)
+            UIComponent(parent).$addChildAt(displayObject, displayObjectIndex);
         else
-            dispObjParent.addChildAt(displayObject, childIndex);
+            parent.addChildAt(displayObject, displayObjectIndex);
             
         // Restore the original 3D matrix
         displayObject.transform.matrix3D = oldMat3D;
@@ -3331,7 +3394,7 @@ public class GraphicElement extends EventDispatcher
     protected function invalidateDisplayObjectSharing():void
     {
         if (parent)
-            Group(parent).invalidateGraphicElementSharing(this);
+            IGraphicElementContainer(parent).invalidateGraphicElementSharing(this);
     }
 
     /**
@@ -3354,7 +3417,7 @@ public class GraphicElement extends EventDispatcher
         invalidatePropertiesFlag = true;
 
         if (parent)
-            Group(parent).invalidateGraphicElementProperties(this);
+            IGraphicElementContainer(parent).invalidateGraphicElementProperties(this);
     }
 
     /**
@@ -3380,7 +3443,7 @@ public class GraphicElement extends EventDispatcher
         invalidateSizeFlag = true;
 
         if (parent)
-            Group(parent).invalidateGraphicElementSize(this);
+            IGraphicElementContainer(parent).invalidateGraphicElementSize(this);
     }
 
     /**
@@ -3424,10 +3487,10 @@ public class GraphicElement extends EventDispatcher
             return;
         invalidateDisplayListFlag = true;
 
-        // The Group will take care of redrawing all graphic elements that
+        // The IGraphicElementContainer will take care of redrawing all graphic elements that
         // share the display object with this element.
         if (parent)
-            Group(parent).invalidateGraphicElementDisplayList(this);
+            IGraphicElementContainer(parent).invalidateGraphicElementDisplayList(this);
     }
 
     /**
@@ -3480,7 +3543,8 @@ public class GraphicElement extends EventDispatcher
      *
      *  <p>You do not call this method directly.
      *  Flex calls the <code>commitProperties()</code> method when you
-     *  use the <code>addElement()</code> method to add an element to the group,
+     *  use the <code>addElement()</code> method to add an element to an 
+     *  <code>IGraphicElementContainer</code> container such as Group,
      *  or when you call the <code>invalidateProperties()</code> method of the element.
      *  Calls to the <code>commitProperties()</code> method occur before calls to the
      *  <code>measure()</code> method. This lets you set property values that might
@@ -3784,7 +3848,8 @@ public class GraphicElement extends EventDispatcher
      *  method that you might override when creating a subclass of GraphicElement.
      *
      *  <p>You do not call this method directly. Flex calls the
-     *  <code>measure()</code> method when the element is added to a group
+     *  <code>measure()</code> method when the element is added to an
+     *  <code>IGraphicElementContainer</code> container such as Group
      *  using the <code>addElement()</code> method, and when the element's
      *  <code>invalidateSize()</code> method is called. </p>
      *
@@ -3845,10 +3910,10 @@ public class GraphicElement extends EventDispatcher
      */
     public function validateDisplayList():void
     {
-        // Don't check the invalidateDisplayListFlag for early return, the Group takes care to
+        // Don't check the invalidateDisplayListFlag for early return, the IGraphicElementContainer takes care to
         // call validateDisplayList() only for elements that need to redraw.
         // Note that even when invalidateDisplayListFlag is false for a particular element,
-        // the Group may still call it to redraw if it shares a display object with another
+        // the IGraphicElementContainer may still call it to redraw if it shares a display object with another
         // element that is redrawing.
         // if (!invalidateDisplayListFlag)
         //    return;
@@ -3900,7 +3965,8 @@ public class GraphicElement extends EventDispatcher
      *
      *  <p>You do not call this method directly. Flex calls the
      *  <code>updateDisplayList()</code> method when the component is added 
-     *  to a group using the <code>addElement()</code> method, and when the element's
+     *  to an <code>IGraphicElementContainer</code> container such as Group
+     *  using the <code>addElement()</code> method, and when the element's
      *  <code>invalidateDisplayList()</code> method is called. </p>
      *
      *  <p>This method is where you would do programmatic drawing
@@ -4046,6 +4112,7 @@ public class GraphicElement extends EventDispatcher
 
         // Calculate the width and height pre-transform:
         var newSize:Point = MatrixUtil.fitBounds(width, height, m,
+                                                 explicitWidth, explicitHeight,
                                                  preferredWidthPreTransform(),
                                                  preferredHeightPreTransform(),
                                                  minWidth, minHeight,
@@ -4081,6 +4148,7 @@ public class GraphicElement extends EventDispatcher
 
         // Calculate the width and height pre-transform:
         var newSize:Point = MatrixUtil.fitBounds(width, height, m,
+                                                 explicitWidth, explicitHeight,
                                                  preferredWidthPreTransform(),
                                                  preferredHeightPreTransform(),
                                                  minWidth, minHeight,
@@ -4166,9 +4234,16 @@ public class GraphicElement extends EventDispatcher
     /**
      *  Transform the element's size.
      *  
+     *  <p>This method calculates the bounding box of the graphic element as if the element’s width/height properties were set to the passed in values.
+     *  The method returns the width of the bounding box.</p>
+     * 
+     *  <p>In general, this method is not for use by developers. Instead, you should implement or override the methods defined by the ILayoutElement interface.</p>
+     * 
      *  @param width The target pre-transform width.
      *  
      *  @param height The target pre-transform height.
+     * 
+     *  @param postLayoutTransform When <code>true</code>, the returned bounding box is around the transformed element in its parent space (the element's transform is applied first).  
      *  
      *  @return Returns the transformed width. Transformation is this element's
      *  layout transformation matrix.
@@ -4193,12 +4268,17 @@ public class GraphicElement extends EventDispatcher
 
     /**
      *  Transform the element's size.
+     * 
+     *  <p>This method calculates the bounding box of the graphic element as if the element’s width/height properties were set to the passed in values.
+     *  The method returns the height of the bounding box.</p>
+     * 
+     *  <p>In general, this method is not for use by developers. Instead, you should implement or override the methods defined by the ILayoutElement interface.</p>
      *  
      *  @param width The target pre-transform width.
      *  
      *  @param height The target pre-transform height.
      *  
-     *  @param postLayoutTransform 
+     *  @param postLayoutTransform When <code>true</code>, the returned bounding box is around the transformed element in its parent space (the element's transform is applied first).  
      *  
      *  @return Returns the transformed height. Transformation is this element's
      *  layout transformation matrix.
@@ -4224,6 +4304,13 @@ public class GraphicElement extends EventDispatcher
     /**
      *  Used for the implementation of the ILayoutElement interface,
      *  returns the explicit of measured width pre-transform.
+     * 
+     * @return The explicit measured height, pre-transform.
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     protected function preferredWidthPreTransform():Number
     {
@@ -4232,7 +4319,14 @@ public class GraphicElement extends EventDispatcher
 
     /**
      *  Used for the implementation of the ILayoutElement interface,
-     *  returns the explicit of measured height pre-transform.
+     *  returns the explicit measured height pre-transform.
+     * 
+     * @return The explicit measured height, pre-transform.
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     protected function preferredHeightPreTransform():Number
     {
@@ -4320,6 +4414,7 @@ public class GraphicElement extends EventDispatcher
         else
         {
             var newSize:Point = MatrixUtil.fitBounds(width, height, m,
+                                                     explicitWidth, explicitHeight,
                                                      preferredWidthPreTransform(),
                                                      preferredHeightPreTransform(),
                                                      minWidth, minHeight,
@@ -4336,7 +4431,15 @@ public class GraphicElement extends EventDispatcher
                 height = minHeight;
             }
         }
-
+        
+        setActualSize(width, height);
+    }
+    
+    /**
+     *  @private
+     */
+    mx_internal function setActualSize(width:Number, height:Number):void
+    {
         if (_width != width || _height != height)
         {
             var oldWidth:Number = _width;
@@ -4344,18 +4447,18 @@ public class GraphicElement extends EventDispatcher
             
             _width = width;
             _height = height;
-			
-			if (layoutFeatures)  // mirroring transform depends on width
+            
+            if (layoutFeatures)  // mirroring transform depends on width
             {
-				layoutFeatures.layoutWidth = width;
-                invalidateTransform();
+                layoutFeatures.layoutWidth = width;
+                invalidateTransform(false /*changeInvalidatesLayering*/, false /*invalidateLayout*/);
             }
             
             if (width != oldWidth)
                 dispatchPropertyChangeEvent("width", oldWidth, width);
             if (height != oldHeight)
                 dispatchPropertyChangeEvent("height", oldHeight, height);
-
+            
             invalidateDisplayList();
         }
     }
@@ -4528,7 +4631,7 @@ public class GraphicElement extends EventDispatcher
      *  Returns the amount of pixels occupied by the stroke on each side
      *  of the element's bounds.
      * 
-     *  @param postLayoutTransform - if true, the stroke extents are calculated
+     *  @param postLayoutTransform If <code>true</code>, the stroke extents are calculated
      *  in parent coordinate space (after applying the element's transformations).
      * 
      *  @return Rectangle of the stroke extents. The rectangle's <code>left</code>,

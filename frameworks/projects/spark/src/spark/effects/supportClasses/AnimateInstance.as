@@ -19,6 +19,7 @@ import mx.core.IVisualElement;
 import mx.core.IVisualElementContainer;
 import mx.core.UIComponent;
 import mx.core.mx_internal;
+import mx.effects.Effect;
 import mx.effects.EffectInstance;
 import mx.events.EffectEvent;
 import mx.managers.SystemManager;
@@ -128,6 +129,16 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
      */
     private var oldWidth:Number;
     private var oldHeight:Number;
+
+    /**
+     * @private
+     * Used to selectively disable constraints that are being animated by
+     * their underlying values because the constraint values are not
+     * valid in both states of a transition. For example, if left is set
+     * in only one state, then we disable left and animate x instead,
+     * re-enabling left when the effect is finished.
+     */
+    private var disabledConstraintsMap:Object;
 
     //--------------------------------------------------------------------------
     //
@@ -448,14 +459,68 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
         // from/to values are the same. Not worth the cycles, but also want
         // to avoid triggering any side effects when we're not actually changing
         // values
+        var addWidthMP:Boolean;
+        var addHeightMP:Boolean;
         var i:int;
         var j:int;
         for (i = 0; i < motionPaths.length; ++i)
         {
             var mp:MotionPath = MotionPath(motionPaths[i]);
-            var keyframes:Vector.<Keyframe> = motionPaths[i].keyframes;
+            var keyframes:Vector.<Keyframe> = mp.keyframes;
             if (!keyframes)
                 continue;
+            // Account for animating constraints where one or both state values
+            // are invalid; use underlying properties of x, y, width, height
+            // instead, or in addition
+            if (propertyChanges != null &&
+                (mp.property == "left" || mp.property == "right" ||
+                 mp.property == "top" || mp.property == "bottom" ||
+                 mp.property == "percentWidth" || mp.property == "percentHeight" ||
+                 mp.property == "horizontalCenter" || mp.property == "verticalCenter"))
+            {
+                // We need to substitute an underlying property if the animation is
+                // trying to automatically use and animate between the constraint
+                // values in the states, but one or both values are invalid
+                if (!isValidValue(propertyChanges.start[mp.property]) ||
+                    !isValidValue(propertyChanges.end[mp.property]) &&
+                    keyframes.length == 2 && !isValidValue(keyframes[0].value) &&
+                    !isValidValue(keyframes[1].value))
+                {
+                    if (mp.property == "percentWidth")
+                        mp.property = "width";
+                    else if (mp.property == "percentHeight")
+                        mp.property = "height";
+                    else if (mp.property == "left" || mp.property == "right" || 
+                        mp.property == "horizontalCenter")
+                    {
+                        if (!disabledConstraintsMap)
+                            disabledConstraintsMap = new Object();
+                        disabledConstraintsMap[mp.property] = true;
+                        mp.property = "x";
+                        if (isValidValue(propertyChanges.start["width"]) &&
+                            isValidValue(propertyChanges.end["width"]) &&
+                            propertyChanges.start["width"] != propertyChanges.end["width"])
+                        {
+                            // add motionPath to account for width changing between states
+                            addWidthMP = true;
+                        }
+                    }
+                    else
+                    {
+                        if (!disabledConstraintsMap)
+                            disabledConstraintsMap = new Object();
+                        disabledConstraintsMap[mp.property] = true;
+                        mp.property = "y";
+                        if (isValidValue(propertyChanges.start["height"]) &&
+                            isValidValue(propertyChanges.end["height"]) &&
+                            propertyChanges.start["height"] != propertyChanges.end["height"])
+                        {
+                            // add motionPath to account for height changing between states
+                            addHeightMP = true;
+                        }
+                    }
+                }
+            }
             if (interpolator)
                 mp.interpolator = interpolator;
             // adjust effect duration to be the max of all MotionPath keyframe times
@@ -472,13 +537,15 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
                         duration = Math.max(duration, keyframes[j].time);
 
         }
+        if (addWidthMP)
+            motionPaths.push(new SimpleMotionPath("width"));
+        if (addHeightMP)
+            motionPaths.push(new SimpleMotionPath("height"));
 
         animation = new Animation(duration);
         animation.animationTarget = this;
         animation.motionPaths = motionPaths;
         
-        if (_seekTime > 0)
-            animation.playheadTime = _seekTime;
         if (reverseAnimation)
             animation.playReversed = true;
         animation.interpolator = interpolator;
@@ -489,6 +556,8 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
         animation.startDelay = startDelay;
         
         animation.play();
+        if (_seekTime > 0)
+            animation.playheadTime = _seekTime;
     }
 
     /**
@@ -563,7 +632,23 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
                 }
                 else
                 {
-                    keyframes[0].value = getCurrentValue(motionPath.property);
+                    // An interrupting transition effect should grab its start
+                    // values from the propertyChanges array, which has been populated
+                    // in UIComponent.commitCurrentState() with the values of target
+                    // objects when the previous transition was interrupted. The
+                    // current values of the objects, from getCurrentValue(), may be
+                    // set to the end values of that previous transition, so we do not
+                    // want those values for the animation
+                    if ((playReversed || Effect(effect).transitionInterruption) && 
+                        propertyChanges &&
+                        propertyChanges.start[motionPath.property] !== undefined)
+                    {
+                        keyframes[0].value = propertyChanges.start[motionPath.property];
+                    }
+                    else
+                    {
+                        keyframes[0].value = getCurrentValue(motionPath.property);
+                    }
                 }
             }
             // set any other invalid values based on information in surrounding
@@ -650,7 +735,13 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
             setupParentLayout(false);
             cacheConstraints();
         }
-            
+        else if (disabledConstraintsMap)
+        {
+            for (var constraint:String in disabledConstraintsMap)
+                cacheConstraint(constraint);
+            disabledConstraintsMap = null;
+        }
+
         finalizeValues();
     }
     
@@ -700,7 +791,8 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
         if (disableLayout)
         {
             reenableConstraints();
-            setupParentLayout(true);
+            if (disableLayout)
+                setupParentLayout(true);
         }
     }
     
@@ -806,10 +898,18 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
             {
                 var parentStart:* = propertyChanges.start["parent"];
                 var parentEnd:* = propertyChanges.end["parent"];
+                if (playReversed)
+                {
+                    var tmp:* = parentStart;
+                    parentStart = parentEnd;
+                    parentEnd = tmp;
+                }
                 if (parentStart && !parentEnd && 
                     (parentStart is IVisualElementContainer || parentStart is SystemManager))
                 {
-                    var startIndex:* = propertyChanges.start["index"];
+                    var startIndex:* = !playReversed ? 
+                        propertyChanges.start["index"] :
+                        propertyChanges.end["index"];
                     if (parentStart is IVisualElementContainer)
                     {
                         var startContainer:IVisualElementContainer = 
@@ -865,8 +965,14 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
             // the same target
             if ("parent" in target && target.parent)
             {
-                var parentStart:* = propertyChanges.start["parent"];;
-                var parentEnd:* = propertyChanges.end["parent"];;
+                var parentStart:* = propertyChanges.start["parent"];
+                var parentEnd:* = propertyChanges.end["parent"];
+                if (playReversed)
+                {
+                    var tmp:* = parentStart;
+                    parentStart = parentEnd;
+                    parentEnd = tmp;
+                }
                 if (parentStart && !parentEnd)
                 {
                     if (parentStart is IVisualElementContainer)
@@ -953,7 +1059,6 @@ public class AnimateInstance extends EffectInstance implements IAnimationTarget
             oldWidth = target.explicitWidth;
             target.width = w;
         }
-    
         if (top != undefined && bottom != undefined && "explicitHeight" in target)
         {
             var h:Number = target.height;

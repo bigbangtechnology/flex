@@ -23,41 +23,74 @@ package org.osmf.logging
 {
 	import flash.utils.Dictionary;
 	
+	[ExcludeClass]
+	
 	/**
-	 * This class implements ILoggerFactory. It is the associated logger factory
+	 * @private
+	 * 
+	 * This class extends LoggerFactory. It is the associated logger factory
 	 * for the TraceLogger. 
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */
-	public class TraceLoggerFactory implements ILoggerFactory
+	public class TraceLoggerFactory extends LoggerFactory
 	{
-		public function TraceLoggerFactory()
+		/**
+		 * Constructor.
+		 **/
+		public function TraceLoggerFactory(filter:String=null)
 		{
+			super();
+			
 			loggers = new Dictionary();
+			_filter = filter;
+		}
+		
+		/**
+		 * Optional filter to apply to all loggers.  If specified, then
+		 * only those Loggers whose category matches or contains this filter
+		 * string (which is case-sensitive) will be logged.
+		 **/
+		public function get filter():String
+		{
+			return _filter;
+		}
+		
+		public function set filter(value:String):void
+		{
+			_filter = value;
 		}
 
 		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 * @private
 		 */
-		public function getLogger(name:String):ILogger
+		override public function getLogger(category:String):Logger
 		{
-			var logger:ILogger = loggers[name];
+			var logger:Logger = loggers[category];
 			
 			if (logger == null)
 			{
-				logger = new TraceLogger(name);
-				loggers[name] = logger;
+				if (filter != null && category.indexOf(filter) == -1)
+				{
+					logger = new Logger(category);
+				}
+				else
+				{
+					logger = new TraceLogger(category);
+				}
+				loggers[category] = logger;
 			}
 			
 			return logger;
 		}
 		
-		// internal
+		// Internals
 		//
 		
 		private var loggers:Dictionary;
+		private var _filter:String;
 	}
 }

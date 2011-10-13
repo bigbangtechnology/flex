@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.utils
 {
 	import flash.geom.Point;
@@ -71,7 +71,7 @@ package flashx.textLayout.utils
 		private static function nextAtomHelper(flowRoot:TextFlow, para:ParagraphElement, pos:int, paraStart:int):int
 		{
 			if (pos - paraStart == para.textLength - 1)
-				return Math.min(flowRoot.textLength - 1, pos + 1);
+				return Math.min(flowRoot.textLength, pos + 1);
 			return para.findNextAtomBoundary(pos - paraStart) + paraStart;
 		}
 		
@@ -127,7 +127,7 @@ package flashx.textLayout.utils
 			var nextWordPos:int = absolutePos - paraStart;
 			
 			if (absolutePos - paraStart == para.textLength - 1)
-				return Math.min(flowRoot.textLength - 1, absolutePos + 1);
+				return Math.min(flowRoot.textLength, absolutePos + 1);
 			do
 			{
 				nextWordPos = para.findNextWordBoundary(nextWordPos);
@@ -305,6 +305,91 @@ package flashx.textLayout.utils
 		 	}
 		 	return false;
 		} 
+		
+		/** @private */
+		static tlf_internal function computeEndIdx(targetFlowLine:TextFlowLine,curTextFlowLine:TextFlowLine,blockProgression:String,isRTLDirection:Boolean,globalPoint:Point):int
+		{
+			var endIdx:int;
+			var targetTextLine:TextLine = targetFlowLine.getTextLine(true);
+			var currentTextLine:TextLine = curTextFlowLine.getTextLine(true);
+			var bidiRightToLeft:Boolean = ((currentTextLine.getAtomBidiLevel(atomIndex) % 2) != 0); 				
+			
+			if (targetFlowLine.controller == curTextFlowLine.controller)
+			{
+				if(blockProgression != BlockProgression.RL)
+				{
+					globalPoint.y -= (currentTextLine.y - targetTextLine.y);
+				} else {
+					globalPoint.x += (targetTextLine.x - currentTextLine.x);
+				}
+			} else {
+				var firstAtomRect:Rectangle = targetTextLine.getAtomBounds(0);
+				var firstAtomPoint:Point = new Point();
+				firstAtomPoint.x = firstAtomRect.left;
+				firstAtomPoint.y = 0;
+				firstAtomPoint = targetTextLine.localToGlobal(firstAtomPoint);
+				if(blockProgression != BlockProgression.RL)
+				{
+					globalPoint.x -= curTextFlowLine.controller.container.x;
+					globalPoint.y = firstAtomPoint.y;
+				} else {
+					globalPoint.x = firstAtomPoint.x;
+					globalPoint.y -= curTextFlowLine.controller.container.y; 
+				}					
+			} 
+			
+			var atomIndex:int = targetTextLine.getAtomIndexAtPoint(globalPoint.x,globalPoint.y);
+			if (atomIndex == -1)
+			{
+				if(blockProgression != BlockProgression.RL) {
+					if (!bidiRightToLeft)
+						endIdx = (globalPoint.x <= targetTextLine.x) ? targetFlowLine.absoluteStart : (targetFlowLine.absoluteStart + targetFlowLine.textLength - 1);
+					else
+						endIdx = (globalPoint.x <= targetTextLine.x) ? (targetFlowLine.absoluteStart + targetFlowLine.textLength - 1) : targetFlowLine.absoluteStart;						
+				} else {
+					if (!bidiRightToLeft)
+						endIdx = (globalPoint.y <= targetTextLine.y) ? targetFlowLine.absoluteStart : (targetFlowLine.absoluteStart + targetFlowLine.textLength - 1);
+					else
+						endIdx = (globalPoint.y <= targetTextLine.y)  ? (targetFlowLine.absoluteStart + targetFlowLine.textLength - 1) : targetFlowLine.absoluteStart;						
+				}
+			} 
+			else {
+				// get the character box and if check we are past the middle select past this character. 
+				var glyphRect:Rectangle = targetTextLine.getAtomBounds(atomIndex);
+				var leanRight:Boolean = false;
+				if(glyphRect)
+				{	
+					//if this is TTB and NOT TCY determine lean based on Y coordinates...
+					var glyphGlobalPoint:Point = new Point();
+					glyphGlobalPoint.x = glyphRect.x;
+					glyphGlobalPoint.y = glyphRect.y;
+					glyphGlobalPoint = targetTextLine.localToGlobal(glyphGlobalPoint);
+					
+					if((blockProgression == BlockProgression.RL) && targetTextLine.getAtomTextRotation(atomIndex) != TextRotation.ROTATE_0)
+						leanRight = (globalPoint.y > (glyphGlobalPoint.y + glyphRect.height/2));
+					else //use X..
+						leanRight = (globalPoint.x > (glyphGlobalPoint.x + glyphRect.width/2));
+				}
+				
+				var paraSelectionIdx:int;
+				if ((targetTextLine.getAtomBidiLevel(atomIndex) % 2) != 0) // Right to left case, right is "start" unicode
+					paraSelectionIdx = leanRight ? targetTextLine.getAtomTextBlockBeginIndex(atomIndex) : targetTextLine.getAtomTextBlockEndIndex(atomIndex);
+				else  {// Left to right case, right is "end" unicode
+					if (isRTLDirection) {
+						if ((leanRight == false) && (atomIndex > 0))
+						{
+							paraSelectionIdx = targetTextLine.getAtomTextBlockBeginIndex(atomIndex - 1);	
+						} else {
+							paraSelectionIdx = targetTextLine.getAtomTextBlockBeginIndex(atomIndex);
+						}
+					} else {
+						paraSelectionIdx = leanRight ? targetTextLine.getAtomTextBlockEndIndex(atomIndex) : targetTextLine.getAtomTextBlockBeginIndex(atomIndex);							
+					}
+				}
+				endIdx = targetFlowLine.paragraph.getAbsoluteStart() + paraSelectionIdx;
+			}
+			return endIdx;
+		}
 		/**
 		 * Sets the TextRange down one line
 		 * @param extendSelection	Indicates that only activeIndex should move
@@ -322,6 +407,7 @@ package flashx.textLayout.utils
 				return true;
 				
 			var textFlow:TextFlow = range.textFlow;
+			var blockProgression:String = textFlow.computedFormat.blockProgression;
 			var begIdx:int = range.anchorPosition;
 			var endIdx:int = range.activePosition;
 			var limitIdx:int = endOfLastController(textFlow);
@@ -342,7 +428,7 @@ package flashx.textLayout.utils
 				var currentTextLineX:Number = currentTextLine.x;
 				var curPosRectLeft:Number = curPosRect.left;
 				var curPosRectRight:Number = curPosRect.right;
-				if(textFlow.computedFormat.blockProgression == BlockProgression.RL)
+				if(blockProgression == BlockProgression.RL)
 				{
 					currentTextLineX = currentTextLine.y;
 					curPosRectLeft = curPosRect.top;
@@ -352,7 +438,7 @@ package flashx.textLayout.utils
 				//find the atom
 				var globalPoint:Point = new Point();				
 						
-				if(textFlow.computedFormat.blockProgression != BlockProgression.RL)
+				if(blockProgression != BlockProgression.RL)
 				{
 					if (!isRTLDirection)
 						globalPoint.x = curPosRect.left;
@@ -375,8 +461,9 @@ package flashx.textLayout.utils
 				if (nextFlowLine.absoluteStart >= limitIdx)
 				{
 					if (!extendSelection)
-						range.anchorPosition = textFlow.textLength-1;
-					range.activePosition = textFlow.textLength-1;
+						range.activePosition = range.anchorPosition = textFlow.textLength - 1;
+					else
+						range.activePosition = textFlow.textLength;
 					return true;
 				}
 				
@@ -391,93 +478,25 @@ package flashx.textLayout.utils
 					{
 						textFlow.flowComposer.composeToPosition(nextFlowLine.absoluteStart+1);
 						nextFlowLine = textFlow.flowComposer.getLineAt(curLine + 1);
+						if (nextFlowLine.isDamaged())
+							return false;
 					}
+					// Scroll down one line, but allow scrolling only in the block progression direction
+					var curLogicalHorizontalScrollPos:Number = (blockProgression == BlockProgression.TB) ? controller.horizontalScrollPosition : controller.verticalScrollPosition;
 					controller.scrollToRange(nextFlowLine.absoluteStart, nextFlowLine.absoluteStart + nextFlowLine.textLength - 1);
+					if (blockProgression == BlockProgression.TB)
+						controller.horizontalScrollPosition = curLogicalHorizontalScrollPos;
+					else
+						controller.verticalScrollPosition = curLogicalHorizontalScrollPos; 
 				}
 				
-				var nextTextLine:TextLine = nextFlowLine.getTextLine(true);
-				if (nextFlowLine.controller == curTextFlowLine.controller)
-				{				
-					if(textFlow.computedFormat.blockProgression != BlockProgression.RL)
-					{
-						globalPoint.y += (nextFlowLine.y - curTextFlowLine.y);
-					} else {
-						globalPoint.x -= (curTextFlowLine.x - nextFlowLine.x);
-					}
-				} else {
-					var firstAtomRect:Rectangle = nextTextLine.getAtomBounds(0);
-					var firstAtomPoint:Point = new Point();
-					firstAtomPoint.x = firstAtomRect.left;
-					firstAtomPoint.y = 0;
-					firstAtomPoint = nextTextLine.localToGlobal(firstAtomPoint);
-					if(textFlow.computedFormat.blockProgression != BlockProgression.RL)
-					{
-						globalPoint.x += nextFlowLine.controller.container.x;
-						globalPoint.y = firstAtomPoint.y;
-					} else {
-						globalPoint.x = firstAtomPoint.x;
-						globalPoint.y += nextFlowLine.controller.container.y; 
-					}					
-				} 
-				
-				atomIndex = nextTextLine.getAtomIndexAtPoint(globalPoint.x,globalPoint.y);
-				if (atomIndex == -1)
-				{
-					if(textFlow.computedFormat.blockProgression != BlockProgression.RL) {
-						if (!bidiRightToLeft) {
-							endIdx = (globalPoint.x <= nextTextLine.x) ? nextFlowLine.absoluteStart : (nextFlowLine.absoluteStart + nextFlowLine.textLength - 1);
-						} else {
-							endIdx = (globalPoint.x <= nextTextLine.x) ? (nextFlowLine.absoluteStart + nextFlowLine.textLength - 1) : nextFlowLine.absoluteStart;							
-						}
-					} else {
-						if (!bidiRightToLeft) {
-							endIdx = (globalPoint.y <= nextTextLine.y) ? nextFlowLine.absoluteStart : (nextFlowLine.absoluteStart + nextFlowLine.textLength - 1);							
-						} else {
-							endIdx = (globalPoint.y <= nextTextLine.y) ? (nextFlowLine.absoluteStart + nextFlowLine.textLength - 1) : nextFlowLine.absoluteStart;
-						}
-					}
-				} else {
-					// get the character box and if check we are past the middle select past this character. 
-					var glyphRect:Rectangle = nextTextLine.getAtomBounds(atomIndex);
-					var leanRight:Boolean = false;
-					if(glyphRect)
-					{	
-						//if this is TTB and NOT TCY determine lean based on Y coordinates...
-						var glyphGlobalPoint:Point = new Point();
-						glyphGlobalPoint.x = glyphRect.x;
-						glyphGlobalPoint.y = glyphRect.y;
-						glyphGlobalPoint = nextTextLine.localToGlobal(glyphGlobalPoint);
-						
-						if((textFlow.computedFormat.blockProgression == BlockProgression.RL) && nextTextLine.getAtomTextRotation(atomIndex) != TextRotation.ROTATE_0)
-							leanRight = (globalPoint.y > (glyphGlobalPoint.y + glyphRect.height/2));
-						else //use X..
-							leanRight = (globalPoint.x > (glyphGlobalPoint.x + glyphRect.width/2));
-					}
-			
-					var paraSelectionIdx:int;
-					if ((nextTextLine.getAtomBidiLevel(atomIndex) % 2) != 0) // Right to left case, right is "start" unicode
-						paraSelectionIdx = leanRight ? nextTextLine.getAtomTextBlockBeginIndex(atomIndex) : nextTextLine.getAtomTextBlockEndIndex(atomIndex);
-					else  {// Left to right case, right is "end" unicode
-						if (isRTLDirection) {
-							if ((leanRight == false) && (atomIndex > 0))
-							{
-								paraSelectionIdx = nextTextLine.getAtomTextBlockBeginIndex(atomIndex - 1);	
-							} else {
-								paraSelectionIdx = nextTextLine.getAtomTextBlockBeginIndex(atomIndex);
-							}
-						} else {
-							paraSelectionIdx = leanRight ? nextTextLine.getAtomTextBlockEndIndex(atomIndex) : nextTextLine.getAtomTextBlockBeginIndex(atomIndex);							
-						}
-					}
-					endIdx = nextFlowLine.paragraph.getAbsoluteStart() + paraSelectionIdx;
-					if (endIdx >= textFlow.textLength)
-					{
-						endIdx = textFlow.textLength - 1;
-					}
-				}
-			} else {
-				endIdx = textFlow.textLength - 1;
+				endIdx = computeEndIdx(nextFlowLine,curTextFlowLine,blockProgression,isRTLDirection,globalPoint);
+
+				if (endIdx >= textFlow.textLength)
+					endIdx = textFlow.textLength;
 			}
+			else
+				endIdx = textFlow.textLength;
 				
 			if (!extendSelection)
 				begIdx = endIdx;
@@ -509,6 +528,7 @@ package flashx.textLayout.utils
 				return true;
 				
 			var textFlow:TextFlow = range.textFlow;
+			var blockProgression:String = textFlow.computedFormat.blockProgression;
 			var begIdx:int = range.anchorPosition;
 			var endIdx:int = range.activePosition;
 			
@@ -523,12 +543,11 @@ package flashx.textLayout.utils
 				var currentTextLine:TextLine = curTextFlowLine.getTextLine(true);
 				var para:ParagraphElement = curTextFlowLine.paragraph;
 				var atomIndex:int = currentTextLine.getAtomIndexAtCharIndex(endIdx - para.getAbsoluteStart());
-				var bidiRightToLeft:Boolean = ((currentTextLine.getAtomBidiLevel(atomIndex) % 2) != 0); 				
 				var curPosRect:Rectangle = currentTextLine.getAtomBounds(atomIndex);
 				var currentTextLineX:Number = currentTextLine.x;
 				var curPosRectLeft:Number = curPosRect.left;
 				var curPosRectRight:Number = curPosRect.right;
-				if(textFlow.computedFormat.blockProgression == BlockProgression.RL)
+				if(blockProgression == BlockProgression.RL)
 				{
 					currentTextLineX = currentTextLine.y;
 					curPosRectLeft = curPosRect.top;
@@ -538,7 +557,7 @@ package flashx.textLayout.utils
 				//find the atom
 				var globalPoint:Point = new Point();				
 						
-				if(textFlow.computedFormat.blockProgression != BlockProgression.RL)
+				if(blockProgression != BlockProgression.RL)
 				{
 					if (!isRTLDirection)
 						globalPoint.x = curPosRect.left;
@@ -564,84 +583,19 @@ package flashx.textLayout.utils
 				var lastPosInContainer:int = firstPosInContainer + controller.textLength;
 				if ((prevFlowLine.absoluteStart >= firstPosInContainer) && (prevFlowLine.absoluteStart < lastPosInContainer))
 				{
+					// Scroll up one line, but allow scrolling only in the block progression direction
+					var curLogicalHorizontalScrollPos:Number = (blockProgression == BlockProgression.TB) ? controller.horizontalScrollPosition : controller.verticalScrollPosition;
 					controller.scrollToRange(prevFlowLine.absoluteStart,prevFlowLine.absoluteStart+prevFlowLine.textLength-1);
+					if (blockProgression == BlockProgression.TB)
+						controller.horizontalScrollPosition = curLogicalHorizontalScrollPos;
+					else
+						controller.verticalScrollPosition = curLogicalHorizontalScrollPos; 
 				}
 				
-				var preventextLine:TextLine = prevFlowLine.getTextLine(true);
-				if (prevFlowLine.controller == curTextFlowLine.controller)
-				{
-					if(textFlow.computedFormat.blockProgression != BlockProgression.RL)
-					{
-						globalPoint.y -= (currentTextLine.y - preventextLine.y);
-					} else {
-						globalPoint.x += (preventextLine.x - currentTextLine.x);
-					}
-				} else {
-					var firstAtomRect:Rectangle = preventextLine.getAtomBounds(0);
-					var firstAtomPoint:Point = new Point();
-					firstAtomPoint.x = firstAtomRect.left;
-					firstAtomPoint.y = 0;
-					firstAtomPoint = preventextLine.localToGlobal(firstAtomPoint);
-					if(textFlow.computedFormat.blockProgression != BlockProgression.RL)
-					{
-						globalPoint.x -= curTextFlowLine.controller.container.x;
-						globalPoint.y = firstAtomPoint.y;
-					} else {
-						globalPoint.x = firstAtomPoint.x;
-						globalPoint.y -= curTextFlowLine.controller.container.y; 
-					}					
-				} 
-				
-				atomIndex = preventextLine.getAtomIndexAtPoint(globalPoint.x,globalPoint.y);
-				if (atomIndex == -1)
-				{
-					if(textFlow.computedFormat.blockProgression != BlockProgression.RL) {
-						if (!bidiRightToLeft)
-							endIdx = (globalPoint.x <= preventextLine.x) ? prevFlowLine.absoluteStart : (prevFlowLine.absoluteStart + prevFlowLine.textLength - 1);
-						else
-							endIdx = (globalPoint.x <= preventextLine.x) ? (prevFlowLine.absoluteStart + prevFlowLine.textLength - 1) : prevFlowLine.absoluteStart;						
-					} else {
-						if (!bidiRightToLeft)
-							endIdx = (globalPoint.y <= preventextLine.y) ? prevFlowLine.absoluteStart : (prevFlowLine.absoluteStart + prevFlowLine.textLength - 1);
-						else
-							endIdx = (globalPoint.y <= preventextLine.y)  ? (prevFlowLine.absoluteStart + prevFlowLine.textLength - 1) : prevFlowLine.absoluteStart;						
-					}
-				} else {
-					// get the character box and if check we are past the middle select past this character. 
-					var glyphRect:Rectangle = preventextLine.getAtomBounds(atomIndex);
-					var leanRight:Boolean = false;
-					if(glyphRect)
-					{	
-						//if this is TTB and NOT TCY determine lean based on Y coordinates...
-						var glyphGlobalPoint:Point = new Point();
-						glyphGlobalPoint.x = glyphRect.x;
-						glyphGlobalPoint.y = glyphRect.y;
-						glyphGlobalPoint = preventextLine.localToGlobal(glyphGlobalPoint);
-						
-						if((textFlow.computedFormat.blockProgression == BlockProgression.RL) && preventextLine.getAtomTextRotation(atomIndex) != TextRotation.ROTATE_0)
-							leanRight = (globalPoint.y > (glyphGlobalPoint.y + glyphRect.height/2));
-						else //use X..
-							leanRight = (globalPoint.x > (glyphGlobalPoint.x + glyphRect.width/2));
-					}
-			
-					var paraSelectionIdx:int;
-					if ((preventextLine.getAtomBidiLevel(atomIndex) % 2) != 0) // Right to left case, right is "start" unicode
-						paraSelectionIdx = leanRight ? preventextLine.getAtomTextBlockBeginIndex(atomIndex) : preventextLine.getAtomTextBlockEndIndex(atomIndex);
-					else  {// Left to right case, right is "end" unicode
-						if (isRTLDirection) {
-							if ((leanRight == false) && (atomIndex > 0))
-							{
-								paraSelectionIdx = preventextLine.getAtomTextBlockBeginIndex(atomIndex - 1);	
-							} else {
-								paraSelectionIdx = preventextLine.getAtomTextBlockBeginIndex(atomIndex);
-							}
-						} else {
-							paraSelectionIdx = leanRight ? preventextLine.getAtomTextBlockEndIndex(atomIndex) : preventextLine.getAtomTextBlockBeginIndex(atomIndex);							
-						}
-					}
-					endIdx = prevFlowLine.paragraph.getAbsoluteStart() + paraSelectionIdx;
-				}
-			} else {
+				endIdx = computeEndIdx(prevFlowLine,curTextFlowLine,blockProgression,isRTLDirection,globalPoint);
+			}
+			else 
+			{
 				endIdx = 0;
 			}
 				
@@ -716,9 +670,10 @@ package flashx.textLayout.utils
   								
  			if (isTTB)
  			{
- 				if ((controller.horizontalScrollPosition - amount) < -controller.contentWidth)
+				var contentWidth:Number = controller.contentWidth;
+ 				if ((controller.horizontalScrollPosition - amount) < -contentWidth)
  				{
- 					controller.horizontalScrollPosition = -controller.contentWidth;
+ 					controller.horizontalScrollPosition = -contentWidth;
 					nextLine = textFlow.flowComposer.numLines - 1;
 					nextTextFlowLine = textFlow.flowComposer.getLineAt(nextLine);								
  				} else
@@ -743,9 +698,10 @@ package flashx.textLayout.utils
  			}
  			else
  			{
- 				if ((controller.verticalScrollPosition + amount) > controller.contentHeight)
+				var contentHeight:Number = controller.contentHeight;
+ 				if ((controller.verticalScrollPosition + amount) > contentHeight)
  				{
- 					controller.verticalScrollPosition = controller.contentHeight;
+ 					controller.verticalScrollPosition = contentHeight;
 					nextLine = textFlow.flowComposer.numLines - 1;
 					nextTextFlowLine = textFlow.flowComposer.getLineAt(nextLine);								 						
  				} else
@@ -844,7 +800,6 @@ package flashx.textLayout.utils
 			var lineStart:int = textFlow.flowComposer.getLineAt(curLine).absoluteStart;
 			var linePos:int = endIdx - lineStart;
  			var nextLine:int;
- 			var nextLinePos:int;
  			var nextTextFlowLine:TextFlowLine = curTextFlowLine;
  											
 			var isTTB:Boolean = textFlow.computedFormat.blockProgression == BlockProgression.RL;
@@ -1024,7 +979,7 @@ package flashx.textLayout.utils
 			var textFlow:TextFlow = range.textFlow
 			var begIdx:int = range.anchorPosition;
 			var endIdx:int = range.activePosition;
-			endIdx = textFlow.textLength - 1;
+			endIdx = textFlow.textLength;
 			if (!extendSelection)
 				begIdx = endIdx;							
 			if (begIdx == endIdx)
@@ -1128,6 +1083,11 @@ package flashx.textLayout.utils
 			var flowComposer:IFlowComposer = range.textFlow.flowComposer;
 			var controller:ContainerController = null;
 			checkCompose(flowComposer, range.absoluteEnd);
+			if (range.absoluteEnd > flowComposer.damageAbsoluteStart - 1)
+			{
+				clampToFit(range, flowComposer.damageAbsoluteStart - 1);
+				return true;
+			}
 			if (flowComposer && flowComposer.numControllers)
 			{
 				var controllerIndex:int = flowComposer.findControllerIndexAtPosition(range.absoluteEnd);
@@ -1142,11 +1102,19 @@ package flashx.textLayout.utils
 
 			if (!controller)		// we're overset, or one position before overset
 			{
-				range.anchorPosition = range.textFlow.textLength - 1;
+				range.anchorPosition = range.textFlow.textLength;
 				range.activePosition = range.anchorPosition;
 				return true;
 			}
 			return false;
+		}
+		
+		static private function clampToFit(range:TextRange, endPos:int):void
+		{
+			if (endPos < 0)
+				endPos = 0;
+			range.anchorPosition = Math.min(range.anchorPosition, endPos);
+			range.activePosition = Math.min(range.activePosition, endPos); 
 		}
 		
 		/** If the range is in overset text (after the last container in a non-scrolling flow), adjust the range so it is at the end of the last controller in the flow. */
@@ -1156,6 +1124,11 @@ package flashx.textLayout.utils
 			if (flowComposer)
 			{
 				checkCompose(flowComposer, range.absoluteEnd);
+				if (range.absoluteEnd > flowComposer.damageAbsoluteStart - 1)
+				{
+					clampToFit(range, flowComposer.damageAbsoluteStart - 1);
+					return true;
+				} 
 				if (flowComposer.findControllerIndexAtPosition(range.absoluteEnd) == -1)
 				{
 					range.anchorPosition = endOfLastController(range.textFlow);

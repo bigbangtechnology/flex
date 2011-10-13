@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
 	import flashx.textLayout.edit.SelectionState;
@@ -225,7 +225,7 @@ package flashx.textLayout.operations
 		 *  @return A FlowOperation representing the combined operation if 
 		 *  the merge was successful, null otherwise.
 		 */
-		tlf_internal function merge(operation:FlowOperation):FlowOperation
+		tlf_internal function merge(operation:FlowOperation):FlowOperation	// No PMD
 		{
 			return null;
 		}

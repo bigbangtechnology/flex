@@ -1,16 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
-//
-//ActionScript file
-//
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.debug 
 {
 	[ExcludeClass]
@@ -18,6 +15,8 @@ package flashx.textLayout.debug
 	public class Debugging 
 	{
 		import flash.utils.Dictionary;
+		import flash.text.engine.TextBlock;
+		import flash.text.engine.TextLine;
 		import flashx.textLayout.tlf_internal;
 		
 		use namespace tlf_internal;
@@ -28,6 +27,7 @@ package flashx.textLayout.debug
 			static tlf_internal var traceFlag:Boolean = false;	
 			static tlf_internal var verbose:Boolean = false;	
 			static tlf_internal var throwOnAssert:Boolean = false;
+			static tlf_internal var debugCheckTextFlow:Boolean = false;
 			static tlf_internal var containerLineValidation:Boolean = false;
 			
 			static private var traceOutString:String;
@@ -82,7 +82,12 @@ package flashx.textLayout.debug
 				if (idDictionary[o] == null)
 				{
 					var s:String = getClassForIdentity(o);
-					idDictionary[o] = "my" + s + nextKey.toString();
+					if (s == "TextLine")
+						idDictionary[o] = "textLineArray[" + nextKey + "]"
+					else if (s == "TextBlock")
+						idDictionary[o] = "textBlockArray[" + nextKey + "]"
+					else
+						idDictionary[o] = "my" + s + nextKey.toString();
 					nextKey++;
 				}
 				return idDictionary[o];
@@ -97,6 +102,19 @@ package flashx.textLayout.debug
 					return "Vector.<" + s ;
 				}
 				return s.substr( s.lastIndexOf(":")+1);
+			}
+			
+			static tlf_internal function printHexString(tempString:String):String
+			{
+				var str:String = "String.fromCharCode("
+				for (var idx:int = 0; idx < tempString.length; idx++)
+				{
+					if (idx != 0)
+						str += ", ";
+					str += "0x" + tempString.charCodeAt(idx).toString(16);
+				}
+				str += ")";
+				return str;
 			}
 			
 			static tlf_internal function makeParameter(obj:Object):String
@@ -156,7 +174,12 @@ package flashx.textLayout.debug
 				if (rslt)
 				{
 					rsltType = getClassForType(rslt);
-					str += "var " + getIdentity(rslt) + ":" + getClassForType(rslt) + " = ";
+					if (rslt is TextLine)
+						str += getIdentity(rslt) + " = ";
+					else if (rslt is TextBlock)
+						str += getIdentity(rslt) + " = ";
+					else
+						str += "var " + getIdentity(rslt) + ":" + getClassForType(rslt) + " = ";
 				}
 				
 				if (target)

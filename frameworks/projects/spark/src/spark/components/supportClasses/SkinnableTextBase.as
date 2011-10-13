@@ -12,25 +12,36 @@
 package spark.components.supportClasses
 {
 
-import flash.accessibility.Accessibility;    
-import flash.accessibility.AccessibilityProperties;    
+import flash.accessibility.Accessibility;
+import flash.accessibility.AccessibilityProperties;
 import flash.display.DisplayObject;
+import flash.display.InteractiveObject;
 import flash.events.Event;
 import flash.events.FocusEvent;
+import flash.events.MouseEvent;
+import flash.events.SoftKeyboardEvent;
 import flash.system.Capabilities;
 
 import flashx.textLayout.elements.TextFlow;
 import flashx.textLayout.events.SelectionEvent;
 
+import mx.core.FlexGlobals;
 import mx.core.IIMESupport;
+import mx.core.IVisualElement;
+import mx.core.InteractionMode;
 import mx.core.mx_internal;
 import mx.events.FlexEvent;
+import mx.events.SandboxMouseEvent;
+import mx.events.TouchInteractionEvent;
 import mx.managers.IFocusManagerComponent;
 import mx.utils.BitFlagUtil;
 
-import spark.components.TextSelectionHighlighting;
-import spark.events.TextOperationEvent;
+import spark.components.Application;
 import spark.components.RichEditableText;
+import spark.components.TextSelectionHighlighting;
+import spark.core.IDisplayText;
+import spark.core.IEditableText;
+import spark.events.TextOperationEvent;
 
 use namespace mx_internal;
 
@@ -71,7 +82,7 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="borderVisible", type="Boolean", inherit="no", theme="spark")]
+[Style(name="borderVisible", type="Boolean", inherit="no", theme="spark, mobile")]
 
 /**
  *  The alpha of the content background for this component.
@@ -81,17 +92,17 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="contentBackgroundAlpha", type="Number", inherit="yes", theme="spark", minValue="0.0", maxValue="1.0")]
+[Style(name="contentBackgroundAlpha", type="Number", inherit="yes", theme="spark, mobile", minValue="0.0", maxValue="1.0")]
 
 /**
- *  @copy spark.components.supportClasses.GroupBase#contentBackgroundColor
+ *  @copy spark.components.supportClasses.GroupBase#style:contentBackgroundColor
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="contentBackgroundColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="contentBackgroundColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  The alpha of the focus ring for this component.
@@ -101,17 +112,17 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="focusAlpha", type="Number", inherit="no", theme="spark", minValue="0.0", maxValue="1.0")]
+[Style(name="focusAlpha", type="Number", inherit="no", theme="spark, mobile", minValue="0.0", maxValue="1.0")]
 
 /**
- *  @copy spark.components.supportClasses.GroupBase#focusColor
+ *  @copy spark.components.supportClasses.GroupBase#style:focusColor
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 //--------------------------------------
 //  Events
@@ -158,9 +169,68 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
 [Event(name="change", type="spark.events.TextOperationEvent")]
 
 /**
+ *  Dispatched when a keystroke is about to be input to
+ *  the component.
+ *
+ *  @eventType flash.events.TextEvent.TEXT_INPUT
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Event(name="textInput", type="flash.events.TextEvent")]
+
+//--------------------------------------
+//  Skin states
+//--------------------------------------
+
+/**
+ *  Normal state.
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[SkinState("normal")]
+
+/**
+ *  Disabled state.
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[SkinState("disabled")]
+
+/**
+ *  Normal state with prompt.
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10.2
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[SkinState("normalWithPrompt")]
+
+/**
+ *  Disabled state with prompt.
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10.2
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[SkinState("disabledWithPrompt")]
+
+/**
  *  The base class for skinnable components, such as the Spark TextInput
- *  and TextArea, that include an instance of RichEditableText in their skin
- *  to provide rich text display, scrolling, selection, and editing.
+ *  and TextArea, that include an instance of IEditableText in their skin
+ *  to provide text display, scrolling, selection, and editing.
+ *  IEditableText is RichEditableText for the Spark theme and StyleableTextField
+ *  for the Mobile theme.
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10
@@ -211,11 +281,6 @@ public class SkinnableTextBase extends SkinnableComponent
     /**
      *  @private
      */
-    private static const MAX_HEIGHT_PROPERTY_FLAG:uint = 1 << 6;
-    
-    /**
-     *  @private
-     */
     private static const MAX_WIDTH_PROPERTY_FLAG:uint = 1 << 7;
     
     /**
@@ -242,12 +307,22 @@ public class SkinnableTextBase extends SkinnableComponent
      *  @private
      */
     private static const TEXT_FLOW_PROPERTY_FLAG:uint = 1 << 12;
+    
+    /**
+     *  @private
+     */
+    private static const TYPICAL_TEXT_PROPERTY_FLAG:uint = 1 << 13;
+    
+    /**
+     *  @private
+     */
+    private static const WIDTH_IN_CHARS_PROPERTY_FLAG:uint = 1 << 14;
 
     /**
      *  @private
      */
-    private static const WIDTH_IN_CHARS_PROPERTY_FLAG:uint = 1 << 13;
-        
+    private static const PROMPT_TEXT_PROPERTY_FLAG:uint = 1;
+    
     //--------------------------------------------------------------------------
     //
     //  Constructor
@@ -266,7 +341,42 @@ public class SkinnableTextBase extends SkinnableComponent
     {
         super();
     }
+    
+    //--------------------------------------------------------------------------
+    //
+    //  Variables
+    //
+    //-------------------------------------------------------------------------- 
 
+    /**
+     *  @private
+     */  
+    private var touchHandlersAdded:Boolean = false;
+    
+    /**
+     *  @private
+     *  True if we received a mouseDown and we haven't receieved a mouseUp yet
+     */
+    private var isMouseDown:Boolean = false;
+    
+    /**
+     *  @private
+     *  True if setFocus is called while isMouseDown is true
+     */
+    private var delaySetFocus:Boolean = false;
+    
+    /**
+     *  @private
+     *  The target from the current mouseDown event
+     */
+    private var mouseDownTarget:InteractiveObject;
+    
+    /**
+     *  @private
+     *  Variable that determines whether this application is running on iOS.
+     */
+    private static var isIOS:Boolean = (Capabilities.version.indexOf("IOS") == 0);
+    
     //--------------------------------------------------------------------------
     //
     //  Skin parts
@@ -274,13 +384,13 @@ public class SkinnableTextBase extends SkinnableComponent
     //--------------------------------------------------------------------------
 
     //----------------------------------
-    //  textDisplay
+    //  promptDisplay
     //----------------------------------
-
+    
     [SkinPart(required="false")]
-
+    
     /**
-     *  The RichEditableText that may be present
+     *  The Label or other IDisplayText that might be present
      *  in any skin assigned to this component.
      *  
      *  @langversion 3.0
@@ -288,7 +398,46 @@ public class SkinnableTextBase extends SkinnableComponent
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-    public var textDisplay:RichEditableText;
+    public var promptDisplay:IDisplayText;
+    
+    /**
+     *  @private
+     *  Properties are proxied to promptDisplay.  However, when 
+     *  promptDisplay is not around, we need to store values set on 
+     *  SkinnableTextBase.  This object stores those values.  If promptDisplay is 
+     *  around, the values are  stored  on the promptDisplay directly.  However, 
+     *  we need to know what values have been set by the developer on 
+     *  TextInput/TextArea (versus set on the promptDisplay or defaults of the 
+     *  promptDisplay) as those are values we want to carry around if the 
+     *  promptDisplay changes (via a new skin). In order to store this info 
+     *  efficiently, promptDisplayProperties becomes a uint to store a series of 
+     *  BitFlags.  These bits represent whether a property has been explicitly 
+     *  set on this SkinnableTextBase.  When the promptDisplay is not around, 
+     *  promptDisplayProperties is a typeless object to store these proxied 
+     *  properties.  When promptDisplay is around, promptDisplayProperties stores 
+     *  booleans as to whether these properties have been explicitly set or not.
+     */
+    private var promptDisplayProperties:Object = {};
+    
+    //----------------------------------
+    //  textDisplay
+    //----------------------------------
+
+    [Bindable]
+    [SkinPart(required="false")]
+
+    /**
+     *  The IEditableText that may be present
+     *  in any skin assigned to this component.
+     *  This is RichEditableText for the Spark theme
+     *  and StyleableTextField for the Mobile theme.
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    public var textDisplay:IEditableText;
 
     /**
      *  @private
@@ -314,203 +463,181 @@ public class SkinnableTextBase extends SkinnableComponent
     //  Overridden properties: UIComponent
     //
     //--------------------------------------------------------------------------
-	
-	/*
-	
-	Note:
-	
-	SkinnableTextBase does not have an accessibilityImplementation
-	because, if it does, the Flash Player doesn't support text-selection
-	accessibility. The selectionAnchorIndex and selectionActiveIndex
-	getters of the acc impl don't get called, probably because Player 10.1
-	doesn't like the fact that stage.focus is the texDisplay:RichEditableText
-	part instead of the SinnableTextBase component (i.e., the TextInput
-	or TextArea).
-	
-	Instead, we rely on the RichEditableTextAccImpl of the textDisplay
-	to provide accessibility.
-	
-	However, developers expect to be able to control accessibility by setting
-	accessibilityProperties, accessibilityName, accessibilityDescription,
-	tabIndex, etc. on the component itself.
-	
-	In order to make these settings usable by RichEditableTextAccImpl,
-	we push them down into the accessibilityProperties of the RichEditableText,
-	using the invalidateProperties() / commitProperties() pattern.
-	
-	*/
+    
+    /*
+    
+    Note:
+    
+    SkinnableTextBase does not have an accessibilityImplementation
+    because, if it does, the Flash Player doesn't support text-selection
+    accessibility. The selectionAnchorIndex and selectionActiveIndex
+    getters of the acc impl don't get called, probably because Player 10.1
+    doesn't like the fact that stage.focus is the texDisplay:RichEditableText
+    part instead of the SinnableTextBase component (i.e., the TextInput
+    or TextArea).
+    
+    Instead, we rely on the RichEditableTextAccImpl of the textDisplay
+    to provide accessibility.
+    
+    However, developers expect to be able to control accessibility by setting
+    accessibilityProperties, accessibilityName, accessibilityDescription,
+    tabIndex, etc. on the component itself.
+    
+    In order to make these settings usable by RichEditableTextAccImpl,
+    we push them down into the accessibilityProperties of the RichEditableText,
+    using the invalidateProperties() / commitProperties() pattern.
+    
+    */
 
-	//----------------------------------
-	//  accessibilityEnabled
-	//----------------------------------
-	
-	/**
-	 *  @private
-	 */
-	override public function set accessibilityEnabled(value:Boolean):void
-	{
-		if (!Capabilities.hasAccessibility)
-			return;
-			
-		if (!accessibilityProperties)
-			accessibilityProperties = new AccessibilityProperties();
-		
-		accessibilityProperties.silent = !value;
-		accessibilityPropertiesChanged = true;
-		
-		invalidateProperties();
-	}
-	
-	//----------------------------------
-	//  accessibilityDescription
-	//----------------------------------
-	
-	/**
-	 *  @private
-	 */
-	override public function set accessibilityDescription(value:String):void
-	{
-		if (!Capabilities.hasAccessibility)
-			return;
-		
-		if (!accessibilityProperties)
-			accessibilityProperties = new AccessibilityProperties();
-		
-		accessibilityProperties.description = value;
-		accessibilityPropertiesChanged = true;
-		
-		invalidateProperties();
-	}
-	
-	//----------------------------------
-	//  accessibilityName
-	//----------------------------------
-	
-	/**
-	 *  @private
-	 */
-	override public function set accessibilityName(value:String):void 
-	{
-		if (!Capabilities.hasAccessibility)
-			return;
-		
-		if (!accessibilityProperties)
-			accessibilityProperties = new AccessibilityProperties();
-		
-		accessibilityProperties.name = value;
-		accessibilityPropertiesChanged = true;
-		
-		invalidateProperties();
-	}
-	
-	//----------------------------------
-	//  accessibilityProperties
-	//----------------------------------
-	
-	/**
-	 *  @private
-	 *  Storage for the accessibilityProperties property.
-	 */
-	private var _accessibilityProperties:AccessibilityProperties = null;
+    //----------------------------------
+    //  accessibilityEnabled
+    //----------------------------------
+    
+    /**
+     *  @private
+     */
+    override public function set accessibilityEnabled(value:Boolean):void
+    {
+        if (!Capabilities.hasAccessibility)
+            return;
+            
+        if (!accessibilityProperties)
+            accessibilityProperties = new AccessibilityProperties();
+        
+        accessibilityProperties.silent = !value;
+        accessibilityPropertiesChanged = true;
+        
+        invalidateProperties();
+    }
+    
+    //----------------------------------
+    //  accessibilityDescription
+    //----------------------------------
+    
+    /**
+     *  @private
+     */
+    override public function set accessibilityDescription(value:String):void
+    {
+        if (!Capabilities.hasAccessibility)
+            return;
+        
+        if (!accessibilityProperties)
+            accessibilityProperties = new AccessibilityProperties();
+        
+        accessibilityProperties.description = value;
+        accessibilityPropertiesChanged = true;
+        
+        invalidateProperties();
+    }
+    
+    //----------------------------------
+    //  accessibilityName
+    //----------------------------------
+    
+    /**
+     *  @private
+     */
+    override public function set accessibilityName(value:String):void 
+    {
+        if (!Capabilities.hasAccessibility)
+            return;
+        
+        if (!accessibilityProperties)
+            accessibilityProperties = new AccessibilityProperties();
+        
+        accessibilityProperties.name = value;
+        accessibilityPropertiesChanged = true;
+        
+        invalidateProperties();
+    }
+    
+    //----------------------------------
+    //  accessibilityProperties
+    //----------------------------------
+    
+    /**
+     *  @private
+     *  Storage for the accessibilityProperties property.
+     */
+    private var _accessibilityProperties:AccessibilityProperties = null;
 
-	/**
-	 *  @private
-	 */
-	private var accessibilityPropertiesChanged:Boolean = false;
-	
-	/**
-	 *  @private
-	 */
-	override public function get accessibilityProperties():AccessibilityProperties
-	{
-		return _accessibilityProperties;
-	}
-	
-	/**
-	 *  @private
-	 */
-	override public function set accessibilityProperties(
-									value:AccessibilityProperties):void
-	{
-		_accessibilityProperties = value;
-		accessibilityPropertiesChanged = true;
-		
-		invalidateProperties();
-	}
-	
-	//----------------------------------
-	//  accessibilityShortcut
-	//----------------------------------
-	
-	/**
-	 *  @private
-	 */
-	override public function set accessibilityShortcut(value:String):void
-	{
-		if (!Capabilities.hasAccessibility)
-			return;		
-		
-		if (!accessibilityProperties)
-			accessibilityProperties = new AccessibilityProperties();
-		
-		accessibilityProperties.shortcut = value;
-		accessibilityPropertiesChanged = true;
-		
-		invalidateProperties();
-	}
+    /**
+     *  @private
+     */
+    private var accessibilityPropertiesChanged:Boolean = false;
+    
+    /**
+     *  @private
+     */
+    override public function get accessibilityProperties():AccessibilityProperties
+    {
+        return _accessibilityProperties;
+    }
+    
+    /**
+     *  @private
+     */
+    override public function set accessibilityProperties(
+                                    value:AccessibilityProperties):void
+    {
+        _accessibilityProperties = value;
+        accessibilityPropertiesChanged = true;
+        
+        invalidateProperties();
+    }
+    
+    //----------------------------------
+    //  accessibilityShortcut
+    //----------------------------------
+    
+    /**
+     *  @private
+     */
+    override public function set accessibilityShortcut(value:String):void
+    {
+        if (!Capabilities.hasAccessibility)
+            return;     
+        
+        if (!accessibilityProperties)
+            accessibilityProperties = new AccessibilityProperties();
+        
+        accessibilityProperties.shortcut = value;
+        accessibilityPropertiesChanged = true;
+        
+        invalidateProperties();
+    }
 
-	//----------------------------------
+    //----------------------------------
     //  baselinePosition
     //----------------------------------
-
+    
     /**
      *  @private
      */
     override public function get baselinePosition():Number
     {
-        return getBaselinePositionForPart(textDisplay);
+        return getBaselinePositionForPart(textDisplay as IVisualElement);
     }
     
     //----------------------------------
-    //  maxHeight
+    //  enabled
     //----------------------------------
     
     /**
      *  @private
      */
-    /*
-    override public function get maxHeight():Number
+    override public function set enabled(value:Boolean):void
     {
         if (textDisplay)
-            return textDisplay.maxHeight;
+            textDisplay.enabled = value;
         
-        // want the default to be default max height for UIComponent
-        var v:* = textDisplayProperties.maxHeight;
-        return (v === undefined) ? super.maxHeight : v;        
-    }
-    */
-    
-    /**
-     *  @private
-     */
-    /*
-    override public function set maxHeight(value:Number):void
-    {
-        if (textDisplay)
-        {
-            textDisplay.maxHeight = value;
-            textDisplayProperties = BitFlagUtil.update(
-                uint(textDisplayProperties), MAX_HEIGHT_PROPERTY_FLAG, true);
-        }
-        else
-        {
-            textDisplayProperties.maxHeight = value;
-        }
+        if (value == super.enabled)
+            return;
         
-        // Generate an UPDATE_COMPLETE event.
-        invalidateProperties();                    
+        super.enabled = value;
     }
-    */
+
     //----------------------------------
     //  maxWidth
     //----------------------------------
@@ -520,11 +647,13 @@ public class SkinnableTextBase extends SkinnableComponent
      */
     override public function get maxWidth():Number
     {
-        if (textDisplay)
-            return textDisplay.maxWidth;
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
+
+        if (richEditableText)
+            return richEditableText.maxWidth;
             
         // want the default to be default max width for UIComponent
-        var v:* = textDisplayProperties.maxWidth;
+        var v:* = textDisplay ? undefined : textDisplayProperties.maxWidth;
         return (v === undefined) ? super.maxWidth : v;        
     }
 
@@ -535,7 +664,12 @@ public class SkinnableTextBase extends SkinnableComponent
     {
         if (textDisplay)
         {
-            textDisplay.maxWidth = value;
+            var richEditableText:RichEditableText = textDisplay as RichEditableText;
+            
+            if (richEditableText)
+                richEditableText.maxWidth = value;
+            else
+                super.maxWidth = value;
             textDisplayProperties = BitFlagUtil.update(
                 uint(textDisplayProperties), MAX_WIDTH_PROPERTY_FLAG, true);
         }
@@ -548,16 +682,74 @@ public class SkinnableTextBase extends SkinnableComponent
         invalidateProperties();                    
     }
 
-	//----------------------------------
-	//  tabIndex
-	//----------------------------------
+    //----------------------------------
+    //  prompt
+    //----------------------------------
+    
+    [Inspectable(category="General", defaultValue="")]
+
+    /**
+     *  Text to be displayed if/when the actual text property is an empty string.
+     * 
+     *  <p>Prompt text appears when the text control is first created. 
+     *  Prompt text disappears when the control gets focus or when the control’s 
+     *  <code>text</code> property is a non-empty string. 
+     *  Prompt text reappears when the control loses focus, but only if no text was entered 
+     *  (if the value of the text field is the empty string).</p>
+     *  
+     *  <p>For text controls, if the user enters text, but later deletes it, the prompt text 
+     *  reappears when the control loses focus. 
+     *  You can also cause the prompt text to reappear programmatically by setting the 
+     *  text control’s text property to the empty string.</p>
+     *  
+     *  <p>You can change the style of the prompt text with CSS. 
+     *  If the control has prompt text and is not disabled, the style is defined by the 
+     *  <code>normalWithPrompt</code> pseudo selector. 
+     *  If the control is disabled, then the styles defined by the <code>disabledWithPrompt</code> 
+     *  pseudo selector are used.</p>
+     *  
+     *  <p>The following example CSS changes the color of the prompt text in controls that 
+     *  sub-class SkinnableTextBase (this includes the Spark TextInput and TextArea controls):
+     *  <pre>
+     *  &#64;namespace s "library://ns.adobe.com/flex/spark";
+     *  s|SkinnableTextBase:normalWithPrompt {
+     *      color: #CCCCFF;
+     *  }
+     *  </pre>
+     *  </p>
+     *
+     *  <p><b>For the Mobile theme, this is not supported.</b></p>
+     * 
+     *  @default null
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10.2
+     *  @playerversion AIR 2.0
+     *  @productversion Flex 4.5
+     */
+    public function get prompt():String
+    {
+        return getPrompt();
+    }
+    
+    /**
+     *  @private
+     */
+    public function set prompt(value:String):void
+    {
+        setPrompt(value);
+    }
+    
+    //----------------------------------
+    //  tabIndex
+    //----------------------------------
 
     /**
      *  @private
      *  Storage for the tabIndex property.
      */
     private var _tabIndex:int = -1;
-	
+    
     /**
      *  @private
      */
@@ -578,6 +770,44 @@ public class SkinnableTextBase extends SkinnableComponent
         invalidateProperties();
     }
     
+    //----------------------------------
+    //  typicalText
+    //----------------------------------
+    
+    [Inspectable(category="General", defaultValue="null")]
+
+    /**
+     *  Text that is used to determine
+     *  the default width and height of the control, 
+     *  without actually being displayed.
+     * 
+     *  <p><b>For the Spark theme, see
+     *  spark.components.RichEditableText.typicalText</b></p>
+     *
+     *  <p><b>For the Mobile theme, this is not supported.</b></p>
+     * 
+     *  @see spark.components.RichEditableText#typicalText
+     * 
+     *  @default null
+     * 
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    public function get typicalText():String
+    {
+        return getTypicalText();
+    }
+    
+    /**
+     *  @private
+     */
+    public function set typicalText(value:String):void
+    {
+        setTypicalText(value);
+    }
+    
     //--------------------------------------------------------------------------
     //
     //  Properties proxied to textDisplay
@@ -588,9 +818,13 @@ public class SkinnableTextBase extends SkinnableComponent
     //  displayAsPassword
     //----------------------------------
     
+    [Inspectable(category="General", defaultValue="false")]
+
     /**
-     *  @copy spark.components.RichEditableText#displayAsPassword
-     *  
+     *  @copy flash.text.TextField#displayAsPassword
+     * 
+     *  @default false
+     * 
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
@@ -631,9 +865,20 @@ public class SkinnableTextBase extends SkinnableComponent
     //  editable
     //----------------------------------
 
+    [Inspectable(category="General", defaultValue="true")]
+
     /**
-     *  @copy spark.components.RichEditableText#editable
-     *  
+     *  Specifies whether the text is editable.
+     * 
+     *  <p><b>For the Spark theme, see
+     *  spark.components.RichEditableText.editable</b></p>
+     *
+     *  <p><b>For the Mobile theme, see
+     *  spark.components.supportClasses.StyleableTextField.editable</b></p>
+     * 
+     *  @see spark.components.RichEditableText#editable
+     *  @see spark.components.supportClasses.StyleableTextField#editable
+     * 
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
@@ -674,7 +919,12 @@ public class SkinnableTextBase extends SkinnableComponent
     //----------------------------------
 
     /**
-     *  @copy spark.components.RichEditableText#enableIME
+     *  A flag that indicates whether the IME should
+     *  be enabled when the component receives focus.
+     * 
+     *  <p><b>For the Mobile theme, this is not supported.</b></p>
+     * 
+     *  @see spark.components.RichEditableText#enableIME
      *
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -691,20 +941,31 @@ public class SkinnableTextBase extends SkinnableComponent
     //----------------------------------
 
     /**
-     *  @copy spark.components.RichEditableText#imeMode
+     *  Specifies the IME (input method editor) mode.
+     * 
+     *  <p><b>For the Spark theme, see
+     *  spark.components.RichEditableText.imeMode</b></p>
+     *
+     *  <p><b>For the Mobile theme, this is not supported.</b></p>
+     * 
+     *  @see spark.components.RichEditableText#imeMode
+     * 
+     *  @default null
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-     public function get imeMode():String
+    public function get imeMode():String
     {
-        if (textDisplay)        
-            return textDisplay.imeMode;
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
+                
+        if (richEditableText)        
+            return richEditableText.imeMode;
             
         // want the default to be null
-        var v:* = textDisplayProperties.imeMode;
+        var v:* = textDisplay ? undefined : textDisplayProperties.imeMode;
         return (v === undefined) ? null : v;
     }
 
@@ -713,9 +974,12 @@ public class SkinnableTextBase extends SkinnableComponent
      */
     public function set imeMode(value:String):void
     {
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
+
         if (textDisplay)
         {
-            textDisplay.imeMode = value;
+            if (richEditableText)
+                richEditableText.imeMode = value;
             textDisplayProperties = BitFlagUtil.update(
                 uint(textDisplayProperties), IME_MODE_PROPERTY_FLAG, true);
         }
@@ -732,11 +996,13 @@ public class SkinnableTextBase extends SkinnableComponent
     //  maxChars
     //----------------------------------
     
-    [Inspectable(minValue="0.0")]    
+    [Inspectable(category="General", defaultValue="0")]    
 
     /**
-     *  @copy spark.components.RichEditableText#maxChars
-     *  
+     *  @copy flash.text.TextField#maxChars
+     * 
+     *  @default 0
+     * 
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
@@ -776,8 +1042,10 @@ public class SkinnableTextBase extends SkinnableComponent
     //  restrict
     //----------------------------------
 
+    [Inspectable(category="General", defaultValue="null")]
+
     /**
-     *  @copy spark.components.RichEditableText#restrict
+     *  @copy flash.text.TextField#restrict
      * 
      *  @default null
      *  
@@ -820,9 +1088,25 @@ public class SkinnableTextBase extends SkinnableComponent
     //  selectable
     //----------------------------------
 
+    [Inspectable(category="General", defaultValue="true")]
+
     /**
-     *  @copy spark.components.RichEditableText#selectable
+     *  A flag indicating whether the content is selectable.  On a Desktop, a user can 
+     *  select content with the mouse or with the keyboard when the control has 
+     *  keyboard focus.  On a touch interaction device, a user can select text with 
+     *  their fingers once they've entered into selection mode for the text component.
+     * 
+     *  <p><b>For the Spark theme, see
+     *  spark.components.RichEditableText.selectable</b></p>
+     *
+     *  <p><b>For the Mobile theme, see
+     *  spark.components.supportClasses.StyleableTextField.selectable</b></p>
+     * 
+     *  @see spark.components.RichEditableText#selectable
+     *  @see spark.components.supportClasses.StyleableTextField#selectable
      *  
+     *  @default true
+     * 
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
@@ -868,7 +1152,18 @@ public class SkinnableTextBase extends SkinnableComponent
     [Bindable("selectionChange")]
     
     /**
-     *  @copy spark.components.RichEditableText#selectionActivePosition
+     *  A character position, relative to the beginning of the
+     *  <code>text</code> String, specifying the end of the selection
+     *  that moves when the selection is extended with the arrow keys.
+     * 
+     *  <p><b>For the Spark theme, see
+     *  spark.components.RichEditableText.selectionActivePosition</b></p>
+     *
+     *  <p><b>For the Mobile theme, see
+     *  spark.components.supportClasses.StyleableTextField.selectionActivePosition</b></p>
+     * 
+     *  @see spark.components.RichEditableText#selectionActivePosition
+     *  @see spark.components.supportClasses.StyleableTextField#selectionActivePosition
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -890,8 +1185,19 @@ public class SkinnableTextBase extends SkinnableComponent
     [Bindable("selectionChange")]
     
     /**
-     *  @copy spark.components.RichEditableText#selectionAnchorPosition
-     *  
+     *  A character position, relative to the beginning of the
+     *  <code>text</code> String, specifying the end of the selection
+     *  that stays fixed when the selection is extended with the arrow keys.
+     * 
+     *  <p><b>For the Spark theme, see
+     *  spark.components.RichEditableText.selectionAnchorPosition</b></p>
+     *
+     *  <p><b>For the Mobile theme, see
+     *  spark.components.supportClasses.StyleableTextField.selectionAnchorPosition</b></p>
+     * 
+     *  @see spark.components.RichEditableText#selectionAnchorPosition
+     *  @see spark.components.supportClasses.StyleableTextField#selectionAnchorPosition
+     *   
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
@@ -906,11 +1212,20 @@ public class SkinnableTextBase extends SkinnableComponent
     //  selectionHighlighting
     //----------------------------------
 
+    [Inspectable(category="General", enumeration="always,whenActive,whenFocused", defaultValue="whenFocused")]
+    
     /**
-     *  @copy spark.components.RichEditableText#selectionHighlighting
-     *  
+     *  Determines when the text selection is highlighted.
+     * 
+     *  <p><b>For the Spark theme, see
+     *  spark.components.RichEditableText.selectionHighlighting</b></p>
+     *
+     *  <p><b>For the Mobile theme, this is not supported.</b></p>
+     * 
+     *  @see spark.components.RichEditableText#selectionHighlighting
+     * 
      *  @default TextSelectionHighlighting.WHEN_FOCUSED
-     *  
+     * 
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
@@ -918,11 +1233,13 @@ public class SkinnableTextBase extends SkinnableComponent
      */
     public function get selectionHighlighting():String 
     {
-        if (textDisplay)
-            return textDisplay.selectionHighlighting;
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
+        
+        if (richEditableText)
+            return richEditableText.selectionHighlighting;
             
         // want the default to be "when focused"
-        var v:* = textDisplayProperties.selectionHighlighting;
+        var v:* = textDisplay ? undefined : textDisplayProperties.selectionHighlighting;
         return (v === undefined) ? TextSelectionHighlighting.WHEN_FOCUSED : v;
     }
     
@@ -933,7 +1250,10 @@ public class SkinnableTextBase extends SkinnableComponent
     {
         if (textDisplay)
         {
-            textDisplay.selectionHighlighting = value;
+            var richEditableText:RichEditableText = textDisplay as RichEditableText;
+            
+            if (richEditableText)
+                richEditableText.selectionHighlighting = value;
             textDisplayProperties = BitFlagUtil.update(
                                     uint(textDisplayProperties), 
                                     SELECTION_HIGHLIGHTING_FLAG, true);
@@ -951,10 +1271,21 @@ public class SkinnableTextBase extends SkinnableComponent
     //  text
     //----------------------------------
     
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="")]
     
     /**
-     *  @copy spark.components.RichEditableText#text
+     *  The text displayed by this text component.
+     * 
+     *  <p><b>For the Spark theme, see
+     *  spark.components.RichEditableText.text</b></p>
+     *
+     *  <p><b>For the Mobile theme, see
+     *  spark.components.supportClasses.StyleableTextField.text</b></p>
+     * 
+     *  @see spark.components.RichEditableText#text
+     *  @see spark.components.supportClasses.StyleableTextField#text
+     * 
+     *  @default ""
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -979,6 +1310,8 @@ public class SkinnableTextBase extends SkinnableComponent
      */
     public function set text(value:String):void
     {
+        // text should never be null.  Convert null to the empty string.
+        
         if (textDisplay)
         {
             textDisplay.text = value;
@@ -987,7 +1320,7 @@ public class SkinnableTextBase extends SkinnableComponent
         }
         else
         {
-            textDisplayProperties.text = value;
+            textDisplayProperties.text = value ? value : "";
 
             // Of 'text', 'textFlow', and 'content', the last one set wins.  So
             // if we're holding onto the properties until the skin is loaded
@@ -997,7 +1330,8 @@ public class SkinnableTextBase extends SkinnableComponent
         }
 
         // Generate an UPDATE_COMPLETE event.
-        invalidateProperties();                    
+        invalidateProperties();
+        invalidateSkinState();
      }
 
     //--------------------------------------------------------------------------
@@ -1006,29 +1340,56 @@ public class SkinnableTextBase extends SkinnableComponent
     //
     //--------------------------------------------------------------------------
 
-	/**
-	 *  @private
-	 */
-	override protected function commitProperties():void
-	{
-		super.commitProperties();
-		
-		if (accessibilityPropertiesChanged)
-		{
-			if (textDisplay)
-			{
-				textDisplay.accessibilityProperties = _accessibilityProperties;
+    /**
+     *  @private
+     */
+    override protected function commitProperties():void
+    {
+        super.commitProperties();
+        
+        if (accessibilityPropertiesChanged)
+        {
+            if (textDisplay)
+            {
+                textDisplay.accessibilityProperties = _accessibilityProperties;
                 textDisplay.tabIndex = _tabIndex;             
                 
-				// Note: Calling updateProperties() on players that don't
-				// support accessibility will throw an RTE.
-				if (Capabilities.hasAccessibility)
-					Accessibility.updateProperties();
-			}
-			
-			accessibilityPropertiesChanged = false;
-		}
-	}
+                // Note: Calling updateProperties() on players that don't
+                // support accessibility will throw an RTE.
+                if (Capabilities.hasAccessibility)
+                    Accessibility.updateProperties();
+            }
+            
+            accessibilityPropertiesChanged = false;
+        }
+    }
+    
+    /**
+     *  @private
+     */
+    override public function styleChanged(styleProp:String):void
+    {
+        super.styleChanged(styleProp);
+        
+        if (!styleProp ||
+            styleProp == "styleName" || styleProp == "interactionMode")
+        {
+            if (getStyle("interactionMode") == InteractionMode.TOUCH && !touchHandlersAdded)
+            {
+                addEventListener(MouseEvent.MOUSE_DOWN, touchMouseDownHandler);
+                addEventListener(TouchInteractionEvent.TOUCH_INTERACTION_START,
+                    touchInteractionStartHandler);
+                touchHandlersAdded = true;
+            }
+            else if (getStyle("interactionMode") == InteractionMode.MOUSE && touchHandlersAdded)
+            {
+                removeEventListener(MouseEvent.MOUSE_DOWN, touchMouseDownHandler);
+                removeEventListener(TouchInteractionEvent.TOUCH_INTERACTION_START,
+                    touchInteractionStartHandler);
+                touchHandlersAdded = false;
+            }
+        }
+    }
 
     /**
      *  @private
@@ -1037,6 +1398,18 @@ public class SkinnableTextBase extends SkinnableComponent
     {
         super.partAdded(partName, instance);
 
+        if (instance == promptDisplay)
+        {
+            var newPromptDisplayProperties:uint = 0;
+            if (promptDisplayProperties.prompt !== undefined)
+            {
+                promptDisplay.text = promptDisplayProperties.prompt;
+                newPromptDisplayProperties = BitFlagUtil.update(
+                    uint(newPromptDisplayProperties), PROMPT_TEXT_PROPERTY_FLAG, true);
+            }
+            promptDisplayProperties = newPromptDisplayProperties;
+        }
+        
         if (instance == textDisplay)
         {
             // Copy proxied values from textDisplayProperties (if set) to 
@@ -1046,7 +1419,7 @@ public class SkinnableTextBase extends SkinnableComponent
             // Focus on this, rather than the inner RET component.
             textDisplay.focusEnabled = false;
 
-            // Start listening for various events from the RichEditableText.
+            // Start listening for various events from the IEditableText.
 
             textDisplay.addEventListener(SelectionEvent.SELECTION_CHANGE,
                                          textDisplay_selectionChangeHandler);
@@ -1079,7 +1452,7 @@ public class SkinnableTextBase extends SkinnableComponent
             // textDisplayProperties.                        
             textDisplayRemoved();            
             
-            // Stop listening for various events from the RichEditableText.
+            // Stop listening for various events from the IEditableText.
 
             textDisplay.removeEventListener(SelectionEvent.SELECTION_CHANGE,
                                             textDisplay_selectionChangeHandler);
@@ -1096,6 +1469,19 @@ public class SkinnableTextBase extends SkinnableComponent
             textDisplay.removeEventListener(FlexEvent.VALUE_COMMIT,
                                             textDisplay_valueCommitHandler);
         }
+        
+        if (instance == promptDisplay)
+        {
+            var newPromptDisplayProperties:Object = {};
+            
+            if (BitFlagUtil.isSet(uint(promptDisplayProperties), 
+                PROMPT_TEXT_PROPERTY_FLAG))
+            {
+                newPromptDisplayProperties.prompt = 
+                    promptDisplay.text;
+            }
+            promptDisplayProperties = newPromptDisplayProperties;
+        }
     }
     
     /**
@@ -1103,17 +1489,54 @@ public class SkinnableTextBase extends SkinnableComponent
      */
     override protected function getCurrentSkinState():String
     {
+        if (focusManager && focusManager.getFocus() != focusManager.findFocusManagerComponent(this) && 
+            prompt != null && prompt != "")
+        {
+            if (text.length == 0)
+            {
+                if (enabled && skin && skin.hasState("normalWithPrompt"))
+                    return "normalWithPrompt";
+                if (!enabled && skin && skin.hasState("disabledWithPrompt"))
+                    return "disabledWithPrompt";
+            }
+        }
         return enabled ? "normal" : "disabled";
     }
 
     /**
      *  @private
-     *  Focus should always be on the internal RichEditableText.
+     *  Focus should always be on the internal textDisplay.
      */
     override public function setFocus():void
     {
+        // If the mouse is down, then we don't want the TextField to open the soft keyboard until mouse up. 
+        // Otherwise, this was called programmatically and we want the soft keyboard to appear immediately.
+        // Note that isMouseDown can only be true when we are in InteractionMode == TOUCH. 
         if (textDisplay)
-            textDisplay.setFocus();
+        {
+            if (isMouseDown)
+            {
+                delaySetFocus = true;
+                
+                // Cancelling an ACTIVATING event will close the softKeyboard if it is 
+                // currently active on iOS only. Add a check to only cancel the event
+                // if the softKeyboard is not active. Otherwise, the softKeyboard will
+                // close if you press on the skin of a text component.
+                var topLevelApp:Application = FlexGlobals.topLevelApplication as Application;
+                var cancelEvent:Boolean = !(topLevelApp && topLevelApp.isSoftKeyboardActive);
+                if (cancelEvent)
+                    addEventListener(SoftKeyboardEvent.SOFT_KEYBOARD_ACTIVATING, softKeyboardActivatingHandler);
+                
+                textDisplay.setFocus();
+                
+                if (cancelEvent)
+                    removeEventListener(SoftKeyboardEvent.SOFT_KEYBOARD_ACTIVATING, softKeyboardActivatingHandler);
+            }
+            else
+            {
+                textDisplay.setFocus();
+            }
+        }
     }
 
     /**
@@ -1129,7 +1552,7 @@ public class SkinnableTextBase extends SkinnableComponent
     //  Methods
     //
     //--------------------------------------------------------------------------
-
+    
     /**
      *  @copy spark.components.RichEditableText#insertText()
      *  
@@ -1213,9 +1636,14 @@ public class SkinnableTextBase extends SkinnableComponent
     {        
         if (textDisplay)
         {
-            textDisplay.content = value;
-            textDisplayProperties = BitFlagUtil.update(
-                uint(textDisplayProperties), CONTENT_PROPERTY_FLAG, true);
+            var richEditableText:RichEditableText = textDisplay as RichEditableText;
+            
+            if (richEditableText)
+            {
+                richEditableText.content = value;
+                textDisplayProperties = BitFlagUtil.update(
+                    uint(textDisplayProperties), CONTENT_PROPERTY_FLAG, true);
+            }
         }
         else
         {
@@ -1237,11 +1665,13 @@ public class SkinnableTextBase extends SkinnableComponent
      */
     mx_internal function getHeightInLines():Number
     {
-        if (textDisplay)
-            return textDisplay.heightInLines;
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
+
+        if (richEditableText)
+            return richEditableText.heightInLines;
             
         // want the default to be NaN
-        var v:* = textDisplayProperties.heightInLines;        
+        var v:* = textDisplay ? undefined : textDisplayProperties.heightInLines;        
         return (v === undefined) ? NaN : v;
     }
 
@@ -1252,7 +1682,10 @@ public class SkinnableTextBase extends SkinnableComponent
     {
         if (textDisplay)
         {
-            textDisplay.heightInLines = value;
+            var richEditableText:RichEditableText = textDisplay as RichEditableText;
+
+            if (richEditableText)
+                richEditableText.heightInLines = value;
             textDisplayProperties = BitFlagUtil.update(
                 uint(textDisplayProperties), 
                 HEIGHT_IN_LINES_PROPERTY_FLAG, true);
@@ -1267,18 +1700,60 @@ public class SkinnableTextBase extends SkinnableComponent
     }
 
     /**
+     *  @see #prompt
+     *
+     *  @private
+     */
+    mx_internal function getPrompt():String
+    {
+        if (promptDisplay)
+        {
+            if (BitFlagUtil.isSet(uint(promptDisplayProperties), 
+                PROMPT_TEXT_PROPERTY_FLAG))
+                return promptDisplay.text;
+            return null;
+        }
+        
+        // want the default to be null
+        var v:* = promptDisplay ? undefined : promptDisplayProperties.prompt;
+        return (v === undefined) ? null : v;
+    }
+    
+    /**
+     *  @private
+     */
+    mx_internal function setPrompt(value:String):void
+    {
+        if (promptDisplay)
+        {
+            promptDisplay.text = value;
+            promptDisplayProperties = BitFlagUtil.update(
+                uint(promptDisplayProperties), 
+                PROMPT_TEXT_PROPERTY_FLAG, true);
+        }
+        else
+            promptDisplayProperties.prompt = value;
+        
+        // Generate an UPDATE_COMPLETE event.
+        invalidateProperties();       
+        invalidateSkinState();
+    }
+    
+    /**
      *  @private  
      */
     mx_internal function getTextFlow():TextFlow 
     {
-        if (textDisplay)
-            return textDisplay.textFlow;
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
+        
+        if (richEditableText)
+            return richEditableText.textFlow;
             
         // If there is no textDisplay, it isn't possible to set one of
         // text, textFlow or content and then get it in another form.
 
         // want the default to be null
-        var v:* = textDisplayProperties.textFlow;
+        var v:* = textDisplay ? undefined : textDisplayProperties.textFlow;
         return (v === undefined) ? null : v;
     }
     
@@ -1289,7 +1764,10 @@ public class SkinnableTextBase extends SkinnableComponent
     {
         if (textDisplay)
         {
-            textDisplay.textFlow = value;
+            var richEditableText:RichEditableText = textDisplay as RichEditableText;
+            
+            if (richEditableText)
+                richEditableText.textFlow = value;
             textDisplayProperties = BitFlagUtil.update(
                                     uint(textDisplayProperties), 
                                     TEXT_FLOW_PROPERTY_FLAG, true);
@@ -1306,6 +1784,48 @@ public class SkinnableTextBase extends SkinnableComponent
         }
 
         // Generate an UPDATE_COMPLETE event.
+        invalidateProperties();
+        invalidateSkinState();
+    }
+
+    /**
+     *  @see RichEditableText#typicalText
+     *
+     *  @private
+     */
+    mx_internal function getTypicalText():String
+    {
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
+        
+        if (richEditableText)
+            return richEditableText.typicalText;
+        
+        // want the default to be null
+        var v:* = textDisplay ? undefined : textDisplayProperties.typicalText;
+        return (v === undefined) ? null : v;
+    }
+    
+    /**
+     *  @private
+     */
+    mx_internal function setTypicalText(value:String):void
+    {
+        if (textDisplay)
+        {
+            var richEditableText:RichEditableText = textDisplay as RichEditableText;
+            
+            if (richEditableText)
+                richEditableText.typicalText = value;
+            textDisplayProperties = BitFlagUtil.update(
+                uint(textDisplayProperties), 
+                TYPICAL_TEXT_PROPERTY_FLAG, true);
+        }
+        else
+        {
+            textDisplayProperties.typicalText = value;
+        }
+        
+        // Generate an UPDATE_COMPLETE event.
         invalidateProperties();                    
     }
 
@@ -1319,11 +1839,13 @@ public class SkinnableTextBase extends SkinnableComponent
      */
     mx_internal function getWidthInChars():Number
     {
-        if (textDisplay)
-            return textDisplay.widthInChars
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
+
+        if (richEditableText)
+            return richEditableText.widthInChars
             
         // want the default to be NaN
-        var v:* = textDisplayProperties.widthInChars;
+        var v:* = textDisplay ? undefined : textDisplayProperties.widthInChars;
         return (v === undefined) ? NaN : v;
     }
 
@@ -1334,7 +1856,10 @@ public class SkinnableTextBase extends SkinnableComponent
     {
         if (textDisplay)
         {
-            textDisplay.widthInChars = value;
+            var richEditableText:RichEditableText = textDisplay as RichEditableText;
+
+            if (richEditableText)
+                richEditableText.widthInChars = value;
             textDisplayProperties = BitFlagUtil.update(
                 uint(textDisplayProperties), 
                 WIDTH_IN_CHARS_PROPERTY_FLAG, true);
@@ -1356,10 +1881,11 @@ public class SkinnableTextBase extends SkinnableComponent
     private function textDisplayAdded():void
     {        
         var newTextDisplayProperties:uint = 0;
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
         
-        if (textDisplayProperties.content !== undefined)
+        if (textDisplayProperties.content !== undefined && richEditableText)
         {
-            textDisplay.content = textDisplayProperties.content;
+            richEditableText.content = textDisplayProperties.content;
             newTextDisplayProperties = BitFlagUtil.update(
                 uint(newTextDisplayProperties), CONTENT_PROPERTY_FLAG, true);
         }
@@ -1380,17 +1906,17 @@ public class SkinnableTextBase extends SkinnableComponent
                 uint(newTextDisplayProperties), EDITABLE_PROPERTY_FLAG, true);
         }
 
-        if (textDisplayProperties.heightInLines !== undefined)
+        if (textDisplayProperties.heightInLines !== undefined && richEditableText)
         {
-            textDisplay.heightInLines = textDisplayProperties.heightInLines;
+            richEditableText.heightInLines = textDisplayProperties.heightInLines;
             newTextDisplayProperties = BitFlagUtil.update(
                 uint(newTextDisplayProperties), 
                 HEIGHT_IN_LINES_PROPERTY_FLAG, true);
         }
 
-        if (textDisplayProperties.imeMode !== undefined)
+        if (textDisplayProperties.imeMode !== undefined && richEditableText)
         {
-            textDisplay.imeMode = textDisplayProperties.imeMode;
+            richEditableText.imeMode = textDisplayProperties.imeMode;
             newTextDisplayProperties = BitFlagUtil.update(
                 uint(newTextDisplayProperties), IME_MODE_PROPERTY_FLAG, true);
         }
@@ -1401,17 +1927,13 @@ public class SkinnableTextBase extends SkinnableComponent
             newTextDisplayProperties = BitFlagUtil.update(
                 uint(newTextDisplayProperties), MAX_CHARS_PROPERTY_FLAG, true);
         }
-
-        if (textDisplayProperties.maxHeight !== undefined)
-        {
-            textDisplay.maxHeight = textDisplayProperties.maxHeight;
-            newTextDisplayProperties = BitFlagUtil.update(
-                uint(newTextDisplayProperties), MAX_HEIGHT_PROPERTY_FLAG, true);
-        }
         
         if (textDisplayProperties.maxWidth !== undefined)
         {
-            textDisplay.maxWidth = textDisplayProperties.maxWidth;
+            if (richEditableText)
+                richEditableText.maxWidth = textDisplayProperties.maxWidth;
+            else
+                super.maxWidth = textDisplayProperties.maxWidth;
             newTextDisplayProperties = BitFlagUtil.update(
                 uint(newTextDisplayProperties), MAX_WIDTH_PROPERTY_FLAG, true);
         }
@@ -1430,9 +1952,9 @@ public class SkinnableTextBase extends SkinnableComponent
                 uint(newTextDisplayProperties), SELECTABLE_PROPERTY_FLAG, true);
         }
 
-        if (textDisplayProperties.selectionHighlighting !== undefined)
+        if (textDisplayProperties.selectionHighlighting !== undefined && richEditableText)
         {
-            textDisplay.selectionHighlighting = 
+            richEditableText.selectionHighlighting = 
                 textDisplayProperties.selectionHighlighting;
             newTextDisplayProperties = BitFlagUtil.update(
                 uint(newTextDisplayProperties), 
@@ -1446,16 +1968,24 @@ public class SkinnableTextBase extends SkinnableComponent
                 uint(newTextDisplayProperties), TEXT_PROPERTY_FLAG, true);
         }
 
-        if (textDisplayProperties.textFlow !== undefined)
+        if (textDisplayProperties.textFlow !== undefined && richEditableText)
         {
-            textDisplay.textFlow = textDisplayProperties.textFlow;
+            richEditableText.textFlow = textDisplayProperties.textFlow;
             newTextDisplayProperties = BitFlagUtil.update(
                 uint(newTextDisplayProperties), TEXT_FLOW_PROPERTY_FLAG, true);
         }
 
-        if (textDisplayProperties.widthInChars !== undefined)
+        if (textDisplayProperties.typicalText !== undefined && richEditableText)
         {
-            textDisplay.widthInChars = textDisplayProperties.widthInChars;
+            richEditableText.typicalText = textDisplayProperties.typicalText;
+            newTextDisplayProperties = BitFlagUtil.update(
+                uint(newTextDisplayProperties), 
+                TYPICAL_TEXT_PROPERTY_FLAG, true);
+        }
+        
+        if (textDisplayProperties.widthInChars !== undefined && richEditableText)
+        {
+            richEditableText.widthInChars = textDisplayProperties.widthInChars;
             newTextDisplayProperties = BitFlagUtil.update(
                 uint(newTextDisplayProperties), 
                 WIDTH_IN_CHARS_PROPERTY_FLAG, true);
@@ -1473,6 +2003,7 @@ public class SkinnableTextBase extends SkinnableComponent
     private function textDisplayRemoved():void
     {        
         var newTextDisplayProperties:Object = {};
+        var richEditableText:RichEditableText = textDisplay as RichEditableText;
         
         if (BitFlagUtil.isSet(uint(textDisplayProperties), 
                               DISPLAY_AS_PASSWORD_PROPERTY_FLAG))
@@ -1488,15 +2019,15 @@ public class SkinnableTextBase extends SkinnableComponent
         }
         
         if (BitFlagUtil.isSet(uint(textDisplayProperties), 
-                              HEIGHT_IN_LINES_PROPERTY_FLAG))
+                              HEIGHT_IN_LINES_PROPERTY_FLAG) && richEditableText)
         {
-            newTextDisplayProperties.heightInLines = textDisplay.heightInLines;
+            newTextDisplayProperties.heightInLines = richEditableText.heightInLines;
         }
 
         if (BitFlagUtil.isSet(uint(textDisplayProperties), 
-                              IME_MODE_PROPERTY_FLAG))
+                              IME_MODE_PROPERTY_FLAG) && richEditableText)
         {
-            newTextDisplayProperties.imeMode = textDisplay.imeMode;
+            newTextDisplayProperties.imeMode = richEditableText.imeMode;
         }
         
         if (BitFlagUtil.isSet(uint(textDisplayProperties), 
@@ -1506,15 +2037,10 @@ public class SkinnableTextBase extends SkinnableComponent
         }
 
         if (BitFlagUtil.isSet(uint(textDisplayProperties), 
-            MAX_HEIGHT_PROPERTY_FLAG))
-        {
-            newTextDisplayProperties.maxHeight = textDisplay.maxHeight;
-        }
-
-        if (BitFlagUtil.isSet(uint(textDisplayProperties), 
                               MAX_WIDTH_PROPERTY_FLAG))
         {
-            newTextDisplayProperties.maxWidth = textDisplay.maxWidth;
+            newTextDisplayProperties.maxWidth = richEditableText ? 
+                richEditableText.maxWidth : super.maxWidth;
         }
 
         if (BitFlagUtil.isSet(uint(textDisplayProperties), 
@@ -1530,10 +2056,10 @@ public class SkinnableTextBase extends SkinnableComponent
         }
 
         if (BitFlagUtil.isSet(uint(textDisplayProperties), 
-                              SELECTION_HIGHLIGHTING_FLAG))
+                              SELECTION_HIGHLIGHTING_FLAG) && richEditableText)
         {
             newTextDisplayProperties.selectionHighlighting = 
-                textDisplay.selectionHighlighting;
+                richEditableText.selectionHighlighting;
         }
             
         // Text is special.            
@@ -1545,17 +2071,23 @@ public class SkinnableTextBase extends SkinnableComponent
         if (BitFlagUtil.isSet(uint(textDisplayProperties), 
                 TEXT_FLOW_PROPERTY_FLAG) || 
             BitFlagUtil.isSet(uint(textDisplayProperties), 
-                CONTENT_PROPERTY_FLAG))
+                CONTENT_PROPERTY_FLAG) && richEditableText)
         {
-            newTextDisplayProperties.textFlow = textDisplay.textFlow;
+            newTextDisplayProperties.textFlow = richEditableText.textFlow;
         }
 
         if (BitFlagUtil.isSet(uint(textDisplayProperties), 
-                              WIDTH_IN_CHARS_PROPERTY_FLAG))
+                              TYPICAL_TEXT_PROPERTY_FLAG) && richEditableText)
         {
-            newTextDisplayProperties.widthInChars = textDisplay.widthInChars;
+            newTextDisplayProperties.typicalText = richEditableText.typicalText;
         }
             
+        if (BitFlagUtil.isSet(uint(textDisplayProperties), 
+            WIDTH_IN_CHARS_PROPERTY_FLAG) && richEditableText)
+        {
+            newTextDisplayProperties.widthInChars = richEditableText.widthInChars;
+        }
+        
         // Switch from storing bit mask to storing properties.
         textDisplayProperties = newTextDisplayProperties;
     }
@@ -1586,15 +2118,123 @@ public class SkinnableTextBase extends SkinnableComponent
         if (enabled && editable && focusManager)
             focusManager.showFocusIndicator = true;
 
+        invalidateSkinState();
+        
         super.focusInHandler(event);
     }
  
+    /**
+     *  @private
+     */
+    override protected function focusOutHandler(event:FocusEvent):void
+    {
+        if (event.target == this)
+            return;
+        
+        invalidateSkinState();
+        
+        super.focusOutHandler(event);
+    }
+
     //--------------------------------------------------------------------------
     //
     //  Event handlers
     //
     //--------------------------------------------------------------------------
 
+
+    /**
+     * @private
+     * Called if we are in touch interaction mode and we receive a mouseDown
+     */  
+    private function touchMouseDownHandler(event:MouseEvent):void
+    {
+        isMouseDown = true;
+        mouseDownTarget = event.target as InteractiveObject;
+        
+        // If we already have focus, make sure to open soft keyboard
+        // on mouse up
+        if (focusManager.getFocus() == this)
+            delaySetFocus = true;
+        
+        // Wait for a mouseUp somewhere
+        systemManager.getSandboxRoot().addEventListener(
+            MouseEvent.MOUSE_UP, touchMouseUpHandler, false, 0, true);
+        systemManager.getSandboxRoot().addEventListener(
+            SandboxMouseEvent.MOUSE_UP_SOMEWHERE, touchMouseUpHandler, false, 0, true);
+    }
+    
+    /**
+     * @private
+     * Called if we are in touch interaction mode and a mouseUp occurs on the stage while isMouseDown is true
+     */ 
+    private function touchMouseUpHandler(event:Event):void
+    {        
+        /* 
+         We set the focus on the component on mouseUp to activate the softKeyboard   
+         We only set focus if the following conditions are met:
+         1. mouseUp occurs on this component
+         2. mouseDown occured on any subcomponent besides the textDisplay OR
+         mouseDown occurred on textDisplay and mouseUp did not occur on textDisplay
+        
+         The mouseDown and mouseUp on textDisplay case is handled by the Player
+        */        
+        if ((event.target is DisplayObject && contains(DisplayObject(event.target))) 
+            && (delaySetFocus ||
+             (mouseDownTarget == textDisplay && event.target != textDisplay)))
+        {
+            if (textDisplay)
+                textDisplay.setFocus();
+        }
+        
+        clearMouseDownState();
+    }
+       
+    /**
+     * @private
+     * Called if we are inside of a Scroller and the user has started a scroll gesture
+     */
+    private function touchInteractionStartHandler(event:TouchInteractionEvent):void
+    {
+        // if in iOS and keyboard is up and scrolling is occurring, drop the keyboard
+        var topLevelApp:Application = FlexGlobals.topLevelApplication as Application;
+        if (isIOS && topLevelApp && topLevelApp.isSoftKeyboardActive && editable)
+        {
+            // set focus
+            stage.focus = null;
+        }
+        
+        // Clear out the state because starting a scroll gesture should never 
+        // open the soft keyboard
+        clearMouseDownState();
+    }    
+    
+    /**
+     * @private
+     * Helper function to clear the state if the mouse is up or we started as scroll gesture
+     */
+    private function clearMouseDownState():void
+    {
+        if (isMouseDown)
+        {
+            systemManager.getSandboxRoot().removeEventListener(
+                MouseEvent.MOUSE_UP, touchMouseUpHandler, false);
+            systemManager.getSandboxRoot().removeEventListener(
+                SandboxMouseEvent.MOUSE_UP_SOMEWHERE, touchMouseUpHandler, false);
+            isMouseDown = false;
+            delaySetFocus = false;
+            mouseDownTarget = null;
+        }
+    }
+    
+    /**
+     * @private
+     */
+    private function softKeyboardActivatingHandler(event:SoftKeyboardEvent):void
+    {
+        event.preventDefault();
+    }
+    
     /**
      *  @private
      *  Called when the RichEditableText dispatches a 'selectionChange' event.
@@ -1614,7 +2254,7 @@ public class SkinnableTextBase extends SkinnableComponent
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-    private function textDisplay_changeHandler(event:TextOperationEvent):void
+    private function textDisplay_changeHandler(event:Event):void
     {        
         //trace(id, "textDisplay_changeHandler", textDisplay.text);
         

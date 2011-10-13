@@ -31,7 +31,7 @@ import java.net.URLClassLoader;
 import java.util.List;
 
 /**
- *
+ * This class contains common data and logic used by all the Flex Ant tasks.
  */
 public abstract class FlexTask extends Java
 {
@@ -117,14 +117,21 @@ public abstract class FlexTask extends Java
 
     protected NestedAttributeElement createElem(String attrib, OptionSpec spec)
     {
-        NestedAttributeElement e = new NestedAttributeElement(attrib, spec);
+        NestedAttributeElement e = new NestedAttributeElement(attrib, spec, this);
         nestedAttribs.add(e);
         return e;
     }
 
     protected NestedAttributeElement createElem(String[] attribs, OptionSpec spec)
     {
-        NestedAttributeElement e = new NestedAttributeElement(attribs, spec);
+        NestedAttributeElement e = new NestedAttributeElement(attribs, spec, this);
+        nestedAttribs.add(e);
+        return e;
+    }
+    
+    protected NestedAttributeElement createElemAllowAppend(String[] attribs, OptionSpec spec)
+    {
+        NestedAttributeElement e = new NestedAttributeElement(attribs, spec, this, true);
         nestedAttribs.add(e);
         return e;
     }
@@ -228,7 +235,6 @@ public abstract class FlexTask extends Java
 
     /**
      * Executes the task in a separate VM
-     *
      */
     private void executeOutOfProcess() throws BuildException
     {
@@ -261,7 +267,6 @@ public abstract class FlexTask extends Java
 
     /**
      * Executes the task in the same VM
-     *
      */
     private void executeInProcess() throws BuildException
     {

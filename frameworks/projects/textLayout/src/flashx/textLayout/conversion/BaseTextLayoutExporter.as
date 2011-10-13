@@ -1,24 +1,30 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.conversion
 {
+	import flash.system.System;
 	import flash.utils.getQualifiedClassName;
+	
+	import flashx.textLayout.TextLayoutVersion;
 	import flashx.textLayout.debug.assert;
+	import flashx.textLayout.elements.Configuration;
 	import flashx.textLayout.elements.ContainerFormattedElement;
 	import flashx.textLayout.elements.FlowElement;
 	import flashx.textLayout.elements.FlowGroupElement;
+	import flashx.textLayout.elements.GlobalSettings;
 	import flashx.textLayout.elements.LinkElement;
 	import flashx.textLayout.elements.ParagraphFormattedElement;
 	import flashx.textLayout.elements.SpanElement;
 	import flashx.textLayout.elements.TextFlow;
+	import flashx.textLayout.elements.TextRange;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.formats.WhiteSpaceCollapse;
@@ -29,9 +35,9 @@ package flashx.textLayout.conversion
 	[ExcludeClass]
 	/** 
 	 * @private 
-	 * Export filter for TextLayout format. 
+	 * Export converter for TextLayout format. 
 	 */
-	internal class BaseTextLayoutExporter implements ITextExporter
+	internal class BaseTextLayoutExporter extends ConverterBase implements ITextExporter
 	{	
 		private var _config:ImportExportConfiguration;
 		private var _rootTag:XML;
@@ -43,29 +49,17 @@ package flashx.textLayout.conversion
 			_ns = ns;
 			_rootTag = rootTag;
 		}
-
 		
-		/** Clear results from last export. */
-		protected function clear():void
-		{
-			// does nothing
-		}
-		
-		/** Export text content
-		 * @param source	the text to export
-		 * @param conversionType 	what type to return
-		 * @return Object	the exported content
+		/** @copy ITextExporter#export()
 		 */
 		public function export(source:TextFlow, conversionType:String):Object
 		{
 			clear();
-			if (conversionType == ConversionType.STRING_TYPE)
-				return exportToString(source);
-			else if (conversionType == ConversionType.XML_TYPE)
-				return exportToXML(source);
-			return null;
+			
+			var result:XML = exportToXML(source);
+			return conversionType == ConversionType.STRING_TYPE ? convertXMLToString(result) : result;
 		}
-
+		
 		/** Export text content of a TextFlow into XFL format.
 		 * @param source	the text to export
 		 * @return XML	the exported content
@@ -88,24 +82,25 @@ package flashx.textLayout.conversion
 		}
 		
 		/** Export text content as a string
-		 * @param source	the text to export
+		 * @param xml	the XML to convert
 		 * @return String	the exported content
+		 * @private
 		 */
-		protected function exportToString(source:TextFlow):String
+		static tlf_internal function convertXMLToString(xml:XML):String
 		{
 			var result:String;
-			// We do some careful type casting here so that leading and trailing spaces in the XML don't
-			// get dropped when it is converted to a string
+			// Adjust settings so that leading and trailing spaces in the XML don't get dropped when it is converted to a string
 			var originalSettings:Object = XML.settings();
 			try
 			{
 				XML.ignoreProcessingInstructions = false;		
 				XML.ignoreWhitespace = false;
 				XML.prettyPrinting = false;
-				result = exportToXML(source).toXMLString();
+				result = xml.toXMLString();
+				if (Configuration.playerEnablesArgoFeatures)
+					System["disposeXML"](xml);
 				XML.setSettings(originalSettings);
 			}
-			
 			catch(e:Error)
 			{
 				XML.setSettings(originalSettings);
@@ -132,7 +127,7 @@ package flashx.textLayout.conversion
 		protected function exportFlowElement (flowElement:FlowElement):XMLList
 		{
 			var className:String = flash.utils.getQualifiedClassName(flowElement);
-			var elementName:String = _config.lookupName(className);
+			var elementName:String = _config.lookupName(className);	// NO PMD
 			var output:XML = <{elementName}/>;
 			output.setNamespace(_ns);
 			return XMLList(output);
@@ -192,7 +187,7 @@ package flashx.textLayout.conversion
 			else
 			{
 				//this is the simple case where we don't have a character to replace
-				destination.appendChild(span.text);
+				destination.appendChild(spanText);
 			}		
 		}  
 		
@@ -276,6 +271,41 @@ package flashx.textLayout.conversion
 			}
 			return rslt;
 		}
+		
+		static public function exportList(exporter:BaseTextLayoutExporter, flowParagraph:ParagraphFormattedElement):XMLList
+		{
+			return exporter.exportList(flowParagraph);
+		}
+		
+		protected function exportList(flowElement:FlowElement):XMLList
+		{
+			var rslt:XMLList = exportFlowElement(flowElement);
+			// output each child
+			for(var childIter:int = 0; childIter < FlowGroupElement(flowElement).numChildren; ++childIter)
+			{
+				var flowChild:FlowElement = FlowGroupElement(flowElement).getChildAt(childIter);
+				rslt.appendChild(exportChild(flowChild));
+			}
+			return rslt;
+		}
+		
+		static public function exportListItem(exporter:BaseTextLayoutExporter, flowParagraph:ParagraphFormattedElement):XMLList
+		{
+			return exporter.exportListItem(flowParagraph);
+		}
+		
+		protected function exportListItem(flowElement:FlowElement):XMLList
+		{
+			var rslt:XMLList = exportFlowElement(flowElement);
+			// output each child
+			for(var childIter:int = 0; childIter < FlowGroupElement(flowElement).numChildren; ++childIter)
+			{
+				var flowChild:FlowElement = FlowGroupElement(flowElement).getChildAt(childIter);
+				rslt.appendChild(exportChild(flowChild));
+			}
+			return rslt;
+		}
+		
 		/** Base functionality for exporting a ContainerFormattedElement. Exports as a ParagraphFormattedElement,
 		 * and exports container attributes.
 		 * @param exporter	Root object for the export
@@ -308,6 +338,9 @@ package flashx.textLayout.conversion
 			
 			// TextLayout will use PRESERVE on output
 			output.@[TextLayoutFormat.whiteSpaceCollapseProperty.name] = WhiteSpaceCollapse.PRESERVE;
+			
+			// TextLayout adds version information
+			output.@["version"] = TextLayoutVersion.getVersionString(TextLayoutVersion.CURRENT_VERSION);
 						
 			return output;
 		}
@@ -327,75 +360,23 @@ package flashx.textLayout.conversion
 				return info.exporter(this, flowElement);
 			return null;
 		}
-				
-		private function exportObjectAsDictionary(key:String,styleDict:Object):XMLList
-		{
-			// link attributes only right now
-			if (key != LinkElement.LINK_NORMAL_FORMAT_NAME && key != LinkElement.LINK_ACTIVE_FORMAT_NAME && key != LinkElement.LINK_HOVER_FORMAT_NAME)
-				return null;
-
-			// create the TextLayoutFormat element
-			var elementName:String = "TextLayoutFormat";
-			var formatXML:XML = <{elementName}/>;
-			formatXML.setNamespace(flowNS);
-			exportStyles(XMLList(formatXML), styleDict, formatDescription);
-
-			// create the link format element
-			var linkFormatXML:XMLList = XMLList(<{key}/>);
-			linkFormatXML.appendChild(formatXML);
-			return linkFormatXML;
-		}
-		
+					
 		/** Helper function to export styles (core or user) in the form of xml attributes or xml children
-		 *
 		 * @param xml object to which attributes/children are added 
-		 * @styles the styles object: core styles, user styles, or a style dictionary 
-		 * @param description attribute class metadata object; must be specified for core styles, not otherwise
-		 * @param exclusions values to be excluded from being exported
+		 * @param sortableStyles an array of objects (xmlName,xmlVal) members that is sorted and exported.
 		 */
-		protected function exportStyles(xml:XMLList, styles:Object, description:Object=null, exclusions:Array=null):void
+		protected function exportStyles(xml:XMLList, sortableStyles:Array):void
 		{
-			var sortableStyles:Array = [];
-			for (var key:Object in styles)
-			{
-				var val:Object = styles[key];
-				if (!exclusions || exclusions.indexOf(val) == -1)
-				{
-					if (description)
-					{
-						// Core style
-						// Use the description object to filter out styles that should not be exported
-						// and to obtain the corresponding String to be used as an XML attribute value
-						var prop:Property = description[key];
-						if (prop)
-							sortableStyles.push({xmlName:key, xmlVal:prop.toXMLString(val)});
-					}
-					else
-					{
-						// User style
-						if ((val is String) || val.hasOwnProperty("toString"))
-						{
-							// Is or can be converted to a String which will be used as an XML attribute value
-							sortableStyles.push({xmlName:key, xmlVal:val});
-						}
-						else
-						{
-							// A style dictionary; Will be converted to an XMLList containing elements to be added as children 
-							var customDictProp:XMLList = exportObjectAsDictionary(key as String,val);
-							if (customDictProp)
-								sortableStyles.push({xmlName:key, xmlVal:customDictProp});
-						}
-						
-					}
-				}
-			}
-			
 			// Sort the styles based on name for predictable export order
 			sortableStyles.sortOn("xmlName");
 			
 			for each(var exportInfo:Object in sortableStyles)
             {
             	var xmlVal:Object = exportInfo.xmlVal;
+				CONFIG::debug{ assert(useClipboardAnnotations || exportInfo.xmlName != ConverterBase.MERGE_TO_NEXT_ON_PASTE, "Found paste merge attribute in exported TextFlow"); }
+				/* Filter out paste attributes */
+				if (!useClipboardAnnotations && exportInfo.xmlName == ConverterBase.MERGE_TO_NEXT_ON_PASTE)
+					continue;
             	if (xmlVal is String)
 					xml.@[exportInfo.xmlName] = xmlVal; // as an attribute
 				else if (xmlVal is XMLList)

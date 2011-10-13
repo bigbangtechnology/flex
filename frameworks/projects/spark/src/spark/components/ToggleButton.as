@@ -19,6 +19,14 @@ import spark.components.supportClasses.ToggleButtonBase;
 [IconFile("ToggleButton.png")]
 
 /**
+ * Because this component does not define a skin for the mobile theme, Adobe
+ * recommends that you not use it in a mobile application. Alternatively, you
+ * can define your own mobile skin for the component. For more information,
+ * see <a href="http://help.adobe.com/en_US/Flex/4.0/UsingSDK/WS53116913-F952-4b21-831F-9DE85B647C8A.html">Spark Skinning</a>.
+ */
+[DiscouragedForProfile("mobileDevice")]
+
+/**
  *  The ToggleButton component defines a toggle button. 
  *  Clicking the button toggles it between the up and an down states.
  *  If you click the button while it is in the up state, 
@@ -27,6 +35,12 @@ import spark.components.supportClasses.ToggleButtonBase;
  * 
  *  <p>You can get or set this state programmatically
  *  by using the <code>selected</code> property.</p>
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  <p>The ToggleButton control has the following default characteristics:</p>
  *     <table class="innertable">

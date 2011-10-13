@@ -1,12 +1,13 @@
+////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.compose
 {
 	import flash.display.DisplayObject;
@@ -15,7 +16,10 @@ package flashx.textLayout.compose
 	import flash.display.Shape;
 	import flash.geom.Point;
 	import flash.geom.Rectangle;
+	import flash.text.engine.ElementFormat;
+	import flash.text.engine.FontMetrics;
 	import flash.text.engine.TextBlock;
+	import flash.text.engine.TextElement;
 	import flash.text.engine.TextLine;
 	import flash.text.engine.TextLineValidity;
 	import flash.text.engine.TextRotation;
@@ -26,29 +30,40 @@ package flashx.textLayout.compose
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.edit.ISelectionManager;
 	import flashx.textLayout.edit.SelectionFormat;
+	import flashx.textLayout.elements.BackgroundManager;
 	import flashx.textLayout.elements.ContainerFormattedElement;
 	import flashx.textLayout.elements.FlowElement;
 	import flashx.textLayout.elements.FlowLeafElement;
 	import flashx.textLayout.elements.FlowValueHolder;
 	import flashx.textLayout.elements.InlineGraphicElement;
+	import flashx.textLayout.elements.LinkElement;
+	import flashx.textLayout.elements.LinkState;
+	import flashx.textLayout.elements.ListElement;
+	import flashx.textLayout.elements.ListItemElement;
 	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.elements.SpanElement;
-	import flashx.textLayout.elements.SubParagraphGroupElement;
+	import flashx.textLayout.elements.SubParagraphGroupElementBase;
 	import flashx.textLayout.elements.TCYElement;
 	import flashx.textLayout.elements.TextFlow;
-	import flashx.textLayout.external.WeakRef;
+	import flashx.textLayout.factory.StringTextLineFactory;
 	import flashx.textLayout.formats.BackgroundColor;
 	import flashx.textLayout.formats.BlockProgression;
 	import flashx.textLayout.formats.Direction;
 	import flashx.textLayout.formats.Float;
+	import flashx.textLayout.formats.FormatValue;
+	import flashx.textLayout.formats.IListMarkerFormat;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.JustificationRule;
 	import flashx.textLayout.formats.LeadingModel;
 	import flashx.textLayout.formats.LineBreak;
+	import flashx.textLayout.formats.ListMarkerFormat;
+	import flashx.textLayout.formats.ListStylePosition;
+	import flashx.textLayout.formats.TextAlign;
 	import flashx.textLayout.formats.TextDecoration;
 	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.tlf_internal;
 	import flashx.textLayout.utils.CharacterUtil;
+	import flashx.textLayout.utils.Twips;
 	
 	use namespace tlf_internal;
 	
@@ -72,50 +87,153 @@ package flashx.textLayout.compose
 	public final class TextFlowLine implements IVerticalJustificationLine 
 	{
 		
-		
-		
-		/** @private */
-		
+		/** @private - the selection block cache */
+		static private var _selectionBlockCache:Dictionary = new Dictionary(true);
+				
 		private var _absoluteStart:int;		// text-offset of start of line - from beginning of the TextFlow
-		private var _textLength:int;	// number of chars to next line (incl trailing spaces, etc.)
-		private var _height:Number = 0;		// y advance
-		CONFIG::debug
-		{
-			private var _spaceBefore:Number = 0;	// amount of vertical space to leave at the top of the line
-			private var _spaceAfter:Number = 0;	// amount of vertical space to leave at the bottom of the line
-		}
-		private var _x:Number = 0;			// left edge of line
-		private var _y:Number = 0;			// top edge of line
-		private var _outerTargetWidth:Number = 0; // width line is composed to, excluding indents
+		private var _textLength:int;		// number of chars to next line (incl trailing spaces, etc.)
+		private var _x:Number = 0;			// left edge of line; left as Number because it is user-settable
+		private var _y:Number = 0;			// top edge of line; left as Number because it is user-settable
+
+		private var _height:Number = 0;				// y advance
+		private var _outerTargetWidth:Number = 0;	// width line is composed to, excluding indents
+
+
+		private var _boundsLeftTW:int = 2;			// text line bounds: logical left
+		private var _boundsRightTW:int = 1;			// text line bounds: logical right (if left > right, then it is not set)
 		
-		private var _boundsLeftTW:int = 2;			// text line bounds: left
-		private var _boundsRightTW:int = 1;			// text line bounds: right (if left > right, then it is not set)
-		private var _boundsTopTW:int;				// text line bounds: top
-		private var _boundsBottomTW:int;			// text line bounds: bottom
-		
-		private var _para:ParagraphElement;			// owning paragraph
+		private var _para:ParagraphElement;				// owning paragraph
 		private var _controller:ContainerController;	// what frame the line was composed into
-		private var _columnIndex:int;			// column number in the container
+		private var _columnIndex:int;					// column number in the container
 		
 		private var _adornCount:int = 0;
+				
+		static private const VALIDITY_MASK:uint = 7;		// 3 bits
+		static private const ALIGNMENT_SHIFT:uint = 3;
+		static private const ALIGNMENT_MASK:uint = 24; 		// 2 bits
+		static private const NUMBERLINE_MASK:uint = 32;		// 1 bit
+		static private const GRAPHICELEMENT_MASK:uint = 64;	// 1 bit
+		
+		private var _flags:uint;
 		
 		// added to support TextFlowLine when TextLine not available
+
 		private var _ascent:Number;
 		private var _descent:Number;
 		private var _targetWidth:Number;
-		private var _validity:String;
-		private var _textHeight:Number;
 		private var _lineOffset:Number;
 		private var _lineExtent:Number;	// content bounds logical width for the line
-		private var _released:Boolean;	// True if line has been released from the TextBlock
-		private var _alignment:String;	// actual alignment applied to the line by composition (right or center), null if no alignment applied
-		private var _hasGraphicElement:Boolean;	// True if line has as graphic element
+		private var _accumulatedLineExtent:Number;
+		private var _accumulatedMinimumStart:Number;
+		private var _numberLinePosition:int;
 		
-		private var _textLineCache:WeakRef;
+
+		/** Constructor - creates a new TextFlowLine instance. 
+		 *  <p><strong>Note</strong>: No client should call this. It's exposed for writing your own composer.</p>
+		 *
+		 * @param textLine The TextLine display object to use for this line.
+		 * @param paragraph The paragraph (ParagraphElement) in which to place the line.
+		 * @param outerTargetWidth The width the line is composed to, excluding indents.
+		 * @param lineOffset The line's offset in pixels from the appropriate container inset (as dictated by paragraph direction and container block progression), prior to alignment of lines in the paragraph. 
+		 * @param absoluteStart	The character position in the text flow at which the line begins.
+		 * @param numChars	The number of characters in the line.
+		 *
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+	 	 * @langversion 3.0
+	 	 *
+	 	 * @see flash.text.engine.TextLine
+	 	 * @see flashx.textLayout.elements.ParagraphElement
+	 	 * @see #absoluteStart
+	 	 */
+		public function TextFlowLine(textLine:TextLine, paragraph:ParagraphElement, outerTargetWidth:Number = 0, lineOffset:Number = 0, absoluteStart:int = 0, numChars:int = 0)
+		{
+			initialize(paragraph, outerTargetWidth, lineOffset, absoluteStart,numChars,textLine);		
+		}
+		
+		/** @private */
+		tlf_internal function initialize(paragraph:ParagraphElement, outerTargetWidth:Number = 0, lineOffset:Number = 0, absoluteStart:int = 0, numChars:int = 0, textLine:TextLine = null):void
+		{
+			_para = paragraph;
+			_outerTargetWidth = outerTargetWidth;
+			_absoluteStart = absoluteStart;
+			_textLength = numChars;
+
+			_adornCount = 0;
+			_lineExtent = 0;
+			_accumulatedLineExtent = 0;
+			_accumulatedMinimumStart = TextLine.MAX_LINE_WIDTH;
+			
+			_flags = 0;
+			_controller = null;
+			
+			if (textLine)
+			{
+				textLine.userData = this;
+				_targetWidth = textLine.specifiedWidth;
+				_ascent = textLine.ascent;
+				_descent = textLine.descent;
+				// the docs say this is true
+				CONFIG::debug { assert(textLine.textHeight == textLine.ascent+textLine.descent,"bad textheight"); }
+				_lineOffset = lineOffset;
+				setValidity(textLine.validity);
+				CONFIG::debug { assert (textLine.validity == TextLineValidity.VALID, "Initializing TextFlowLine to invalid TextLine"); }
+				setFlag(textLine.hasGraphicElement?GRAPHICELEMENT_MASK:0,GRAPHICELEMENT_MASK);
+			}
+			else 
+				setValidity(TextLineValidity.INVALID);
+		}
+		
+		private function setFlag(value:uint,mask:uint):void
+		{
+			CONFIG::debug { assert((value|mask) == mask,"TFL:setFlag bad value"); }
+			_flags = (_flags & ~mask) | value;
+		}
+		private function getFlag(mask:uint):uint
+		{
+			return _flags & mask;
+		}
+		
+		/** @private */
+		tlf_internal function get heightTW():int
+		{ return Twips.to(_height); }
+		/** @private */
+		tlf_internal function get outerTargetWidthTW():int
+		{ return Twips.to(_outerTargetWidth); }
+		
+		/** @private */
+		tlf_internal function get ascentTW():int
+		{ return Twips.to(_ascent); }
+		/** @private */
+		tlf_internal function get targetWidthTW():int
+		{ return Twips.to(_targetWidth); }
+		/** @private */
+		tlf_internal function get textHeightTW():int
+		{ return Twips.to(textHeight); }
+		/** @private */
+		tlf_internal function get lineOffsetTW():int
+		{ return Twips.to(_lineOffset); }
+		/** @private */
+		tlf_internal function get lineExtentTW():int
+		{ return Twips.to(_lineExtent); }
 		
 		/** @private */
 		tlf_internal function get hasGraphicElement():Boolean
-		{ return _hasGraphicElement; }
+		{ return getFlag(GRAPHICELEMENT_MASK) != 0; }
+		
+		/** @private */
+		tlf_internal function get hasNumberLine():Boolean
+		{ return getFlag(NUMBERLINE_MASK) != 0; }
+		
+		/** @private */
+		tlf_internal function get numberLinePosition():Number
+		{ return Twips.from(_numberLinePosition); }
+		/** @private */
+		tlf_internal function set numberLinePosition(position:Number):void
+		{ 
+			CONFIG::debug { assert(Twips.from(Twips.to(position)) == position,"Bad numberLinePosition"); }
+			_numberLinePosition = Twips.to(position); 
+		}
 		
 		/**
 		 * The height of the text line, which is equal to <code>ascent</code> plus <code>descent</code>. The 
@@ -131,106 +249,7 @@ package flashx.textLayout.compose
 		 */
 		
 		public function get textHeight():Number 
-		{ return _textHeight; }	
-		
-		/** @private */
-		/**
-		 * Check if the line is visible by comparing a set rectangle to the supplied
-		 * rectangle (all values in Twips).
-		 */
-		tlf_internal function isLineVisible(wmode:String, x:int, y:int, w:int, h:int):Boolean
-		{
-			if (_boundsLeftTW > _boundsRightTW)
-				return false;
-			
-			if (wmode == BlockProgression.RL)
-				return _boundsRightTW >= x && _boundsLeftTW < x + w;
-			else
-				return _boundsBottomTW >= y && _boundsTopTW < y + h;
-		}
-		
-		/** @private
-		 * Set the text line bounds rectangle, all values in Twips.
-		 * If left > right, the rectangle is considered not to be set.
-		 */
-		tlf_internal function setLineBounds(x:int, y:int, w:int, h:int):void
-		{
-			_boundsLeftTW = x;
-			_boundsRightTW = x + w;
-			_boundsTopTW = y;
-			_boundsBottomTW = y + h;
-		}
-		
-		/** @private
-		 * Check if the text line bounds are set. If the stored left
-		 * value is > the right value, then the rectangle is not set.
-		 */
-		tlf_internal function hasLineBounds():Boolean
-		{
-			return (_boundsLeftTW <= _boundsRightTW);
-		}
-		
-		/** @private - the selection block cache */
-		static private var _selectionBlockCache:Dictionary = new Dictionary(true);
-		
-		private static const EMPTY_LINE_WIDTH:Number = 2;		// default size of empty line selection
-		
-		/** Constructor - creates a new TextFlowLine instance. 
-		 *  <p><strong>Note</strong>: No client should call this. It's exposed for writing your own composer.</p>
-		 *
-		 * @param textLine The TextLine display object to use for this line.
-		 * @param paragraph The paragraph (ParagraphElement) in which to place the line.
-		 * @param outerTargetWidth The width the line is composed to, excluding indents.
-		 * @param lineOffset The line's offset in pixels from the appropriate container inset (as dictated by paragraph direction and container block progression), prior to alignment of lines in the paragraph. 
-		 * @param absoluteStart	The character position in the text flow at which the line begins.
-		 * @param numChars	The number of characters in the line.
-		 *
-		 * @playerversion Flash 10
-		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 *
-		 * @see flash.text.engine.TextLine
-		 * @see ParagraphElement
-		 * @see #absoluteStart
-		 * @see #numChars
-		 */
-		
-		public function TextFlowLine(textLine:TextLine, paragraph:ParagraphElement, outerTargetWidth:Number = 0, lineOffset:Number = 0, absoluteStart:int = 0, numChars:int = 0)
-		{
-			initialize(paragraph, outerTargetWidth, lineOffset, absoluteStart,numChars,textLine);		
-		}
-		
-		/** @private */
-		tlf_internal function initialize(paragraph:ParagraphElement, outerTargetWidth:Number = 0, lineOffset:Number = 0, absoluteStart:int = 0, numChars:int = 0, textLine:TextLine = null):void
-		{
-			_para = paragraph;
-			_outerTargetWidth = outerTargetWidth;
-			_absoluteStart = absoluteStart;
-			_textLength = numChars;
-			_released = (textLine == null);
-			if (textLine)
-			{
-				_textLineCache = new WeakRef(textLine);
-				textLine.userData = this;
-				_targetWidth = textLine.specifiedWidth;
-				_ascent = textLine.ascent;
-				_descent = textLine.descent;
-				_textHeight = textLine.textHeight;
-				_lineOffset = lineOffset;
-				_validity = TextLineValidity.VALID;
-				_hasGraphicElement = textLine.hasGraphicElement;
-			}
-			else 
-				_validity = TextLineValidity.INVALID;
-		}
-		
-		/** @private */
-		tlf_internal function releaseTextLine():void
-		{ _textLineCache = null; }
-		
-		/** @private */
-		tlf_internal function peekTextLine():TextLine
-		{ return _textLineCache ? _textLineCache.get() : null; }
+		{ return _ascent+_descent; }	
 		
 		/** 
 		 * The horizontal position of the line relative to its container, expressed as the offset in pixels from the 
@@ -264,6 +283,10 @@ package flashx.textLayout.compose
 			_boundsRightTW = 1;
 		}
 		
+		/** @private */
+		tlf_internal function get xTW():int
+		{ return Twips.to(_x); }
+
 		/** 
 		 * The vertical position of the line relative to its container, expressed as the offset in pixels from the top 
 		 * of the container.
@@ -282,6 +305,10 @@ package flashx.textLayout.compose
 		public function get y():Number
 		{ return _y;  }
 		
+		/** @private */
+		tlf_internal function get yTW():int
+		{ return Twips.to(_y); }
+
 		/** This comment is ignored, but the setter should not be used and exists only to satisfy
 		 * the IVerticalJustificationLine interface.
 		 * @see flashx.textLayout.compose.IVerticalJustificationLine
@@ -311,10 +338,10 @@ package flashx.textLayout.compose
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 *
-		 * @see ParagraphElement
-		 * @see TextFlowLineLocation
+	 	 * @langversion 3.0
+	 	 *
+	 	 * @see flashx.textLayout.elements.ParagraphElement
+	 	 * @see TextFlowLineLocation
 		 */
 		
 		public function get location():int
@@ -326,7 +353,7 @@ package flashx.textLayout.compose
 				// Initialize settings for location
 				if (lineStart == 0)		// we're at the start of the paragraph
 					return _textLength == _para.textLength ? TextFlowLineLocation.ONLY : TextFlowLineLocation.FIRST;
-				if (lineStart + _textLength == _para.textLength)	// we're at the end of the para
+				if (lineStart + textLength == _para.textLength)	// we're at the end of the para
 					return TextFlowLineLocation.LAST;
 			}
 			return TextFlowLineLocation.MIDDLE;
@@ -366,9 +393,8 @@ package flashx.textLayout.compose
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 *
-		 * @see #width
+	 	 * @langversion 3.0
+	 	 *
 		 */
 		
 		public function get height():Number
@@ -415,11 +441,11 @@ package flashx.textLayout.compose
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 * 
-		 * @see ParagraphElement
-		 */
-		
+	 	 * @langversion 3.0
+	 	 * 
+	 	 * @see flashx.textLayout.elements.ParagraphElement
+	 	 */
+	 	 
 		public function get paragraph():ParagraphElement
 		{ return _para; }
 		
@@ -429,10 +455,10 @@ package flashx.textLayout.compose
 		 * @return 	the character position in the text flow at which the line begins.
 		 *
 		 * @playerversion Flash 10
-		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 *
-		 * @see TextFlow
+	 	 * @playerversion AIR 1.5
+	 	 * @langversion 3.0
+ 		 *
+ 		 * @see flashx.textLayout.elements.TextFlow
 		 */
 		
 		public function get absoluteStart():int
@@ -475,17 +501,8 @@ package flashx.textLayout.compose
 		
 		public function get spaceBefore():Number
 		{ 
-			CONFIG::debug 
-			{
-				var newResult:Number = (this.location & TextFlowLineLocation.FIRST)? _para.computedFormat.paragraphSpaceBefore : 0;
-				assert(newResult == _spaceBefore, "spaceBefore getting wrong result");
-			}
 		 	return (this.location & TextFlowLineLocation.FIRST)? _para.computedFormat.paragraphSpaceBefore : 0;
 		}
-		
-		/** @private */
-		CONFIG::debug tlf_internal function setSpaceBefore(val:Number):void
-		{  _spaceBefore = val; }
 		
 		/** 
 		 * The amount of space to leave after the line.
@@ -504,17 +521,8 @@ package flashx.textLayout.compose
 		
 		public function get spaceAfter():Number
 		{ 
-			CONFIG::debug 
-			{
-				var newResult:Number = (this.location & TextFlowLineLocation.LAST) ? _para.computedFormat.paragraphSpaceAfter : 0; 
-				assert(newResult == _spaceAfter, "spaceAfter getting wrong result");
-			}
 			return ((this.location & TextFlowLineLocation.LAST) ? _para.computedFormat.paragraphSpaceAfter : 0); 			
 		}
-		
-		/** @private */
-		CONFIG::debug tlf_internal function setSpaceAfter(val:Number):void
-		{ _spaceAfter = val ; }
 		
 		/** @private 
 		 * Target width not including paragraph indents */
@@ -551,41 +559,38 @@ package flashx.textLayout.compose
 			// TODO: just use the textLine.x and textLine.y - after all getTextLine now sets them.
 			// not going to change this right now though
 			var bp:String = paragraph.getAncestorWithContainer().computedFormat.blockProgression;
-			var shapeX:Number = createShapeX();
+			var shapeX:Number = this.x;
 			var shapeY:Number = createShapeY(bp);
 			if (bp == BlockProgression.TB)
 				shapeY += descent-textLine.height;
 			return new Rectangle(shapeX, shapeY, textLine.width, textLine.height);			
 		}
 		
+		static private const _validities:Array = [ TextLineValidity.INVALID, TextLineValidity.POSSIBLY_INVALID, TextLineValidity.STATIC, TextLineValidity.VALID, FlowDamageType.GEOMETRY ];
+		
+		private function setValidity(value:String):void
+		{
+			CONFIG::debug { assert(_validities.indexOf(value) != -1,"Bad alignment passed to TextFlowLine"); }
+			setFlag(_validities.indexOf(value),VALIDITY_MASK);			
+		}
 		/** The validity of the line. 
 		 * <p>A line can be invalid if the text, the attributes applied to it, or the controller settings have
 		 * changed since the line was created. An invalid line can still be displayed, and you can use it, but the values
-		 * used will be the values at the time it was created. The line represented by <code>textLine</code> also will be in an
+		 * used will be the values at the time it was created. The line returned by <code>getTextLine()</code> also will be in an
 		 * invalid state. </p>
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
-		 * @langversion 3.0
-		 *
-		 * @see #textLine
-		 * @see flash.text.engine.TextLine#validity TextLine.validity
-		 * @see #GEOMETRY_DAMAGED
+	 	 * @langversion 3.0
+	 	 *
+	 	 * @see #getTextLine()
+	 	 * @see flash.text.engine.TextLine#validity TextLine.validity
+	 	 * @see FlowDamageType#GEOMETRY
 		 */
 		
 		public function get validity():String
 		{ 
-			// A TextLine may be invalidated separately from the TextFlowLine, when the invalidation is driven from the Player (e.g. changes have been made directly). 
-			// If the TextFlowLine is marked valid, the line may still be invalid if the TextLine has been marked invalid.
-			// If the line has been released (TextBlock.releaseLines called), then it may have an existing TextLine that got marked invalid by the Player 
-			// when it was released. We want to ignore that invalid marking.
-			if (!_released)
-			{
-				var textLine:TextLine = peekTextLine();
-				if (textLine && (_validity == FlowDamageType.GEOMETRY || _validity == TextLineValidity.VALID) && textLine.validity != TextLineValidity.VALID)
-					_validity = textLine.validity;
-			}
-			return _validity; 
+			return _validities[getFlag(VALIDITY_MASK)];
 		}
 		
 		/** 
@@ -594,7 +599,7 @@ package flashx.textLayout.compose
 		 * represents the actual line width. For example, when the following String is justified and assigned a width of 500, it 
 		 * has an actual width of 500 but an unjustified width of 268.9921875. 
 		 *
-		 * <p>TBD: add graphic of justified line </p>
+		 * @internal TBD: add graphic of justified line
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
@@ -621,53 +626,57 @@ package flashx.textLayout.compose
 		}
 		
 		/** @private */
+		tlf_internal function get accumulatedLineExtent():Number
+		{
+			return _accumulatedLineExtent;
+		}
+
+		/** @private */
+		tlf_internal function set accumulatedLineExtent(value:Number):void
+		{
+			_accumulatedLineExtent = value;
+		}
+		
+		/** @private */
+		tlf_internal function get accumulatedMinimumStart():Number
+		{
+			return _accumulatedMinimumStart;
+		}
+		
+		/** @private */
+		tlf_internal function set accumulatedMinimumStart(value:Number):void
+		{
+			_accumulatedMinimumStart = value;
+		}
+		
+		static private const _alignments:Array = [ TextAlign.LEFT, TextAlign.CENTER, TextAlign.RIGHT ];
+		
+		/** @private */
 		tlf_internal function get alignment():String
 		{
-			return _alignment;
+			return _alignments[getFlag(ALIGNMENT_MASK)>>ALIGNMENT_SHIFT];
 		}
 		
 		/** @private */
 		tlf_internal function set alignment(value:String):void
 		{
-			_alignment = value;
+			CONFIG::debug { assert(_alignments.indexOf(value) != -1,"Bad alignment passed to TextFlowLine"); }
+			setFlag(_alignments.indexOf(value)<<ALIGNMENT_SHIFT,ALIGNMENT_MASK);
 		} 
 		
 		/** @private 
 		 * True if the line needs composing. */
 		tlf_internal function isDamaged():Boolean
 		{ 
-			if (_validity != TextLineValidity.VALID)
-				return true;
-			if (!_released)
-			{
-				var textLine:TextLine = peekTextLine(); 
-				if (textLine && textLine.validity != TextLineValidity.VALID)
-					return true;
-			}
-			return false;
+			return (validity != TextLineValidity.VALID)
 		}
 		
 		/** @private
 		 * Mark the line as valid */
 		tlf_internal function clearDamage():void
 		{ 
-			CONFIG::debug { assert(_validity == FlowDamageType.GEOMETRY, "can't clear damage other than geometry"); }
-			if (_validity == TextLineValidity.VALID)		// already is valid
-				return;	
-			_validity = TextLineValidity.VALID; 
-			
-			//CONFIG::debug { assert(_textLineCache != null, "bad call to clearDamage"); }
-			
-			var textLine:TextLine =  peekTextLine();
-			
-			// The line in the cache, if there is one, is either invalid because its been released, or its geometry_damaged, or its already valid.
-			CONFIG::debug { assert(!textLine || _released || textLine.validity == TextLineValidity.VALID || textLine.validity == FlowDamageType.GEOMETRY, "can't clear TextLine damage other than geometry"); }
-			
-			if (textLine && !_released)	// mark the TextLine as well
-			{
-				textLine.validity = TextLineValidity.VALID;
-				CONFIG::debug { Debugging.traceFTEAssign(textLine,"validity",TextLineValidity.VALID);  }
-			}
+			CONFIG::debug { assert(validity == FlowDamageType.GEOMETRY, "can't clear damage other than geometry"); }
+			setValidity(TextLineValidity.VALID); 
 		}
 		
 		/** @private
@@ -676,22 +685,61 @@ package flashx.textLayout.compose
 		tlf_internal function damage(damageType:String):void
 		{
 			// trace("TextFlowLine.damage ", this.start.toString(), this.textLength.toString());
-			if (_validity == damageType || _validity == TextLineValidity.INVALID)
+			var current:String = validity;
+			if (current == damageType || current == TextLineValidity.INVALID)
 				return;	// totally damaged
-			_validity = damageType;
-			
-			var textLine:TextLine = peekTextLine();
-			if (textLine && textLine.validity != TextLineValidity.INVALID)
-			{
-				textLine.validity = _validity;
-				CONFIG::debug { Debugging.traceFTEAssign(textLine,"validity",damageType);  }
-			}
+			setValidity(damageType);
 		}
 		
 		/** @private */
+		/**
+		 * Check if the line is visible by comparing a set rectangle to the supplied
+		 * rectangle (all values in Twips).
+		 * @private
+		 */
+		tlf_internal function isLineVisible(wmode:String, x:int, y:int, w:int, h:int):Boolean
+		{
+			CONFIG::debug{ assert(hasLineBounds(),"Bad call to TextFlowLine.isLineVisible"); }
+			
+			if (wmode == BlockProgression.RL)
+				return _boundsRightTW >= x && _boundsLeftTW < x + w;
+			
+			return _boundsRightTW >= y && _boundsLeftTW < y + h;
+		}
+		
+		/** @private
+		 * Set the text line bounds rectangle, all values in Twips.
+		 * If left > right, the rectangle is considered not to be set.
+		 * @private
+		 */
+		tlf_internal function cacheLineBounds(wmode:String, bndsx:Number, bndsy:Number, bndsw:Number, bndsh:Number):void
+		{
+			if (wmode == BlockProgression.RL)
+			{
+				_boundsLeftTW = Twips.to(bndsx);
+				_boundsRightTW = Twips.to(bndsx + bndsw);				
+			}
+			else
+			{
+				_boundsLeftTW = Twips.to(bndsy);
+				_boundsRightTW = Twips.to(bndsy + bndsh);
+			}
+		}
+		
+		/** @private
+		 * Check if the text line bounds are set. If the stored left
+		 * value is > the right value, then the rectangle is not set.
+		 * @private
+		 */
+		tlf_internal function hasLineBounds():Boolean
+		{
+			return (_boundsLeftTW <= _boundsRightTW);
+		}
+				
+		/** @private */
 		CONFIG::debug public function toString():String
 		{
-			return "x:" + x + " y: " + y + " absoluteStart:" + absoluteStart + " textLength:" + textLength +  " location: " + location + " validity: " + _validity;
+			return "x:" + x + " y: " + y + " absoluteStart:" + absoluteStart + " textLength:" + textLength +  " location: " + location + " validity: " + validity;
 		}
 		
 		/** 
@@ -709,6 +757,29 @@ package flashx.textLayout.compose
 		public function get textLineExists():Boolean
 		{
 			return peekTextLine() != null;			
+		}
+		
+		/** @private
+		 * Returns the associated TextLine if there is one. Finds it by looking up in the TextBlock.
+		 */
+		tlf_internal function peekTextLine():TextLine
+		{
+			var textLine:TextLine;
+			
+			if (!paragraph)
+				return null;
+						
+			// Look it up in the textBlock
+			var textBlock:TextBlock = paragraph.peekTextBlock();
+			if (textBlock)
+			{
+				for (textLine = textBlock.firstLine; textLine; textLine = textLine.nextLine)
+				{
+					if (textLine.userData == this) // found it
+						return textLine;
+				}
+			}
+			return null;
 		}
 		
 		/** 
@@ -731,50 +802,59 @@ package flashx.textLayout.compose
 		public function getTextLine(forceValid:Boolean = false):TextLine
 		{ 				
 			var textLine:TextLine = peekTextLine();
-			if (!textLine || (textLine.validity != TextLineValidity.VALID && forceValid))
+			if (textLine && textLine.validity == FlowDamageType.GEOMETRY)
+				createShape(paragraph.getTextFlow().computedFormat.blockProgression, textLine);
+			else if (!textLine || (textLine.validity == TextLineValidity.INVALID && forceValid))
 			{
+			/*	if (!textLine)
+				{
+					trace("text line does not exist: regenerating");
+					textLine = peekTextLine();
+				}
+				else
+					trace("textline is invalid: regenerated"); */
 				if (isDamaged() && validity != FlowDamageType.GEOMETRY)
 					return null;
 				
-				var textBlock:TextBlock = paragraph.getTextBlock();
-
-				// regenerate the whole paragraph at once, up to current position. The TextBlock may already contain valid
-				// lines that got generated on a prior call to getTextLine but couldn't be added to the cache (e.g., because
-				// the cache contains an invalid line that is in the display list), so we check for that before making a new line.
-				var previousLine:TextLine;
-				var currentLine:TextLine = textBlock.firstLine;
-				var flowComposer:IFlowComposer = paragraph.getTextFlow().flowComposer;
-				var lineIndex:int = flowComposer.findLineIndexAtPosition(paragraph.getAbsoluteStart());
-				do
-				{
-					var line:TextFlowLine = flowComposer.getLineAt(lineIndex);
-					CONFIG::debug { assert (line.paragraph == paragraph, "Expecting line in same paragraph"); }
-					if (currentLine != null && currentLine.validity == TextLineValidity.VALID)
-					{
-						textLine = currentLine;
-						currentLine = currentLine.nextLine;
-						
-						line.updateTextLineCache(textLine);
-					}
-					else
-					{
-						textLine = line.recreateTextLine(textBlock, previousLine);
-						currentLine = null;
-					}
-					previousLine = textLine;
-					++lineIndex;
-				} while (line != this);			
+				textLine = getTextLineInternal();
 			}
 			
-			if(textLine != null && textLine.numChildren == 0 && _adornCount > 0)
+			return textLine;
+		}
+
+		private function getTextLineInternal():TextLine
+		{			
+			// Look it up in the textBlock
+			var paraAbsStart:int = paragraph.getAbsoluteStart();
+			
+			// If we haven't found it yet, we need to regenerate it.
+			// Regenerate the whole paragraph at once, up to the current position. 
+			var textBlock:TextBlock = paragraph.getTextBlock();
+			var currentLine:TextLine = textBlock.firstLine;
+			var flowComposer:IFlowComposer = paragraph.getTextFlow().flowComposer;
+			var lineIndex:int = flowComposer.findLineIndexAtPosition(paraAbsStart);
+			var previousLine:TextLine = null;
+			var textLine:TextLine;
+			do
 			{
-				var para:ParagraphElement = this.paragraph;
-				var paraStart:int = para.getAbsoluteStart();
-				var elem:FlowLeafElement = para.findLeaf(this.absoluteStart - paraStart);
-				var elemStart:int = elem.getAbsoluteStart();
-				
-				createAdornments(para.getAncestorWithContainer().computedFormat.blockProgression,elem, elemStart);		
-			}
+				var line:TextFlowLine = flowComposer.getLineAt(lineIndex);
+				CONFIG::debug { assert (line && line.paragraph == paragraph, "Expecting line in same paragraph"); }
+				if (currentLine != null && currentLine.validity == TextLineValidity.VALID && (line != this || currentLine.userData == line))
+				{
+					textLine = currentLine;
+					currentLine = currentLine.nextLine;
+				}
+				else
+				{
+					textLine = line.recreateTextLine(textBlock, previousLine);
+					currentLine = null;
+				}
+				previousLine = textLine;
+				++lineIndex;
+			} while (line != this);			
+			
+			// Put it in the cache, so we can find it there next time
+		//	textLineCache[this] = textLine;
 			
 			return textLine;
 		}
@@ -784,64 +864,73 @@ package flashx.textLayout.compose
 		{
 			var textLine:TextLine;
 			
-			// If we already have a valid text line, just return it.
-			if (!_released)
-			{
-				textLine = peekTextLine();
-				if (textLine)
-					return textLine;
-			}
-			
-			var textFlow:TextFlow = paragraph.getTextFlow();
+			var textFlow:TextFlow = _para.getTextFlow();
+			var bp:String = textFlow.computedFormat.blockProgression;
 			var flowComposer:IFlowComposer = textFlow.flowComposer;
 			var swfContext:ISWFContext = flowComposer.swfContext ? flowComposer.swfContext : BaseCompose.globalSWFContext;
 			
+			var numberLine:TextLine;
+			var effLineOffset:Number = _lineOffset;
+			if (hasNumberLine)
+			{
+				var boxStartTotalIndent:Number = this._lineOffset - _para.computedFormat.textIndent;
+				numberLine = TextFlowLine.createNumberLine(_para.getParentByType(ListItemElement) as ListItemElement, _para, flowComposer.swfContext, boxStartTotalIndent);
+				if (numberLine)
+				{
+					if (getNumberLineListStylePosition(numberLine) == ListStylePosition.INSIDE)
+						effLineOffset += getNumberLineInsideLineWidth(numberLine);
+				}
+			}
+			
+			//	trace("Recreating line from", absoluteStart, "to", absoluteStart + textLength);
 			textLine = TextLineRecycler.getLineForReuse();
 			if (textLine)
 			{
-				CONFIG::debug { assert(textFlow.backgroundManager == null || textFlow.backgroundManager.lineDict[textLine] === undefined,"Bad TextLine in recycler cache"); }
-				textLine = swfContext.callInContext(textBlock["recreateTextLine"], textBlock, [ textLine, previousLine, _targetWidth, _lineOffset, true ]);
+				CONFIG::debug { assert(textFlow.backgroundManager == null || textFlow.backgroundManager..getEntry(textLine) === undefined,"Bad TextLine in recycler cache"); }
+				textLine = swfContext.callInContext(textBlock["recreateTextLine"], textBlock, [ textLine, previousLine, _targetWidth, effLineOffset, true ]);
 			}
 			else
-				textLine = swfContext.callInContext(textBlock.createTextLine, textBlock, [ previousLine, _targetWidth, _lineOffset, true ]);
+				textLine = swfContext.callInContext(textBlock.createTextLine, textBlock, [ previousLine, _targetWidth, effLineOffset, true ]);
 			
-			textLine.x = createShapeX();
-			CONFIG::debug { Debugging.traceFTEAssign(textLine,"x", createShapeX());  }
-			textLine.y = createShapeY(textFlow.computedFormat.blockProgression);
-			CONFIG::debug { Debugging.traceFTEAssign(textLine,"y", createShapeY(textFlow.computedFormat.blockProgression));  }
+			textLine.x = this.x;
+			CONFIG::debug { Debugging.traceFTEAssign(textLine,"x", this.x);  }
+			textLine.y = createShapeY(bp);
+			CONFIG::debug { Debugging.traceFTEAssign(textLine,"y", createShapeY(bp));  }
 			textLine.doubleClickEnabled = true;
+			textLine.userData = this;
 			
-			updateTextLineCache(textLine);
+			// Regenerate adornments (e.g., underline & strikethru)
+			if (_adornCount > 0)
+			{
+				var paraStart:int = _para.getAbsoluteStart();
+				var elem:FlowLeafElement = _para.findLeaf(this.absoluteStart - paraStart);
+				var elemStart:int = elem.getAbsoluteStart();
+				
+				CONFIG::debug { assert(textLine.userData == this, "textLine doesn't point back to TextFlowLine"); }
+				if (numberLine)
+				{
+					var listItemElement:ListItemElement = _para.getParentByType(ListItemElement) as ListItemElement;
+					TextFlowLine.initializeNumberLinePosition(numberLine, listItemElement, _para, textLine.textWidth);	
+				}
+				
+				createAdornments(_para.getAncestorWithContainer().computedFormat.blockProgression, elem, elemStart, textLine, numberLine);
+				
+				if (numberLine && getNumberLineListStylePosition(numberLine) == ListStylePosition.OUTSIDE)
+				{
+					if (bp == BlockProgression.TB)
+						numberLine.x = this.numberLinePosition;
+					else
+						numberLine.y = this.numberLinePosition;
+				}
+			}
 			
 			return textLine;
 		}
 		
-		/** the rule is that all "displayed" lines must be in the TextFlowLine textLineCache.  Put this new line in the cache iff there isn't already a displayed line */
-		private function updateTextLineCache(textLine:TextLine):void
-		{
-			textLine.userData = this;	
-			var existingTextLine:TextLine = peekTextLine();
-			// If there is an existing, released line, and it is currently being displayed, we can't replace it in the cache.
-			if (!existingTextLine || existingTextLine.parent == null)
-			{
-				if (existingTextLine != textLine)
-					_textLineCache = new WeakRef(textLine);	
-				_released = false;		
-			}
-		}
-		
 		/** @private */
-		tlf_internal function markReleased():void
+		tlf_internal function createShape(bp:String, textLine:TextLine):void
 		{
-			_released = true;
-		}
-		
-		/** @private */
-		tlf_internal function createShape(bp:String):TextLine
-		{
-			var textLine:TextLine = getTextLine();
-			
-			var newX:Number = createShapeX();
+			var newX:Number = this.x;
 			//if (int(newX*20) != int(textLine.x*20))
 			{
 				textLine.x = newX;
@@ -853,37 +942,63 @@ package flashx.textLayout.compose
 				textLine.y = newY;
 				CONFIG::debug { Debugging.traceFTEAssign(textLine,"y", newY);  }
 			}
-			return textLine;
 		}
-		
-		private function createShapeX():Number
-		{ return x; }
 		
 		private function createShapeY(bp:String):Number
 		{ return bp == BlockProgression.RL ? y : y + _ascent; }
 		
 		/** @private 
 		 * Scan through the format runs within the line, and draw any underline or strikethrough that might need it
-		 */
-		
-		tlf_internal function createAdornments(blockProgression:String,elem:FlowLeafElement,elemStart:int):void
+		 */	
+		tlf_internal function createAdornments(blockProgression:String,elem:FlowLeafElement,elemStart:int, textLine:TextLine, numberLine:TextLine):void
 		{
 			CONFIG::debug { assert(elemStart == elem.getAbsoluteStart(),"bad elemStart passed to createAdornments"); } 
 			var endPos:int = _absoluteStart + _textLength;
 			
-			//init adornments back to 0
+			CONFIG::debug { assert(textLine.validity == TextLineValidity.VALID,"createAdornments: bad TextLine validity"); }
+			/*if (textLine.validity != TextLineValidity.VALID)
+			{
+				// This can happen if we are scrolling through text and lines have been released, 
+				// then scrolled back into view before they're gc'ed. Then we have an invalid line in the TextFlowLine
+				// cache, so we create a valid text line to calculate where the adornment shapes should go. The 
+				// actual shapes will be added to the invalid (original) TextLine in the TextFlowLine cache.
+				textLine = getTextLineInternal();
+			}*/
+			
+			//init adornments back to 0 - may be redoing the line in a new position
+			// This can happen if there was damage earlier in the paragraph, so that the TextLine was damaged (because all lines in block were damaged)
+			// but the TextFlowLine is still considered OK (didn't cause a line break change).
+		//	CONFIG::debug { assert(_adornCount == 0 && _hasNumberLine == false,"createAdornments: adornments applied twice?"); }
 			_adornCount = 0;
 			
-			for (;;)
+			if (numberLine)
 			{
-				var format:ITextLayoutFormat = elem.computedFormat;
+				_adornCount++;
+				setFlag(NUMBERLINE_MASK,NUMBERLINE_MASK);
+				textLine.addChild(numberLine);
+				CONFIG::debug { Debugging.traceFTECall(null,textLine,"addChildNumberLine",numberLine); }	
 				
-				_adornCount += elem.updateAdornments(this, blockProgression);
-				
-				var fvh:FlowValueHolder = elem.format as FlowValueHolder;
-				if(fvh && fvh.userStyles && fvh.userStyles.imeStatus)
+				// handle background on the numberLine
+				if (getNumberLineBackground(numberLine) != null)
 				{
-					elem.updateIMEAdornments(this, blockProgression, fvh.userStyles.imeStatus as String);
+					var bgm:BackgroundManager = elem.getTextFlow().getBackgroundManager();
+					if (bgm)
+						bgm.addNumberLine(textLine,numberLine);
+				}
+			}
+			else
+				setFlag(0,NUMBERLINE_MASK);
+
+			
+			for (;;)
+			{				
+				_adornCount += elem.updateAdornments(textLine, blockProgression);
+				
+				var elemFormat:ITextLayoutFormat = elem.format;
+				var imeStatus:* = elemFormat ? elemFormat.getStyle("imeStatus") : undefined;
+				if(imeStatus)
+				{
+					elem.updateIMEAdornments(textLine, blockProgression, imeStatus as String);
 				}
 				elemStart += elem.textLength;
 				if (elemStart >= endPos)
@@ -891,6 +1006,148 @@ package flashx.textLayout.compose
 				elem = elem.getNextLeaf(_para);
 				CONFIG::debug { assert(elem != null,"bad nextLeaf"); }
 			}
+		}
+
+		/** @private */
+		static tlf_internal function initializeNumberLinePosition(numberLine:TextLine,listItemElement:ListItemElement,curParaElement:ParagraphElement,totalWidth:Number):void
+		{
+			// use the listStylePosition on the ListItem (not the list)
+			var listMarkerFormat:IListMarkerFormat = listItemElement.computedListMarkerFormat();
+			var paragraphFormat:ITextLayoutFormat =  curParaElement.computedFormat;
+			// only applies on outside list markers
+			var listEndIndent:Number = listMarkerFormat.paragraphEndIndent === undefined || listItemElement.computedFormat.listStylePosition == ListStylePosition.INSIDE ? 0 
+				: (listMarkerFormat.paragraphEndIndent == FormatValue.INHERIT ? paragraphFormat.paragraphEndIndent : listMarkerFormat.paragraphEndIndent);
+			
+			TextFlowLine.setListEndIndent(numberLine,listEndIndent);
+			
+			// no more work needed for OUTSIDE positioning - its all done in the applyTextAlign code
+			if (listItemElement.computedFormat.listStylePosition == ListStylePosition.OUTSIDE)
+			{
+				numberLine.x = numberLine.y = 0;
+				return;
+			}
+			
+			var bp:String = curParaElement.getTextFlow().computedFormat.blockProgression;
+			var numberLineWidth:Number = TextFlowLine.getNumberLineInsideLineWidth(numberLine);
+			
+			if (bp == BlockProgression.TB)
+			{
+				if (paragraphFormat.direction == Direction.LTR)
+					numberLine.x = -numberLineWidth;
+				else
+					numberLine.x = totalWidth + numberLineWidth-numberLine.textWidth;		
+				numberLine.y = 0;	// assumes same baseline as parent!!
+			}
+			else
+			{
+				if (paragraphFormat.direction == Direction.LTR)
+					numberLine.y = -numberLineWidth;
+				else
+					numberLine.y = totalWidth + numberLineWidth-numberLine.textWidth;						
+				numberLine.x = 0;	// assumes same baseline as parent!!
+			}
+		}
+		
+		static private var numberLineFactory:NumberLineFactory;
+		
+		/** @private Logic to generate and position the TextLine containing the numbering for a listElement's first line */
+		static tlf_internal function createNumberLine(listItemElement:ListItemElement,curParaElement:ParagraphElement,swfContext:ISWFContext, totalStartIndent:Number):TextLine
+		{
+			CONFIG::debug { assert(swfContext != BaseCompose.globalSWFContext, "TextFlowLine.createNumberLine: don't pass globalswfcontext"); }
+			if (numberLineFactory == null)
+			{
+				numberLineFactory = new NumberLineFactory();
+				numberLineFactory.compositionBounds = new Rectangle(0,0,NaN,NaN);
+			}
+			numberLineFactory.swfContext = swfContext;
+			
+			var listMarkerFormat:IListMarkerFormat = listItemElement.computedListMarkerFormat();
+			
+			// use the listStylePosition on the ListItem (not the list)
+			numberLineFactory.listStylePosition = listItemElement.computedFormat.listStylePosition;
+			
+			var listElement:ListElement = listItemElement.parent as ListElement;
+			var paragraphFormat:TextLayoutFormat = new TextLayoutFormat(curParaElement.computedFormat);
+			var boxStartIndent:Number = paragraphFormat.direction == Direction.LTR  ? listElement.getEffectivePaddingLeft() : listElement.getEffectivePaddingRight();
+			// this just gets the first line but that's the only one we use.  could have used paragraphStartIndent or padding/margins.
+			// do it this way so that negative indents are supported.  TODO revisit when box model work is complete
+			paragraphFormat.apply(listMarkerFormat);
+			paragraphFormat.textIndent += totalStartIndent;
+			if (numberLineFactory.listStylePosition == ListStylePosition.OUTSIDE)
+				paragraphFormat.textIndent -= boxStartIndent;
+			numberLineFactory.paragraphFormat = paragraphFormat; // curParaElement.computedFormat;
+			numberLineFactory.textFlowFormat = curParaElement.getTextFlow().computedFormat;
+			
+			// suppress the formatting of any links
+			var firstLeaf:FlowLeafElement = curParaElement.getFirstLeaf();
+			var parentLink:LinkElement = firstLeaf.getParentByType(LinkElement) as LinkElement;
+			// record the topmost parent link
+			var highestParentLinkLinkElement:LinkElement;
+			var linkStateArray:Array = [];
+			while (parentLink)
+			{
+				highestParentLinkLinkElement = parentLink;
+				linkStateArray.push(parentLink.linkState);
+				parentLink.chgLinkState(LinkState.SUPPRESSED);
+				parentLink = parentLink.getParentByType(LinkElement) as LinkElement;
+			}
+
+			// spanFormat to use for the markers
+			var spanFormat:TextLayoutFormat = new TextLayoutFormat(firstLeaf.computedFormat);
+			
+			// now restore the formatting of any links
+			parentLink = firstLeaf.getParentByType(LinkElement) as LinkElement;
+			while (parentLink)
+			{
+				linkStateArray.push(parentLink.linkState);
+				parentLink.chgLinkState(linkStateArray.shift());
+				parentLink = parentLink.getParentByType(LinkElement) as LinkElement;
+			}
+			
+			// forces recompute of computedFormat of all leaf nodes of highestParentLinkLinkElement
+			if (highestParentLinkLinkElement)
+			{
+				var leaf:FlowLeafElement = highestParentLinkLinkElement.getFirstLeaf();
+				while (leaf)
+				{
+					leaf.computedFormat;
+					leaf = leaf.getNextLeaf(highestParentLinkLinkElement);
+				}
+			}
+			
+			// finalize the spanFormat for the marker
+			var markerFormat:TextLayoutFormat = new TextLayoutFormat(spanFormat);
+			TextLayoutFormat.resetModifiedNoninheritedStyles(markerFormat);
+			var holderStyles:Object = (listMarkerFormat as TextLayoutFormat).getStyles();
+			for (var key:String in holderStyles)
+			{
+				// only copy TextLayoutFormat properties
+				if (TextLayoutFormat.description[key] !== undefined)
+				{
+					var val:* = holderStyles[key];
+					markerFormat[key] = (val !== FormatValue.INHERIT) ? val : spanFormat[key];
+				}
+			}
+			numberLineFactory.markerFormat = markerFormat;
+			numberLineFactory.text = listElement.computeListItemText(listItemElement,listMarkerFormat);
+			
+			// expect one or zero lines - technically with beforeContent and afterContent more than one line can be generated.  This could be more like a float!!
+			// also need to expect a backgroundColor
+			var rslt:Array = [];
+			numberLineFactory.createTextLines(function (o:DisplayObject):void { rslt.push(o); });
+
+			// position it relative to the parent line - later need to take inside/outside into account
+			var numberLine:TextLine = rslt[0] as TextLine;
+			if (numberLine)
+			{				
+				CONFIG::debug { assert(numberLine.validity == TextLineValidity.STATIC,"Invalid validity on numberLine"); }
+				numberLine.mouseEnabled = false;
+				numberLine.mouseChildren = false;
+				setNumberLineBackground(numberLine,numberLineFactory.backgroundManager);
+			}
+			numberLineFactory.clearBackgroundManager();
+
+			return numberLine;
 		}
 		
 		/** @private 
@@ -909,14 +1166,12 @@ package flashx.textLayout.compose
 			CONFIG::debug { assert(elem.getAncestorWithContainer() != null,"element with no container"); }
 			for (;;)
 			{
-				//this is kinda bunk and really shouldn't be here, but I'm loath to find a better way....
-				//ignore the leading on a TCY Block.
-				//if the elem is in a TCYBlock, AND it is not the only block in the line, "skip" it
-				if (!(bp == BlockProgression.RL && (elem.parent is TCYElement) &&  (!isNaN(totalLeading) || (elem.textLength != this.textLength))))
-				{
-					var elemLeading:Number = TextLayoutFormat.lineHeightProperty.computeActualPropertyValue(elem.computedFormat.lineHeight,elem.getEffectiveFontSize());
-					totalLeading = Math.max(totalLeading, elemLeading);
-				}
+				// If there's only one element in the line, and it has 0 leading, try resetting the leading using the default algorithm. Important
+				// for lines that contain only a float (which can otherwise recurse infinitely), and TCY spans in vertical text.
+				var elemLeading:Number = elem.getEffectiveLineHeight(bp);
+				if (!elemLeading && elem.textLength == this.textLength)
+					elemLeading = TextLayoutFormat.lineHeightProperty.computeActualPropertyValue(elem.computedFormat.lineHeight, elem.computedFormat.fontSize);
+				totalLeading = Math.max(totalLeading, elemLeading);
 				elemStart += elem.textLength;
 				if (elemStart >= endPos)
 					break;
@@ -931,10 +1186,10 @@ package flashx.textLayout.compose
 		 * Roman baseline) for the overall line is. Normally it is the distance between the Roman and Ascent baselines, 
 		 * but it may be adjusted upwards by the width/height of the GraphicElement.
 		 */
-		tlf_internal function getLineTypographicAscent(elem:FlowLeafElement,elemStart:int):Number
+		tlf_internal function getLineTypographicAscent(elem:FlowLeafElement,elemStart:int,textLine:TextLine):Number
 		{
 			CONFIG::debug { assert(elemStart == elem.getAbsoluteStart(),"bad elemStart passed to getLineTypographicAscent"); } 
-			return getTextLineTypographicAscent(getTextLine(), elem, elemStart, absoluteStart+textLength, _para);
+			return getTextLineTypographicAscent(textLine ? textLine: getTextLine(), elem, elemStart, absoluteStart+textLength);
 		}
 		
 		/** @private 
@@ -942,22 +1197,73 @@ package flashx.textLayout.compose
 		 * Roman baseline) for the overall line is. Normally it is the distance between the Roman and Ascent baselines, 
 		 * but it may be adjusted upwards by the width/height of the GraphicElement.
 		 */
-		static tlf_internal function getTextLineTypographicAscent(textLine:TextLine, elem:FlowLeafElement,elemStart:int, textLineEnd:int, para:ParagraphElement):Number
+		static tlf_internal function getTextLineTypographicAscent(textLine:TextLine, elem:FlowLeafElement,elemStart:int, textLineEnd:int):Number
 		{
-			CONFIG::debug { assert(elemStart == elem.getAbsoluteStart(),"bad elemStart passed to getTextLineTypographicAscent"); } 
+			CONFIG::debug { assert(!elem || elemStart == elem.getAbsoluteStart(),"bad elemStart passed to getTextLineTypographicAscent"); } 
 			var rslt:Number = textLine.getBaselinePosition(flash.text.engine.TextBaseline.ROMAN) - textLine.getBaselinePosition(flash.text.engine.TextBaseline.ASCENT);
 			
-			for (;;) 
+			if (textLine.hasGraphicElement)
 			{
-				if (elem is InlineGraphicElement)
-					rslt = Math.max(rslt,InlineGraphicElement(elem).getTypographicAscent(textLine));
-				elemStart += elem.textLength;
-				if (elemStart >= textLineEnd)
-					break;
-				elem = elem.getNextLeaf(para);
-				CONFIG::debug { assert(elem != null,"bad nextLeaf"); }
+				for (;;) 
+				{
+					if (elem is InlineGraphicElement)
+						rslt = Math.max(rslt,InlineGraphicElement(elem).getTypographicAscent(textLine));
+					elemStart += elem.textLength;
+					if (elemStart >= textLineEnd)
+						break;
+					elem = elem.getNextLeaf();
+					CONFIG::debug { assert(elem != null,"bad nextLeaf"); }
+				}
 			}
 			return rslt;
+		}
+		
+		/** @private 
+		 * Get the "line box" for the line as defined by the CSS visual formatting model (http://www.w3.org/TR/CSS2/visuren.html)
+		 * Essentially, the union of all "inline boxes" on the line.
+		 * @return A rectangle representing the line box. Top and Bottom are relative to the Roman baseline. Left and Right are ignored.
+		 * May return null, for example, if the line only contains a float.
+		 */
+		tlf_internal function getCSSLineBox(bp:String, elem:FlowLeafElement, elemStart:int, swfContext:ISWFContext, effectiveListMarkerFormat:ITextLayoutFormat=null, numberLine:TextLine=null):Rectangle
+		{
+			CONFIG::debug { assert(elem.getAncestorWithContainer() != null,"element with no container"); }
+			CONFIG::debug { assert(elemStart == elem.getAbsoluteStart(),"bad elemStart passed to getCSSLineBox"); }
+			
+			var lineBox:Rectangle;
+			
+			var endPos:int = _absoluteStart + _textLength;
+			var textLine:TextLine = getTextLine();
+			
+			for (;;)
+			{
+				addToLineBox(elem.getCSSInlineBox(bp, textLine, _para, swfContext));
+				
+				elemStart += elem.textLength;
+				if (elemStart >= endPos)
+					break;
+				
+				elem = elem.getNextLeaf(_para);
+				CONFIG::debug { assert(elem != null,"bad nextLeaf"); }
+			}
+			
+			if (effectiveListMarkerFormat && numberLine)
+			{
+				// Para not available for number line, but the methods below handle null para correctly.
+				var para:ParagraphElement = null; 
+				
+				var ef:ElementFormat = FlowLeafElement.computeElementFormatHelper (effectiveListMarkerFormat, para, swfContext);
+				var metrics:FontMetrics	= swfContext ? swfContext.callInContext(ef.getFontMetrics, ef, null, true) : ef.getFontMetrics();
+				
+				addToLineBox (FlowLeafElement.getCSSInlineBoxHelper(effectiveListMarkerFormat, metrics, numberLine, para));
+			}
+			
+			function addToLineBox (inlineBox:Rectangle):void
+			{
+				if (inlineBox)
+					lineBox = lineBox ? lineBox.union(inlineBox) : inlineBox;
+			}
+					
+			return lineBox;
 		}
 		
 		//helper method to determine which subset of line is underlined
@@ -1032,8 +1338,6 @@ package flashx.textLayout.compose
 		{
 			if (isDamaged())
 				return null;
-			
-			// CONFIG::debug { assert(_textLineCache != null, "bad call to getSelectionShapesCacheEntry"); }
 			
 			//get the absolute start of the paragraph.  Calculation is expensive, so just do this once.
 			var paraAbsStart:int = _para.getAbsoluteStart();
@@ -1122,14 +1426,19 @@ package flashx.textLayout.compose
 					++curIdx;
 					continue;
 				}
-				else if(curElem is InlineGraphicElement && (curElem as InlineGraphicElement).float != Float.NONE)
+				else if(curElem is InlineGraphicElement && (curElem as InlineGraphicElement).computedFloat != Float.NONE)
 				{
 					if(floatRectArray == null)
 						floatRectArray = new Array();
 					
-					var tempFloatArray:Array = makeSelectionBlocks(curIdx, curIdx+1, paraAbsStart, blockProgression, direction, heightAndAdj);
-					CONFIG::debug{ assert(tempFloatArray.length == 1, "How can a single floated InlineGraph have multiple shapes!"); }
-					floatRectArray.push(tempFloatArray[0]);
+				//	var blockRect:Rectangle = (curElem as InlineGraphicElement).graphic.getBounds(textLine);
+					var ilg:InlineGraphicElement = (curElem as InlineGraphicElement);
+					var floatInfo:FloatCompositionData = controller.getFloatAtPosition(paraAbsStart + curIdx);
+					if (floatInfo)
+					{
+						var blockRect:Rectangle = new Rectangle(floatInfo.x - textLine.x, floatInfo.y - textLine.y, ilg.elementWidth, ilg.elementHeight);
+						floatRectArray.push(blockRect);
+					}
 					++curIdx;
 					continue;
 				}
@@ -1142,7 +1451,7 @@ package flashx.textLayout.compose
 				if (blockProgression != BlockProgression.RL || 
 					(textLine.getAtomTextRotation(textLine.getAtomIndexAtCharIndex(curIdx)) != TextRotation.ROTATE_0))
 				{
-					var leafBlockArray:Array = makeSelectionBlocks(curIdx, endPos, paraAbsStart, blockProgression, direction, heightAndAdj);
+					var leafBlockArray:Array = makeSelectionBlocks(textLine, curIdx, endPos, paraAbsStart, blockProgression, direction, heightAndAdj);
 					//copy all the blocks into the blockRectArray - we'll normalize them later
 					for(var leafBlockIter:int = 0; leafBlockIter < leafBlockArray.length; ++leafBlockIter)
 					{
@@ -1154,14 +1463,14 @@ package flashx.textLayout.compose
 					var tcyBlock:FlowElement = curElem.getParentByType(TCYElement);
 					CONFIG::debug{ assert(tcyBlock != null, "What kind of object is this that is ROTATE_0, but not TCY?");}
 					
-					//if this element is still encompassed by a SubParagraphGroupElement of some kind (either a link or a TCYBlock)
+					//if this element is still encompassed by a SubParagraphGroupElementBase of some kind (either a link or a TCYBlock)
 					//keep moving up to the parent.  Otherwise, the below code will go into an infinite loop.  bug 1905734
 					var tcyParentRelativeEnd:int = tcyBlock.parentRelativeEnd;
-					var subParBlock:SubParagraphGroupElement = tcyBlock.getParentByType(SubParagraphGroupElement) as SubParagraphGroupElement;
+					var subParBlock:SubParagraphGroupElementBase = tcyBlock.getParentByType(SubParagraphGroupElementBase) as SubParagraphGroupElementBase;
 					while (subParBlock)
 					{
 						tcyParentRelativeEnd += subParBlock.parentRelativeStart;
-						subParBlock = subParBlock.getParentByType(SubParagraphGroupElement) as SubParagraphGroupElement;
+						subParBlock = subParBlock.getParentByType(SubParagraphGroupElementBase) as SubParagraphGroupElementBase;
 					}
 					
 					var largestTCYRise:Number = 0;
@@ -1174,7 +1483,7 @@ package flashx.textLayout.compose
 						curElem = _para.findLeaf(curIdx);
 						numCharsSelecting = curElem.textLength + curElem.getElementRelativeStart(_para) - curIdx;
 						endPos = numCharsSelecting + curIdx > endIdx ? endIdx : numCharsSelecting + curIdx;
-						var tcyRectArray:Array =  makeSelectionBlocks(curIdx, endPos, paraAbsStart, blockProgression, direction, heightAndAdj);
+						var tcyRectArray:Array =  makeSelectionBlocks(textLine, curIdx, endPos, paraAbsStart, blockProgression, direction, heightAndAdj);
 						
 						for(var tcyBlockIter:int = 0; tcyBlockIter < tcyRectArray.length; ++tcyBlockIter)
 						{
@@ -1220,7 +1529,7 @@ package flashx.textLayout.compose
 					var charCode:int = _para.getCharCodeAtPosition(endPos - 1);
 					if(charCode != SpanElement.kParagraphTerminator.charCodeAt(0) && CharacterUtil.isWhitespace(charCode))
 					{
-						var lastElemBlockArray:Array = makeSelectionBlocks(endPos - 1, endPos - 1, paraAbsStart, blockProgression, direction, heightAndAdj);
+						var lastElemBlockArray:Array = makeSelectionBlocks(textLine, endPos - 1, endPos - 1, paraAbsStart, blockProgression, direction, heightAndAdj);
 						var lastRect:Rectangle = lastElemBlockArray[lastElemBlockArray.length - 1];
 						var modifyRect:Rectangle = blockRectArray[blockRectArray.length - 1] as Rectangle;
 						
@@ -1331,7 +1640,7 @@ package flashx.textLayout.compose
 				// "Space above, align bottom" 
 				// 1) Space above as dictated by first baseline offset for the first line or line leading otherwise (both obtained from the 'height' data member)
 				// 2) Selection rectangle must at least include all of the text area
-				rectHeight = height > _textHeight ? height : _textHeight;
+				rectHeight = Math.max(height, textHeight);
 				
 				// 3) Selection rectangle's bottom aligned with line descent; verticalAdj remains 0
 			}
@@ -1353,7 +1662,7 @@ package flashx.textLayout.compose
 					{
 						// "Space above None, align bottom" (eqivalently, "Space below None, align top"): 
 						// 1) Only the text area should be selected
-						rectHeight = _textHeight;
+						rectHeight = textHeight;
 						
 						// 2) Selection rectangle's bottom aligned with line descent; verticalAdj remains 0
 					}
@@ -1362,7 +1671,7 @@ package flashx.textLayout.compose
 						// "Space above, align bottom" 
 						// 1) Space above as dictated by first baseline offset 
 						// 2) Selection rectangle must at least include all of the text area
-						rectHeight = height > _textHeight ? height : _textHeight;
+						rectHeight = Math.max(height, textHeight);
 						// 3) Selection rectangle's bottom aligned with line descent; verticalAdj remains 0
 					}
 				}
@@ -1375,22 +1684,22 @@ package flashx.textLayout.compose
 						// "Space below, align top" 
 						// 1) Space below as dictated by line leading (obtained from 'height' member of next line) 
 						// 2) Selection rectangle must at least include all of the text area
-						rectHeight = nextLine.height > _textHeight ? nextLine.height : _textHeight;
+						rectHeight = Math.max(nextLine.height,textHeight);
 						
 						// 3) Selection rectangle's top to be aligned with line ascent, so its bottom to be at rectHeight - textLine.ascent,
 						// not textLine.descent, set verticalAdj accordingly 
-						verticalAdj = rectHeight - _textHeight; // same as rectHeight - textLine.ascent - textLine.descent
+						verticalAdj = rectHeight - textHeight; // same as rectHeight - textLine.ascent - textLine.descent
 					}
 					else
 					{
 						// Union of 
 						// 1) first line, leading up: In this case, rectangle height is the larger of line height and text height,
 						// and the rectangle is shifted down by descent amount to align bottoms. So, top of rectangle is at:
-						var top:Number = _descent - (height > _textHeight ? height : _textHeight);
+						var top:Number = _descent - Math.max(height,textHeight);
 						
 						// 2) interior line, leading down: In this case, rectangle height is the larger of line leading and text height,
 						// and the rectangle is shifted up by ascent amount to align tops. So, bottom of rectangle is at:
-						var bottom:Number = (nextLine.height > _textHeight ? nextLine.height : _textHeight) - _ascent;
+						var bottom:Number = Math.max(nextLine.height,textHeight) - _ascent;
 						
 						rectHeight = bottom - top;
 						
@@ -1418,7 +1727,7 @@ package flashx.textLayout.compose
 		 * 
 		 * 
 		 */
-		private function makeSelectionBlocks(begIdx:int, endIdx:int, paraAbsStart:int, blockProgression:String, direction:String, heightAndAdj:Array):Array
+		private function makeSelectionBlocks(textLine:TextLine, begIdx:int, endIdx:int, paraAbsStart:int, blockProgression:String, direction:String, heightAndAdj:Array):Array
 		{
 			CONFIG::debug{ assert(begIdx <= endIdx, "Selection indexes are reversed!  How can this happen?!"); }
 			
@@ -1427,199 +1736,153 @@ package flashx.textLayout.compose
 			var startElem:FlowLeafElement = _para.findLeaf(begIdx);
 			var startMetrics:Rectangle = startElem.getComputedFontMetrics().emBox;
 			
-			var textLine:TextLine = getTextLine(true);
+			if (!textLine)
+				textLine = getTextLine(true);
 			
 			//++makeBlockPassCounter;
 			//trace(makeBlockPassCounter + ") direction = " + direction + " blockProgression = " + blockProgression);
 			
-			//if this is the whole line, then we should use line data to perform the selection
-			if(paraAbsStart + begIdx == absoluteStart && paraAbsStart + endIdx == absoluteStart + textLength)
+			// CNW: removed whole line optimization 5/18/10 - was yielding different results than code below and was no faster
+			
+			//trace(makeBlockPassCounter + ") begIdx = " + begIdx.toString() + " endIdx = " +  endIdx.toString());
+			var begAtomIndex:int = textLine.getAtomIndexAtCharIndex(begIdx); 
+			var endAtomIndex:int = adjustEndElementForBidi(textLine, begIdx, endIdx, begAtomIndex, direction);
+			
+			//trace(makeBlockPassCounter + ") begAtomIndex = " + begAtomIndex.toString() + " endAtomIndex = " +  endAtomIndex.toString());
+			CONFIG::debug{ assert(begAtomIndex >= 0, "Invalid start index! begIdx = " + begIdx)};
+			CONFIG::debug{ assert(endAtomIndex >= 0, "Invalid end index! begIdx = " + endIdx)};
+			
+			if(direction == Direction.RTL && textLine.getAtomBidiLevel(endAtomIndex)%2 != 0)
 			{
-				var globalStart:Point = new Point(0,0);
-				var justRule:String = _para.getEffectiveJustificationRule();
-				
-				//use the textLine info if we're not using J justification
-				if(justRule != JustificationRule.EAST_ASIAN)
+				//if we are in RTL, anchoring the LTR text gets tricky.  Because the endElement is before the first
+				//element - which is why we're in this code - the result can be a zero-width rectangle if the span of LTR
+				//text breaks across line boundaries.  If that is the case, then the endAtomIndex value will be 0.  As
+				//this is the less common case, assume that it isn't and make all other cases come first
+				if (endAtomIndex == 0 && begIdx < endIdx-1)
 				{
-					if(blockProgression == BlockProgression.RL)
+					//since the endAtomIndex is 0, meaning that the LTR spans lines,
+					//we want to grab the glyph before the endIdx which represents the last LTR glyph for the selection. 
+					//Make a recursive call into makeSelectionBlocks using and endIdx decremented by 1.
+					blockArray = makeSelectionBlocks(textLine, begIdx, endIdx - 1, paraAbsStart, blockProgression, direction, heightAndAdj);
+					var bidiBlock:Array = makeSelectionBlocks(textLine, endIdx - 1, endIdx - 1, paraAbsStart, blockProgression, direction, heightAndAdj)
+					var bidiBlockIter:int = 0;
+					while(bidiBlockIter < bidiBlock.length)
 					{
-						globalStart.x -= heightAndAdj[1];
-						blockRect.width = heightAndAdj[0];
-						blockRect.height = textLine.textWidth == 0 ? EMPTY_LINE_WIDTH : textLine.textWidth;
+						blockArray.push(bidiBlock[bidiBlockIter]);
+						++bidiBlockIter;
 					}
-					else 
-					{
-						globalStart.y += heightAndAdj[1];
-						blockRect.height = heightAndAdj[0];
-						blockRect.width = textLine.textWidth == 0 ? EMPTY_LINE_WIDTH : textLine.textWidth;
-					}	
-					
+					return blockArray;
 				}
-				else
-				{
-					var eaStartElem:int  = textLine.getAtomIndexAtCharIndex(begIdx);
-					var eaStartRect:Rectangle = textLine.getAtomBounds(eaStartElem);
-					
-					if(blockProgression == BlockProgression.RL)
-					{
-						blockRect.width = eaStartRect.width;
-						blockRect.height = textLine.textWidth;
-					}
-					else
-					{
-						blockRect.height =  eaStartRect.height;
-						blockRect.width = textLine.textWidth;
-					}
-				}
-				
-				blockRect.x = globalStart.x;
-				blockRect.y = globalStart.y;
-				
-				if(blockProgression == BlockProgression.RL)
-				{
-					blockRect.x -= textLine.descent;
-				}
-				else
-				{
-					blockRect.y += (textLine.descent - blockRect.height)
-				}
-				
-				//handle rotation
-				if(startElem.computedFormat.textRotation == TextRotation.ROTATE_180 || 
-					startElem.computedFormat.textRotation == TextRotation.ROTATE_90)
-				{
-					if(blockProgression != BlockProgression.RL)
-						blockRect.y += blockRect.height / 2;
-					else
-						blockRect.x -= blockRect.width;
-				}
-				//push it onto array
-				blockArray.push(blockRect);
 			}
-			else //we only have part of the line.  Get the start and end TC bounds
-			{
-				//trace(makeBlockPassCounter + ") begIdx = " + begIdx.toString() + " endIdx = " +  endIdx.toString());
-				var begElementIndex:int = textLine.getAtomIndexAtCharIndex(begIdx); 
-				var endElementIndex:int = adjustEndElementForBidi(begIdx, endIdx, begElementIndex, direction);
+			
+			var begIsBidi:Boolean = begAtomIndex != -1 ? isAtomBidi(textLine, begAtomIndex, direction) : false;
+			var endIsBidi:Boolean = endAtomIndex != -1 ? isAtomBidi(textLine, endAtomIndex, direction) : false;
+			
+			//trace("begAtomIndex is bidi = " + begIsBidi.toString());
+			//trace("endAtomIndex is bidi = " + endIsBidi.toString());	
+			
+			if(begIsBidi || endIsBidi)
+			{	
+				//this code needs to iterate over the glyphs starting at the begAtomIndex and going forward.
+				//It doesn't matter is beg is bidi or not, we need to find a boundary, create a rect on it, then proceded.
+				//use the value of begIsBidi for testing the consistency of the selection.
 				
-				//trace(makeBlockPassCounter + ") begElementIndex = " + begElementIndex.toString() + " endElementIndex = " +  endElementIndex.toString());
-				CONFIG::debug{ assert(begElementIndex >= 0, "Invalid start index! begIdx = " + begIdx)};
-				CONFIG::debug{ assert(endElementIndex >= 0, "Invalid end index! begIdx = " + endIdx)};
+				//Example bidi text.  Note that the period comes at the left end of the line:
+				//
+				//	Bidi state:		f f t t t t t	(true/false)
+				//	Element Index:0 1 2 3 4 5 6		(0 is the para terminator)
+				//	Chars:			. t o _ b e
+				//  Flow Index:	   6 0 1 2 3 4 (5) 	Note that these numbers represent the space between glyphs AND
+				//					 5(f)			that index 5 is both the space after the e and before the period.
+				//									but, the position 5 is not a valid cursor location.
 				
-				if(direction == Direction.RTL && textLine.getAtomBidiLevel(endElementIndex)%2 != 0)
+				//the original code I implemented used the beg and endElement indexes however that fails because when the text
+				//is mixed bidi/non-bidi, the indexes are only 1 char apart. This resulted in, for example, only the period in 
+				//a line getting selected when the text was bidi.   Instead, we're going to use the begIdx and endIdx and 
+				//recalculate the element indexes each time.  This is expensive, but I don't see an alternative. - gak 09.05.08
+				var curIdx:int = begIdx;
+				var incrementor:int = (begIdx != endIdx ? 1 : 0);
+				
+				//the indexes used to draw the seleciton.  activeStart/End represent the
+				//beginning of the selection shape atoms, while cur is the one we are testing.
+				var activeStartIndex:int = begAtomIndex;
+				var activeEndIndex:int = begAtomIndex;
+				var curElementIndex:int = begAtomIndex;
+				
+				//when activeEndIsBidi no longer matches the bidi setting for the activeStartIndex, we will create the shape
+				var activeEndIsBidi:Boolean = begIsBidi;
+				
+				do
 				{
-					//if we are in RTL, anchoring the LTR text gets tricky.  Because the endElement is before the first
-					//element - which is why we're in this code - the result can be a zero-width rectangle if the span of LTR
-					//text breaks across line boundaries.  If that is the case, then the endElementIndex value will be 0.  As
-					//this is the less common case, assume that it isn't and make all other cases come first
-					if (endElementIndex == 0 && begIdx < endIdx-1)
+					//increment the index
+					curIdx += incrementor;
+					//get the next atom index
+					curElementIndex = textLine.getAtomIndexAtCharIndex(curIdx);
+					
+					//calculate the bidi level for the - kinda cludgy, but if the bidi-text wraps, curElementIndex == -1
+					//so just set it to false if this is the case.  It will get ignored in the subsequent check and curIdx
+					//will == endIdx as this is the last glyph in the line - which is why the next is -1 - gak 09.12.08
+					var curIsBidi:Boolean = (curElementIndex != -1) ? isAtomBidi(textLine, curElementIndex, direction) : false;
+					
+					if(curElementIndex != -1 && curIsBidi != activeEndIsBidi)
 					{
-						//since the endElementIndex is 0, meaning that the LTR spans lines,
-						//we want to grab the glyph before the endIdx which represents the last LTR glyph for the selection. 
-						//Make a recursive call into makeSelectionBlocks using and endIdx decremented by 1.
-						blockArray = makeSelectionBlocks(begIdx, endIdx - 1, paraAbsStart, blockProgression, direction, heightAndAdj);
-						var bidiBlock:Array = makeSelectionBlocks(endIdx - 1, endIdx - 1, paraAbsStart, blockProgression, direction, heightAndAdj)
-						var bidiBlockIter:int = 0;
-						while(bidiBlockIter < bidiBlock.length)
-						{
-							blockArray.push(bidiBlock[bidiBlockIter]);
-							++bidiBlockIter;
-						}
-						return blockArray;
+						blockRect = makeBlock(textLine, curIdx, activeStartIndex, activeEndIndex, startMetrics, blockProgression, direction, heightAndAdj);
+						blockArray.push(blockRect);
+						
+						//shift the activeStart/End indexes to the current
+						activeStartIndex = curElementIndex;
+						activeEndIndex = curElementIndex;
+						//update the bidi setting
+						activeEndIsBidi = curIsBidi;
 					}
-				}
-				
-				var begIsBidi:Boolean = begElementIndex != -1 ? isAtomBidi(begElementIndex, direction) : false;
-				var endIsBidi:Boolean = endElementIndex != -1 ? isAtomBidi(endElementIndex, direction) : false;
-				
-				//trace("begElementIndex is bidi = " + begIsBidi.toString());
-				//trace("endElementIndex is bidi = " + endIsBidi.toString());	
-				
-				if(begIsBidi || endIsBidi)
-				{	
-					//this code needs to iterate over the glyphs starting at the begElementIndex and going forward.
-					//It doesn't matter is beg is bidi or not, we need to find a boundary, create a rect on it, then proceded.
-					//use the value of begIsBidi for testing the consistency of the selection.
-					
-					//Example bidi text.  Note that the period comes at the left end of the line:
-					//
-					//	Bidi state:		f f t t t t t	(true/false)
-					//	Element Index:0 1 2 3 4 5 6		(0 is the para terminator)
-					//	Chars:			. t o _ b e
-					//  Flow Index:	   6 0 1 2 3 4 (5) 	Note that these numbers represent the space between glyphs AND
-					//					 5(f)			that index 5 is both the space after the e and before the period.
-					//									but, the position 5 is not a valid cursor location.
-					
-					//the original code I implemented used the beg and endElement indexes however that fails because when the text
-					//is mixed bidi/non-bidi, the indexes are only 1 char apart. This resulted in, for example, only the period in 
-					//a line getting selected when the text was bidi.   Instead, we're going to use the begIdx and endIdx and 
-					//recalculate the element indexes each time.  This is expensive, but I don't see an alternative. - gak 09.05.08
-					var curIdx:int = begIdx;
-					var incrementor:int = (begIdx != endIdx ? 1 : 0);
-					
-					//the indexes used to draw the seleciton.  activeStart/End represent the
-					//beginning of the selection shape atoms, while cur is the one we are testing.
-					var activeStartIndex:int = begElementIndex;
-					var activeEndIndex:int = begElementIndex;
-					var curElementIndex:int = begElementIndex;
-					
-					//when activeEndIsBidi no longer matches the bidi setting for the activeStartIndex, we will create the shape
-					var activeEndIsBidi:Boolean = begIsBidi;
-					
-					do
+					else
 					{
-						//increment the index
-						curIdx += incrementor;
-						//get the next atom index
-						curElementIndex = textLine.getAtomIndexAtCharIndex(curIdx);
-						
-						//calculate the bidi level for the - kinda cludgy, but if the bidi-text wraps, curElementIndex == -1
-						//so just set it to false if this is the case.  It will get ignored in the subsequent check and curIdx
-						//will == endIdx as this is the last glyph in the line - which is why the next is -1 - gak 09.12.08
-						var curIsBidi:Boolean = (curElementIndex != -1) ? isAtomBidi(curElementIndex, direction) : false;
-						
-						if(curElementIndex != -1 && curIsBidi != activeEndIsBidi)
+						//we don't get another chance to make a block, so if this is the last char, make the block before we bail out.
+						//we have to check both equality and equality plus the incrementor because if we don't, then we'll miss a
+						//character in the selection.
+						if(curIdx == endIdx)
 						{
-							blockRect = makeBlock(activeStartIndex, activeEndIndex, startMetrics, blockProgression, direction, heightAndAdj);
+							blockRect = makeBlock(textLine, curIdx, activeStartIndex, activeEndIndex, startMetrics, blockProgression, direction, heightAndAdj);
 							blockArray.push(blockRect);
-							
-							//shift the activeStart/End indexes to the current
-							activeStartIndex = curElementIndex;
-							activeEndIndex = curElementIndex;
-							//update the bidi setting
-							activeEndIsBidi = curIsBidi;
+						}
+						
+						activeEndIndex = curElementIndex;
+					}
+				}while(curIdx < endIdx)
+				
+			}
+			else
+			{
+				var testILG:InlineGraphicElement = startElem as InlineGraphicElement;
+				if(!testILG || testILG.effectiveFloat == Float.NONE || begIdx == endIdx )
+				{
+					blockRect = makeBlock(textLine, begIdx, begAtomIndex, endAtomIndex, startMetrics, blockProgression, direction, heightAndAdj);
+					if (testILG && testILG.elementWidthWithMarginsAndPadding() != testILG.elementWidth)
+					{	// Don't include margins or padding around inlines in the bounds
+						var verticalText:Boolean = testILG.getTextFlow().computedFormat.blockProgression == BlockProgression.RL;
+						var ilgFormat:ITextLayoutFormat = testILG.computedFormat;
+						if (verticalText)
+						{
+							var paddingTop:Number = testILG.getEffectivePaddingTop();
+							blockRect.top += paddingTop;	// don't include the left side indent in the selected area
+							var paddingBottom:Number = testILG.getEffectivePaddingBottom();
+							blockRect.bottom -= paddingBottom;
 						}
 						else
 						{
-							//we don't get another chance to make a block, so if this is the last char, make the block before we bail out.
-							//we have to check both equality and equality plus the incrementor because if we don't, then we'll miss a
-							//character in the selection.
-							if(curIdx == endIdx)
-							{
-								blockRect = makeBlock(activeStartIndex, activeEndIndex, startMetrics, blockProgression, direction, heightAndAdj);
-								blockArray.push(blockRect);
-							}
-							
-							activeEndIndex = curElementIndex;
+							var paddingLeft:Number = testILG.getEffectivePaddingLeft();
+							blockRect.left += paddingLeft;	// don't include the left side indent in the selected area
+							var paddingRight:Number = testILG.getEffectivePaddingRight();
+							blockRect.right -= paddingRight;
 						}
-					}while(curIdx < endIdx)
-					
+					}
 				}
 				else
 				{
-					var testILG:InlineGraphicElement = startElem as InlineGraphicElement;
-					if(!testILG || testILG.float == Float.NONE)
-					{
-						blockRect = makeBlock(begElementIndex, endElementIndex, startMetrics, blockProgression, direction, heightAndAdj);
-					}
-					else
-					{
-						blockRect = testILG.graphic.getBounds(textLine);
-					}
-					
-					blockArray.push(blockRect);
+					blockRect = testILG.graphic.getBounds(textLine);
 				}
 				
+				blockArray.push(blockRect);
 			}
 			
 			return blockArray;
@@ -1629,35 +1892,36 @@ package flashx.textLayout.compose
 		 * 
 		 * 
 		 */
-		private function makeBlock(begElementIndex:int, endElementIndex:int, startMetrics:Rectangle, blockProgression:String, direction:String, heightAndAdj:Array):Rectangle
+		private function makeBlock(textLine:TextLine, begTextIndex:int, begAtomIndex:int, endAtomIndex:int, startMetrics:Rectangle, blockProgression:String, direction:String, heightAndAdj:Array):Rectangle
 		{
 			var blockRect:Rectangle = new Rectangle();
 			var globalStart:Point = new Point(0,0);
 			var heightAndAdj:Array;
 			
-			if(begElementIndex > endElementIndex)
+			if(begAtomIndex > endAtomIndex)
 			{
 				// swap the start and end
-				var tempEndIdx:int = endElementIndex;
-				endElementIndex = begElementIndex;
-				begElementIndex = tempEndIdx;
+				var tempEndIdx:int = endAtomIndex;
+				endAtomIndex = begAtomIndex;
+				begAtomIndex = tempEndIdx;
 			}
-			var textLine:TextLine = getTextLine(true);
+			if (!textLine)
+				textLine = getTextLine(true);
 			
 			//now that we have elements and they are in the right order for drawing, get their rectangles
-			var begCharRect:Rectangle = textLine.getAtomBounds(begElementIndex);
+			var begCharRect:Rectangle = textLine.getAtomBounds(begAtomIndex);
 			//trace(makeBlockPassCounter + ") begCharRect = " + begCharRect.toString());
 			
-			var endCharRect:Rectangle = textLine.getAtomBounds(endElementIndex);
+			var endCharRect:Rectangle = textLine.getAtomBounds(endAtomIndex);
 			//trace(makeBlockPassCounter + ") endCharRect = " + endCharRect.toString());
 			
 			//Calculate the justificationRule value
 			var justRule:String = _para.getEffectiveJustificationRule();
 			//If this is TTB text and NOT TCY, as indicated by TextRotation.rotate0...
-			if(blockProgression == BlockProgression.RL && textLine.getAtomTextRotation(begElementIndex) != TextRotation.ROTATE_0)
+			if(blockProgression == BlockProgression.RL && textLine.getAtomTextRotation(begAtomIndex) != TextRotation.ROTATE_0)
 			{
 				globalStart.y = begCharRect.y;
-				blockRect.height = begElementIndex != endElementIndex ? endCharRect.bottom - begCharRect.top : begCharRect.height;
+				blockRect.height = begAtomIndex != endAtomIndex ? endCharRect.bottom - begCharRect.top : begCharRect.height;
 				
 				//re-ordered this code.  EAST_ASIAN is more common in vertical and should be the first option.
 				if(justRule == JustificationRule.EAST_ASIAN)
@@ -1674,7 +1938,7 @@ package flashx.textLayout.compose
 			{
 				//given bidi text alternations, the endCharRect could be left of the begCharRect,
 				//use whichever is farther left.
-				globalStart.x = (begCharRect.x < endCharRect.x ? begCharRect.x : endCharRect.x);
+				globalStart.x = Math.min(begCharRect.x,endCharRect.x);
 				//if we're here and the BlockProgression is TTB, then we're TCY.  Less frequent case, so make non-TCY
 				//the first option...
 				//NB - Never use baseline adjustments for TCY.  They don't make sense here.(I think) - gak 06.03.08
@@ -1691,7 +1955,7 @@ package flashx.textLayout.compose
 						globalStart.y += heightAndAdj[1];
 					//changed the width from a default of 2 to use the begCharRect.width so that point seletion
 					//can choose to use the right or left side of the glyph when drawing a caret Watson 1876415/1876953- gak 08.19.09
-					blockRect.width = begElementIndex != endElementIndex ? Math.abs(endCharRect.right - begCharRect.left) : begCharRect.width;
+					blockRect.width = begAtomIndex != endAtomIndex ? Math.abs(endCharRect.right - begCharRect.left) : begCharRect.width;
 				}
 				else
 				{
@@ -1699,7 +1963,7 @@ package flashx.textLayout.compose
 					
 					//changed the width from a default of 2 to use the begCharRect.width so that point seletion
 					//can choose to use the right or left side of the glyph when drawing a caret Watson 1876415/1876953- gak 08.19.09
-					blockRect.width = begElementIndex != endElementIndex ? Math.abs(endCharRect.right - begCharRect.left) : begCharRect.width;
+					blockRect.width = begAtomIndex != endAtomIndex ? Math.abs(endCharRect.right - begCharRect.left) : begCharRect.width;
 				}
 			}
 			
@@ -1707,7 +1971,7 @@ package flashx.textLayout.compose
 			blockRect.y = globalStart.y;
 			if(blockProgression == BlockProgression.RL)
 			{
-				if(textLine.getAtomTextRotation(begElementIndex) != TextRotation.ROTATE_0)
+				if(textLine.getAtomTextRotation(begAtomIndex) != TextRotation.ROTATE_0)
 					blockRect.x -= textLine.descent;
 				else //it's TCY
 					blockRect.y -= (blockRect.height / 2)
@@ -1718,8 +1982,18 @@ package flashx.textLayout.compose
 			}
 			
 			var tfl:TextFlowLine = textLine.userData as TextFlowLine;
-			var curElem:FlowLeafElement = _para.findLeaf(textLine.textBlockBeginIndex + begElementIndex);
-			var rotation:String = curElem.computedFormat.textRotation;
+			var curElem:FlowLeafElement = _para.findLeaf(begTextIndex);
+			var rotation:String;
+			if (!curElem)
+			{
+				if (begTextIndex < 0)
+					curElem = _para.getFirstLeaf();
+				else if (begTextIndex >= _para.textLength)
+					curElem = _para.getLastLeaf();
+				rotation = curElem ? curElem.computedFormat.textRotation : TextRotation.ROTATE_0;
+			}  
+			else
+				rotation = curElem.computedFormat.textRotation;
 			
 			//handle rotation.  For horizontal text, rotations of 90 or 180 cause the text
 			//to draw under the baseline in a cosistent location.  Vertical text is a bit more complicated
@@ -1850,8 +2124,6 @@ package flashx.textLayout.compose
 			if (isDamaged() || !_controller)
 				return;
 			
-			// CONFIG::debug { assert(_textLineCache != null, "bad call to hiliteBlockSelection"); }
-			
 			var textLine:TextLine = peekTextLine();
 			if (!textLine || !textLine.parent)
 				return;
@@ -1882,13 +2154,15 @@ package flashx.textLayout.compose
 			rect.height = height;
 		}
 		
-		/** @private */
+		static private const localZeroPoint:Point = new Point(0,0);
+		static private const localOnePoint:Point = new Point(1,0);
+		static private const rlLocalOnePoint:Point = new Point(0,1);
+		
+		/** @private */		
 		tlf_internal function computePointSelectionRectangle(idx:int, container:DisplayObject, prevLine:TextFlowLine, nextLine:TextFlowLine, constrainSelRect:Boolean):Rectangle
 		{
 			if (isDamaged() || !_controller)
 				return null;
-			
-			// CONFIG::debug { assert(_textLineCache != null, "bad call to hiliteBlockSelection"); }
 			
 			// no container for overflow lines, or lines scrolled out 
 			var textLine:TextLine = peekTextLine();
@@ -1944,7 +2218,7 @@ package flashx.textLayout.compose
 			}
 			
 			var heightAndAdj:Array = getRomanSelectionHeightAndVerticalAdjustment(prevLine, nextLine);
-			var blockRectArray:Array = makeSelectionBlocks(idx, endIdx, _para.getAbsoluteStart(), blockProgression, direction, heightAndAdj);
+			var blockRectArray:Array = makeSelectionBlocks(textLine, idx, endIdx, _para.getAbsoluteStart(), blockProgression, direction, heightAndAdj);
 			CONFIG::debug{ assert(blockRectArray.length == 1, "A point selection should return a single selection rectangle!"); }
 			var rect:Rectangle = blockRectArray[0];
 			
@@ -1958,21 +2232,33 @@ package flashx.textLayout.compose
 				drawOnRight = !drawOnRight;
 			}
 			
+			// compute a width so that cursor is visually one pixel wide independent of scaling
+			var zeroPoint:Point = container.localToGlobal(localZeroPoint);
+			var cursorWidth:Number;
+			
 			if(blockProgression == BlockProgression.RL && textLine.getAtomTextRotation(elementIndex) != TextRotation.ROTATE_0)
 			{
+				var rlOnePoint:Point = container.localToGlobal(rlLocalOnePoint);
+				cursorWidth = zeroPoint.y - rlOnePoint.y;
+				cursorWidth = cursorWidth == 0 ? 1 : Math.abs(1.0/cursorWidth);
+				// trace(zeroPoint,onePoint,cursorSize);
 				if(!drawOnRight)
-					setRectangleValues(rect, rect.x, !isTCYBounds ? rect.y : rect.y + rect.height,rect.width,1);
+					setRectangleValues(rect, rect.x, !isTCYBounds ? rect.y : rect.y + rect.height,rect.width,cursorWidth);
 				else
-					setRectangleValues(rect, rect.x, !isTCYBounds ? rect.y + rect.height : rect.y ,rect.width,1);
+					setRectangleValues(rect, rect.x, !isTCYBounds ? rect.y + rect.height : rect.y ,rect.width,cursorWidth);
 			}
 			else
 			{
+				var onePoint:Point = container.localToGlobal(localOnePoint);
+				cursorWidth = zeroPoint.x - onePoint.x;
+				cursorWidth = cursorWidth == 0 ? 1 : Math.abs(1.0/cursorWidth);
+				// trace(zeroPoint,onePoint,cursorSize);
 				//choose to use the right or left side of the glyph based on Direction when drawing a caret Watson 1876415/1876953
 				//if the direction is ltr, then the cursor should be on the left side
 				if(!drawOnRight)
-					setRectangleValues(rect, !isTCYBounds ? rect.x : rect.x + rect.width, rect.y, 1, rect.height);
+					setRectangleValues(rect, !isTCYBounds ? rect.x : rect.x + rect.width, rect.y, cursorWidth, rect.height);
 				else //otherwise, it should be on the right, unless it is TCY
-					setRectangleValues(rect, !isTCYBounds ? rect.x + rect.width : rect.x, rect.y, 1, rect.height);
+					setRectangleValues(rect, !isTCYBounds ? rect.x + rect.width : rect.x, rect.y, cursorWidth, rect.height);
 			}
 			
 			//allow the atoms to be garbage collected.
@@ -2136,35 +2422,34 @@ package flashx.textLayout.compose
 		}
 		
 		/** @private */
-		private function adjustEndElementForBidi(begIdx:int, endIdx:int, begElementIndex:int, direction:String):int
+		private function adjustEndElementForBidi(textLine:TextLine, begIdx:int, endIdx:int, begAtomIndex:int, direction:String):int
 		{
-			var endElementIndex:int = begElementIndex;
-			
-			var textLine:TextLine = getTextLine(true);
-			
+			var endAtomIndex:int = begAtomIndex;
+						
 			if(endIdx != begIdx)
 			{
-				if(((direction == Direction.LTR && textLine.getAtomBidiLevel(begElementIndex)%2 != 0)
-					|| (direction == Direction.RTL && textLine.getAtomBidiLevel(begElementIndex)%2 == 0))
-					&& textLine.getAtomTextRotation(begElementIndex) != TextRotation.ROTATE_0)
-					endElementIndex = textLine.getAtomIndexAtCharIndex(endIdx);
+				if(((direction == Direction.LTR && textLine.getAtomBidiLevel(begAtomIndex)%2 != 0)
+					|| (direction == Direction.RTL && textLine.getAtomBidiLevel(begAtomIndex)%2 == 0))
+					&& textLine.getAtomTextRotation(begAtomIndex) != TextRotation.ROTATE_0)
+					endAtomIndex = textLine.getAtomIndexAtCharIndex(endIdx);
 				else
 				{
-					endElementIndex = textLine.getAtomIndexAtCharIndex(endIdx - 1);
+					endAtomIndex = textLine.getAtomIndexAtCharIndex(endIdx - 1);
 				}
 			}
 			
-			if(endElementIndex == -1 && endIdx > 0)
+			if(endAtomIndex == -1 && endIdx > 0)
 			{
-				return adjustEndElementForBidi(begIdx, endIdx - 1, begElementIndex, direction);
+				return adjustEndElementForBidi(textLine, begIdx, endIdx - 1, begAtomIndex, direction);
 			}
-			return endElementIndex;
+			return endAtomIndex;
 		}
 		
 		/** @private */
-		private function isAtomBidi(elementIdx:int, direction:String):Boolean
+		private function isAtomBidi(textLine:TextLine, elementIdx:int, direction:String):Boolean
 		{
-			var textLine:TextLine = getTextLine(true);
+			if (!textLine)
+				textLine = getTextLine(true);
 			
 			return (textLine.getAtomBidiLevel(elementIdx)%2 != 0 && direction == Direction.LTR) || (textLine.getAtomBidiLevel(elementIdx)%2 == 0 && direction == Direction.RTL);
 		}
@@ -2173,6 +2458,48 @@ package flashx.textLayout.compose
 		tlf_internal function get adornCount():int 
 		{ return _adornCount; }
 		
+		/** @private */
+		static tlf_internal function findNumberLine(textLine:TextLine):TextLine
+		{
+			// not always going to be a numberLine - listStyleType may be "none"
+			// have to hunt for it because inlinegraphics get pushed at the beginning
+			// risk here is that clients decorate TextLines with other TextLines.
+			for (var idx:int = 0; idx < textLine.numChildren; idx++)
+			{
+				var numberLine:TextLine = textLine.getChildAt(idx) as TextLine;
+				if (numberLine && (numberLine.userData is NumberLineUserData))
+					break;
+			}
+			return numberLine;
+		}
+		
+		/** @private */
+		static tlf_internal function getNumberLineListStylePosition(numberLine:TextLine):String
+		{ return (numberLine.userData as NumberLineUserData).listStylePosition; }
+		/** @private */
+		static tlf_internal function getNumberLineInsideLineWidth(numberLine:TextLine):Number
+		{ return (numberLine.userData as NumberLineUserData).insideLineWidth; }
+		/** @private */
+		static tlf_internal function getNumberLineSpanFormat(numberLine:TextLine):ITextLayoutFormat
+		{ return (numberLine.userData as NumberLineUserData).spanFormat; }
+		/** @private */
+		static tlf_internal function getNumberLineParagraphDirection(numberLine:TextLine):String
+		{ return (numberLine.userData as NumberLineUserData).paragraphDirection; }
+		/** @private */		
+		static tlf_internal function setListEndIndent(numberLine:TextLine,listEndIndent:Number):void
+		{ (numberLine.userData as NumberLineUserData).listEndIndent = listEndIndent; }
+		/** @private */		
+		static tlf_internal function getListEndIndent(numberLine:TextLine):Number
+		{ return (numberLine.userData as NumberLineUserData).listEndIndent; }
+		
+		/** @private */		
+		static tlf_internal function setNumberLineBackground(numberLine:TextLine,background:BackgroundManager):void
+		{ (numberLine.userData as NumberLineUserData).backgroundManager = background; }
+		/** @private */		
+		static tlf_internal function getNumberLineBackground(numberLine:TextLine):BackgroundManager
+		{ return (numberLine.userData as NumberLineUserData).backgroundManager; }
+
+
 		/** @private */
 		CONFIG::debug public function dumpToXML():String
 		{
@@ -2208,9 +2535,11 @@ package flashx.textLayout.compose
 	};
 }
 
+import flash.display.Shape;
 import flash.geom.Rectangle;
 
 import flashx.textLayout.edit.ISelectionManager;
+import flashx.textLayout.formats.ITextLayoutFormat;
 
 /** @private - I would have defined this as tlf_internal, but that is not an option, so
  * making it private.
@@ -2263,4 +2592,128 @@ final class SelectionCache
 		_endIdx = -1;
 	}
 	
+}
+
+import flashx.textLayout.elements.BackgroundManager;
+
+class NumberLineUserData
+{
+	public function NumberLineUserData(listStylePosition:String,insideLineWidth:Number,spanFormat:ITextLayoutFormat,paraDirection:String)
+	{
+		this.listStylePosition = listStylePosition;
+		this.insideLineWidth = insideLineWidth;
+		this.spanFormat = spanFormat;
+		this.paragraphDirection = paraDirection;
+	}
+	public var listStylePosition:String;
+	public var insideLineWidth:Number;
+	public var spanFormat:ITextLayoutFormat;
+	public var paragraphDirection:String;
+	public var listEndIndent:Number;
+	public var backgroundManager:BackgroundManager;
+}
+
+import flash.text.engine.TextBlock;
+import flash.text.engine.TextLine;
+import flash.text.engine.TextLineValidity;
+
+import flashx.textLayout.debug.Debugging;
+import flashx.textLayout.elements.TextFlow;
+import flashx.textLayout.factory.StringTextLineFactory;
+import flashx.textLayout.formats.BlockProgression;
+import flashx.textLayout.tlf_internal;
+import flashx.textLayout.formats.TextLayoutFormat;
+
+use namespace tlf_internal;
+
+class NumberLineFactory extends StringTextLineFactory
+{
+	private var _listStylePosition:String;
+	private var _markerFormat:ITextLayoutFormat;
+	private var _backgroundManager:BackgroundManager;
+	
+	public function get listStylePosition():String
+	{ return _listStylePosition; }
+	public function set listStylePosition(val:String):void
+	{ _listStylePosition = val; }
+	
+	public function get markerFormat():ITextLayoutFormat
+	{ return _markerFormat; }
+	public function set markerFormat(val:ITextLayoutFormat):void
+	{
+		_markerFormat = val;
+		spanFormat = val;
+	}
+	
+	public function get backgroundManager():BackgroundManager
+	{ return _backgroundManager; }
+	
+	public function clearBackgroundManager():void
+	{ _backgroundManager = null; }
+	
+	/** @private */
+	static tlf_internal function calculateInsideNumberLineWidth(numberLine:TextLine,bp:String):Number
+	{
+		var minVal:Number = Number.MAX_VALUE;
+		var maxVal:Number = Number.MIN_VALUE;
+		var idx:int = 0;
+		var rect:Rectangle;
+		
+		if (bp == BlockProgression.TB)
+		{
+			for (; idx < numberLine.atomCount; idx++)
+			{
+				//trace(idx,numberLine.getAtomTextBlockBeginIndex(idx),numberLine.getAtomBounds(idx));
+				if (numberLine.getAtomTextBlockBeginIndex(idx) != numberLine.rawTextLength-1)
+				{
+					rect = numberLine.getAtomBounds(idx);
+					minVal = Math.min(minVal,rect.x);
+					maxVal = Math.max(maxVal,rect.right);
+				}
+			}
+		}
+		else
+		{
+			for (; idx < numberLine.atomCount; idx++)
+			{
+				//trace(idx,numberLine.getAtomTextBlockBeginIndex(idx),numberLine.getAtomBounds(idx));
+				if (numberLine.getAtomTextBlockBeginIndex(idx) != numberLine.rawTextLength-1)
+				{
+					rect = numberLine.getAtomBounds(idx);
+					minVal = Math.min(minVal,rect.top);
+					maxVal = Math.max(maxVal,rect.bottom);
+				}
+			}
+		}
+		numberLine.flushAtomData();
+		//trace("textWidth",numberLine.textWidth,maxVal-minVal);
+		return maxVal > minVal ? maxVal-minVal : 0;
+	}
+	
+	protected override function callbackWithTextLines(callback:Function,delx:Number,dely:Number):void
+	{
+		for each (var textLine:TextLine in _factoryComposer._lines)
+		{
+			textLine.userData = new NumberLineUserData(listStylePosition,calculateInsideNumberLineWidth(textLine,textFlowFormat.blockProgression),_markerFormat,paragraphFormat.direction);
+			var textBlock:TextBlock = textLine.textBlock;
+			if (textBlock)
+			{
+				CONFIG::debug { Debugging.traceFTECall(null,textBlock,"releaseLines",textBlock.firstLine, textBlock.lastLine); }	
+				textBlock.releaseLines(textBlock.firstLine,textBlock.lastLine);
+			}
+			textLine.x += delx;
+			textLine.y += dely;
+			textLine.validity = TextLineValidity.STATIC;
+			CONFIG::debug { Debugging.traceFTEAssign(textLine,"validity",TextLineValidity.STATIC); }
+			callback(textLine);
+		}
+	}
+	
+	// save the backgroundManager for later use.  generate the background when the TextLine is placed
+	tlf_internal override function processBackgroundColors(textFlow:TextFlow,callback:Function,x:Number,y:Number,constrainWidth:Number,constrainHeight:Number):*
+	{
+		_backgroundManager = textFlow.backgroundManager;
+		textFlow.clearBackgroundManager();
+		return;
+	}
 }

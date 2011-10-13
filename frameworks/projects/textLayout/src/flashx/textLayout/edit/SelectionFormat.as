@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit
 {
 	import flash.display.BlendMode;
@@ -41,6 +41,8 @@ package flashx.textLayout.edit
 		 * The cursor blink rate is 500 milliseconds.</p>
 		 *
 		 * <p>Setting the <code>pointAlpha</code> and <code>rangeAlpha</code> properties to zero disables selection highlighting.</p>
+		 * 
+		 * <p>Non-zero blink rate is only used when an EditManager is attached to the TextFlow.</p>
 		 * 
 		 * @param rangeColor The color for drawing the highlight.
 		 * @param rangeAlpha The transparency value for drawing the highlight. Valid values are between 0

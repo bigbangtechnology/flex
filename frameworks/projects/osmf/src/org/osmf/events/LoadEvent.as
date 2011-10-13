@@ -24,13 +24,14 @@ package org.osmf.events
 	import flash.events.Event;
 	
 	/**
-	 * A LoadEvent is dispatched when properties of an ILoadable trait have changed.
+	 * A LoadEvent is dispatched when the properties of a LoadTrait change.
 	 *  
 	 *  @langversion 3.0
 	 *  @playerversion Flash 10
-	 *  @playerversion AIR 1.0
-	 *  @productversion OSMF 4.0		
-		 */
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 *  @productversion FLEXOSMF 4.0
+	 */
 	public class LoadEvent extends Event
 	{
 		/**
@@ -42,9 +43,10 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0		 
-		 **/
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
 		public static const LOAD_STATE_CHANGE:String = "loadStateChange";
 
 		/**
@@ -56,9 +58,10 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0		 
-		 **/
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
 		public static const BYTES_LOADED_CHANGE:String = "bytesLoadedChange";
 		
 		/**
@@ -70,9 +73,10 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0		 
-		 **/
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
 		public static const BYTES_TOTAL_CHANGE:String = "bytesTotalChange";
 		
 		/**
@@ -81,14 +85,15 @@ package org.osmf.events
 		 * @param type Event type.
  		 * @param bubbles Specifies whether the event can bubble up the display list hierarchy.
  		 * @param cancelable Specifies whether the behavior associated with the event can be prevented. 
-		 * @param loadState New LoadState of the ILoadable.
+		 * @param loadState New LoadState of the LoadTrait.
 		 * @param bytes New value of bytesLoaded or bytesTotal.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0		 
-		 **/
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
 		public function LoadEvent
 							( type:String,
 							  bubbles:Boolean=false,
@@ -105,20 +110,21 @@ package org.osmf.events
 		
 		/**
 		 * @private
-		 **/
+		 */
 		override public function clone():Event
 		{
 			return new LoadEvent(type, bubbles, cancelable, loadState, bytes);
 		}
 
 		/**
-		 * New LoadState of the ILoadable.
+		 * New LoadState of the LoadTrait.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0		 
-		 **/
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
 		public function get loadState():String
 		{
 			return _loadState;
@@ -129,9 +135,10 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0		 
-		 **/
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
 		public function get bytes():Number
 		{
 			return _bytes;

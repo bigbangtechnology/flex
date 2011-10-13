@@ -1,15 +1,18 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit
 {
+	import flash.geom.Point;
+	import flash.utils.getQualifiedClassName;
+	
 	import flashx.textLayout.container.ContainerController;
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.elements.FlowElement;
@@ -18,12 +21,11 @@ package flashx.textLayout.edit
 	import flashx.textLayout.elements.InlineGraphicElement;
 	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.elements.SpanElement;
-	import flashx.textLayout.elements.SubParagraphGroupElement;
+	import flashx.textLayout.elements.SubParagraphGroupElementBase;
 	import flashx.textLayout.elements.TextFlow;
 	import flashx.textLayout.formats.Float;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
 	import flashx.textLayout.tlf_internal;
 	
 	use namespace tlf_internal;
@@ -37,87 +39,85 @@ package flashx.textLayout.edit
 	{
 		/**
 		 * Inserts text into specified paragraph
-		 * @param p		ParagraphElement to insert into
-		 * @param paraSelBegIdx	index relative to beginning of the paragraph to insert text
-		 * @param leanBack  at an attribute change boundary are we on the left or the right
+		 * @param textFlow		TextFlow to insert into
+		 * @param absoluteStart	index relative to beginning of the TextFlow to insert text
 		 * @param text	actual text to insert 
-		 * @param forceIntoLeafGiven	flag to suppress creation of new leaf element during insert (useful for type-to-replace)
+		 * @param createNewSpan	flag to force creation of a new span
 		 */
-		public static function insertText(para:ParagraphElement, elem:FlowLeafElement, paraSelBegIdx:int,insertText:String, forceIntoLeafGiven:Boolean = false):void
+		public static function insertText(textFlow:TextFlow, absoluteStart:int,insertText:String, createNewSpan:Boolean):SpanElement
 		{
 			if (insertText.length == 0)
-				return;	// error? other sanity checks needed here?
+				return null;	// error? other sanity checks needed here?
 				
-			var createNewSpan:Boolean = false;
-			var insertParent:FlowGroupElement = elem.parent;
+			var sibling:FlowElement = textFlow.findLeaf(absoluteStart);
+			var siblingIndex:int;
+			var paragraph:ParagraphElement = sibling.getParagraph();
+			var paraStart:int = paragraph.getAbsoluteStart();
+			var paraSelBegIdx:int = absoluteStart - paraStart;
 			
-			var curSPGElement:SubParagraphGroupElement = elem.getParentByType(SubParagraphGroupElement) as SubParagraphGroupElement;
+			if (paraStart == absoluteStart)		// insert to start of paragraph
+				siblingIndex = 0;
+			else 
+			{
+				// If we're at the start a span, go to the previous span in the same paragraph, and insert at the end of it
+				if (paraSelBegIdx == sibling.getElementRelativeStart(paragraph))
+					sibling = FlowLeafElement(sibling).getPreviousLeaf(paragraph);	
+				siblingIndex = sibling.parent.getChildIndex(sibling) + 1;
+			}
+			var insertParent:FlowGroupElement = sibling.parent;
+			
+			// If we are adding text to the start or end of a link, it doesn't allow the insertion to group with the link.
+			// So in that case, we will insert to the element beside the position that is *not* part of the link.
+			var curSPGElement:SubParagraphGroupElementBase = sibling.getParentByType(SubParagraphGroupElementBase) as SubParagraphGroupElementBase;
 			while (curSPGElement != null)
 			{
-				var subParInsertionPoint:int = paraSelBegIdx - curSPGElement.getElementRelativeStart(para);
+				var subParInsertionPoint:int = paraSelBegIdx - curSPGElement.getElementRelativeStart(paragraph);
 				if (((subParInsertionPoint == 0) && (!curSPGElement.acceptTextBefore())) ||
 					((!curSPGElement.acceptTextAfter() && (subParInsertionPoint == curSPGElement.textLength || 
-					(subParInsertionPoint == curSPGElement.textLength - 1 && (elem == para.getLastLeaf()))))))
+					(subParInsertionPoint == curSPGElement.textLength - 1 && (sibling == paragraph.getLastLeaf()))))))
 				{
-					createNewSpan = !forceIntoLeafGiven;
+					createNewSpan = true;
+					sibling = insertParent;
 					insertParent = insertParent.parent;
-					curSPGElement = curSPGElement.getParentByType(SubParagraphGroupElement) as SubParagraphGroupElement;
+					curSPGElement = curSPGElement.getParentByType(SubParagraphGroupElementBase) as SubParagraphGroupElementBase;
+					siblingIndex = insertParent.getChildIndex(sibling) + 1;
 				} else {
 					break;
 				}
 			}
 				
 			// adjust the flow so that we are in a span for the insertion
-			if ((!(elem is SpanElement)) || (createNewSpan == true))
+			var insertSpan:SpanElement = sibling as SpanElement;
+			if (!insertSpan || createNewSpan)
 			{
-				var newSpan:SpanElement;	// scratch
-				var insertIdx:int;	// scratch
-				
-				// if were not in a span then we must be at the beginning or end of some other FlowLeafElement.  
-				// go to prev or next and use if it is a span.  add a span if needed.
-				var paraRelativeStart:int = elem.getElementRelativeStart(para);
-				CONFIG::debug{ assert(paraRelativeStart == paraSelBegIdx || paraRelativeStart+elem.textLength == paraSelBegIdx || paraRelativeStart+elem.textLength - 1 == paraSelBegIdx,"selection inside non-SpanElement Leaf"); }
-				if (paraRelativeStart == paraSelBegIdx)
+				var newSpan:SpanElement = new SpanElement();
+				var insertIdx:int;
+				if (siblingIndex > 0)
 				{
-					elem = elem.getPreviousLeaf(para);
-					if (!(elem is SpanElement))
+					var relativeStart:int = paraSelBegIdx - sibling.getElementRelativeStart(paragraph);
+					if (createNewSpan)
 					{
-						newSpan = new SpanElement();
-						if (elem)
-						{
-							newSpan.format = elem.format;
-							insertIdx = insertParent.getChildIndex(elem)+1;
-						}
-						else
-						{
-							newSpan.format = para.getFirstLeaf().format;
-							insertIdx = 0;
-						}
-						insertParent.replaceChildren(insertIdx,insertIdx,newSpan);
-						elem = newSpan;
+						if (relativeStart == 0)
+							siblingIndex--;
+						else if (relativeStart != sibling.textLength)
+							sibling.splitAtPosition(relativeStart);		// we'll insert between the two elements
 					}
 				}
+				insertParent.replaceChildren(siblingIndex, siblingIndex, newSpan);
+				var formatElem:FlowLeafElement = newSpan.getPreviousLeaf(paragraph);
+				if (formatElem == null)
+					newSpan.format = newSpan.getNextLeaf(paragraph).format;
 				else
-				{
-					newSpan = new SpanElement();
-					newSpan.format = elem.format;
-					if(elem.parent == insertParent)
-						insertIdx = insertParent.getChildIndex(elem)+1;
-					else
-						insertIdx = insertParent.getChildIndex(elem.parent)+1;
-						
-					insertParent.replaceChildren(insertIdx,insertIdx,newSpan);
-					elem = newSpan;
-				}
+					newSpan.format = formatElem.format;
+					
+				insertSpan = newSpan;
 			}
 			
-			var curSpan:SpanElement = elem as SpanElement;
-			var runInsertionPoint:int;
-			//if we added a new span, then 
-			runInsertionPoint = paraSelBegIdx - curSpan.getElementRelativeStart(para);
+			var runInsertionPoint:int = paraSelBegIdx - insertSpan.getElementRelativeStart(paragraph);
 			
 				
-			curSpan.replaceText(runInsertionPoint, runInsertionPoint, insertText);
+			insertSpan.replaceText(runInsertionPoint, runInsertionPoint, insertText);
+			return insertSpan;
 		}
 		
 		private static function deleteTextInternal(para:ParagraphElement, paraSelBegIdx:int, totalToDelete:int):void
@@ -214,7 +214,7 @@ package flashx.textLayout.edit
 			var imgElem:InlineGraphicElement = new InlineGraphicElement();
 			imgElem.height = height;
 			imgElem.width = width;
-			imgElem.float = options ? options.toString() : Float.NONE;
+			imgElem.float = options ? options.toString() : undefined;
 			
 			var src:Object = source;
 			var embedStr:String = "@Embed";
@@ -289,16 +289,18 @@ package flashx.textLayout.edit
 			return elemToUpdate;
 		}
 		
-		private static function undefineDefinedFormats(target:TextLayoutFormatValueHolder,undefineFormat:ITextLayoutFormat):void
+		private static function undefineDefinedFormats(target:TextLayoutFormat,undefineFormat:ITextLayoutFormat):void
 		{
 			if (undefineFormat)
 			{
 				// this is fairly rare so this operation is not optimizied
-				for (var prop:String in TextLayoutFormat.description)
-				{
-					if (undefineFormat[prop] !== undefined)
-						target[prop] = undefined;
-				} 
+				var tlfUndefineFormat:TextLayoutFormat;
+				if (undefineFormat is TextLayoutFormat)
+					tlfUndefineFormat = undefineFormat as TextLayoutFormat;
+				else 
+					tlfUndefineFormat = new TextLayoutFormat(undefineFormat);
+				for (var prop:String in tlfUndefineFormat.styles)
+					target.setStyle(prop, undefined);
 			}
 		}
 
@@ -313,7 +315,7 @@ package flashx.textLayout.edit
 		 */
 		static private function applyCharacterFormat(leaf:FlowLeafElement, begIdx:int, rangeLength:int, applyFormat:ITextLayoutFormat, undefineFormat:ITextLayoutFormat):int
 		{
-			var newFormat:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder(leaf.format);
+			var newFormat:TextLayoutFormat = new TextLayoutFormat(leaf.format);
 			if (applyFormat)
 				newFormat.apply(applyFormat);
 			undefineDefinedFormats(newFormat,undefineFormat);
@@ -328,7 +330,7 @@ package flashx.textLayout.edit
 		 * @param rangeLength	number of characters to modify
 		 * @return starting position of following span
 		 */
-		static private function setCharacterFormat(leaf:FlowLeafElement, format:Object, begIdx:int, rangeLength:int):int
+		static private function setCharacterFormat(leaf:FlowLeafElement, format:ITextLayoutFormat, begIdx:int, rangeLength:int):int
 		{
 			var startOffset:int = leaf.getAbsoluteStart();
 			if (!(format is ITextLayoutFormat) || !TextLayoutFormat.isEqual(ITextLayoutFormat(format),leaf.format))
@@ -357,7 +359,7 @@ package flashx.textLayout.edit
 				if (format is ITextLayoutFormat)
 					elemToUpdate.format = ITextLayoutFormat(format);
 				else
-					elemToUpdate.setCoreStylesInternal(format);
+					elemToUpdate.setStylesInternal(format);
 				
 				return begIdx+rangeLength;
 			}
@@ -379,7 +381,7 @@ package flashx.textLayout.edit
 		}
 		
 		// used for undo of operation
-		public static function setTextStyleChange(flowRoot:TextFlow,begChange:int, endChange:int, coreStyle:Object):void
+		public static function setTextStyleChange(flowRoot:TextFlow,begChange:int, endChange:int, coreStyle:ITextLayoutFormat):void
 		{
 			// TODO: this code only works for span's.  Revisit when new FlowLeafElement types enabled
 			var workIdx:int = begChange;
@@ -390,67 +392,61 @@ package flashx.textLayout.edit
 				workIdx = setCharacterFormat(FlowLeafElement(elem),coreStyle,workIdx,endChange-workIdx);
 			}
 		}
-
-		public static function splitParagraph(para:ParagraphElement, paraSplitPos:int, pointFormat:ITextLayoutFormat=null):ParagraphElement
-		{
-			CONFIG::debug { assert(((paraSplitPos >= 0) && (paraSplitPos <= para.textLength - 1)), "Invalid call to ParaEdit.splitParagraph"); }
-
-			var newPar:ParagraphElement;
-			var paraStartAbsolute:int = para.getAbsoluteStart();
-			var absSplitPos:int = paraStartAbsolute + paraSplitPos;
-			
-			if ((paraSplitPos == para.textLength - 1))
-			{
-				newPar = para.shallowCopy() as ParagraphElement;
-				newPar.replaceChildren(0, 0, new SpanElement());
-				var startIdx:int = para.parent.getChildIndex(para);
-				para.parent.replaceChildren(startIdx + 1, startIdx + 1, newPar);
-				if (newPar.textLength == 1)
-				{
-					//we have an empty paragraph.  Make sure that the first
-					//span of this paragraph has the same character attributes
-					//of the last span of this
-
-					var lastSpan:FlowLeafElement = para.getLastLeaf();
-					var prevSpan:FlowLeafElement;
-					if (lastSpan != null && lastSpan.textLength == 1)
-					{
-						//if the lastSpan is only a newline, you really want the span right before
-						var elementIdx:int = lastSpan.parent.getChildIndex(lastSpan);
-						if (elementIdx > 0)
-						{
-							prevSpan = lastSpan.parent.getChildAt(elementIdx - 1) as SpanElement;
-							if (prevSpan != null) lastSpan = prevSpan;
-						}
-					}
-					if (lastSpan != null)
-					{
-						ParaEdit.setTextStyleChange(para.getTextFlow(), absSplitPos + 1, absSplitPos + 2, lastSpan.format);
-					}
-					if (pointFormat != null)
-						ParaEdit.applyTextStyleChange(para.getTextFlow(),absSplitPos + 1, absSplitPos + 2, pointFormat, null);
-				}							
-			}
-			else
-			{
-				newPar = para.splitAtPosition(paraSplitPos) as ParagraphElement;
-			}
-			
-			//you can't have empty paragraphs.  Put the span back
-			// This now handled in normalize()
-			if (para.numChildren == 0)
-			{
-				//If we are injecting a new Span, we need to clone the attributes from 
-				//the newPar's first child.  If we don't, then contents of para will have
-				//no formatting. (2464521)
-				var newFormattedSpan:SpanElement = new SpanElement();
-				newFormattedSpan.quickCloneTextLayoutFormat(newPar.getChildAt(0));
-				para.replaceChildren(0, 0, newFormattedSpan);
-			}
-			
-			return newPar;
-		}
 		
+		public static function splitElement(elem:FlowGroupElement, splitPos:int):FlowGroupElement
+		{
+			CONFIG::debug { assert(splitPos >= 0 && splitPos <= elem.textLength, "Invalid call to ParaEdit.splitElement"); }
+			
+			var rslt:FlowGroupElement = elem.splitAtPosition(splitPos) as FlowGroupElement;
+			
+			// rslt always follows elem
+			
+
+			if (!(rslt is SubParagraphGroupElementBase))
+			{
+				
+				// need to insure there is a paragraph and a span on each side
+				var rsltParagraph:FlowGroupElement = rslt;
+				while (!(rsltParagraph is ParagraphElement) && rsltParagraph.numChildren)
+					rsltParagraph = rsltParagraph.getChildAt(0) as FlowGroupElement;
+				
+				var elemParagraph:FlowGroupElement = elem;
+				while (!(elemParagraph is ParagraphElement) && elemParagraph.numChildren)
+					elemParagraph = elemParagraph.getChildAt(elemParagraph.numChildren-1) as FlowGroupElement;
+				
+				CONFIG::debug { assert (elemParagraph is ParagraphElement || rsltParagraph is ParagraphElement,"ParaEdit.splitElement didn't find at least one paragraph"); }
+				
+				var p:ParagraphElement;
+				
+				if (!(elemParagraph is ParagraphElement))
+				{
+					// clone rlstParagraph
+					p = rsltParagraph.shallowCopy() as ParagraphElement;
+					elemParagraph.addChild(p);
+					elemParagraph = p;
+				}
+				else if (!(rsltParagraph is ParagraphElement))
+				{
+					p = elemParagraph.shallowCopy() as ParagraphElement;
+					rsltParagraph.addChild(p);
+					rsltParagraph = p;						
+				}
+				
+				// if we have an empty before or after para need to make sure the formats got copied
+				if (elemParagraph.textLength <= 1)
+				{
+					elemParagraph.normalizeRange(0,elemParagraph.textLength);
+					elemParagraph.getLastLeaf().quickCloneTextLayoutFormat(rsltParagraph.getFirstLeaf());
+				}
+				else if (rsltParagraph.textLength <= 1)
+				{
+					rsltParagraph.normalizeRange(0,rsltParagraph.textLength);
+					rsltParagraph.getFirstLeaf().quickCloneTextLayoutFormat(elemParagraph.getLastLeaf());
+				}
+			}
+
+			return rslt;
+		}		
 		// TODO: rewrite this method by moving the elements.  This is buggy.
 		public static function mergeParagraphWithNext(para:ParagraphElement):Boolean
 		{
@@ -499,7 +495,7 @@ package flashx.textLayout.edit
 				var obj:Object = new Object();
 				obj.begIdx = para.getAbsoluteStart();
 				obj.endIdx = obj.begIdx + para.textLength - 1;
-				obj.attributes = para.coreStyles;
+				obj.attributes = new TextLayoutFormat(para.format);
 				undoArray.push(obj);
 
 				begSel = obj.begIdx + para.textLength;
@@ -515,14 +511,14 @@ package flashx.textLayout.edit
 		 * @param endIndex		text index within the last paragraph in the range
 		 */
 		// used for undo of operation
-		public static function setParagraphStyleChange(flowRoot:TextFlow,begChange:int, endChange:int, coreStyles:Object):void
+		public static function setParagraphStyleChange(flowRoot:TextFlow,begChange:int, endChange:int, format:ITextLayoutFormat):void
 		{
 			var beginPara:int = begChange;
-			while (beginPara < endChange)
+			while (beginPara <= endChange)
 			{
 				var para:ParagraphElement = flowRoot.findLeaf(beginPara).getParagraph();
 				
-				para.setCoreStylesInternal(coreStyles);
+				para.format = format ? new TextLayoutFormat(format) : null;
 				beginPara = para.getAbsoluteStart() + para.textLength;
 			}
 		}
@@ -541,13 +537,16 @@ package flashx.textLayout.edit
 			var curIndex:int = begChange;
 			while (curIndex <= endChange)
 			{
-				var para:ParagraphElement = flowRoot.findLeaf(curIndex).getParagraph();
+				var leaf:FlowLeafElement = flowRoot.findLeaf(curIndex);
+				if (!leaf)
+					break;
+				var para:ParagraphElement = leaf.getParagraph();
 				
 				// now, need to get the change from "format" and apply to para. We make
 				// a new ParagraphFormat object instead of changing the ParagraphFormat
 				// already in the paragraph so that if the object is shared, other uses
 				// in other paragraphs will not be affected.
-				var newFormat:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder(para.format);
+				var newFormat:TextLayoutFormat = new TextLayoutFormat(para.format);
 				if (applyFormat)
 					newFormat.apply(applyFormat);
 				undefineDefinedFormats(newFormat,undefineFormat);
@@ -572,8 +571,8 @@ package flashx.textLayout.edit
 				var objLength:int = Math.min(countRemaining, elemLength);
 				obj.endIdx = begSel + objLength;
 				
-				// save just the styles
-				obj.style = elem.coreStyles;
+				// just the styles
+				obj.style = new TextLayoutFormat(elem.format);
 				undoArray.push(obj);
 				
 				countRemaining -= Math.min(countRemaining, elemLength);
@@ -593,21 +592,21 @@ package flashx.textLayout.edit
 			CONFIG::debug { assert(begIdx <= endIdx,"bad indexeds passed to ParaEdit.cacheContainerStyleInformation");  }
 			if (flowRoot.flowComposer)
 			{
-				var controllerIndex:int = flowRoot.flowComposer.findControllerIndexAtPosition(begIdx,false);
-				if (controllerIndex >= 0)
+				var startIdx:int = flowRoot.flowComposer.findControllerIndexAtPosition(begIdx,false);
+				if (startIdx == -1)
+					return;
+				var endIdx:int = flowRoot.flowComposer.findControllerIndexAtPosition(endIdx,true);
+				if (endIdx == -1)
+					endIdx = flowRoot.flowComposer.numControllers-1;
+				while (startIdx <= endIdx)
 				{
-					while (controllerIndex < flowRoot.flowComposer.numControllers)
-					{
-						var controller:ContainerController = flowRoot.flowComposer.getControllerAt(controllerIndex);
-						if (controller.absoluteStart >= endIdx)
-							break;
-						var obj:Object = new Object();
-						obj.container = controller;
-						// save just the styles
-						obj.attributes = controller.coreStyles;
-						undoArray.push(obj);
-						controllerIndex++;
-					}
+					var controller:ContainerController = flowRoot.flowComposer.getControllerAt(startIdx);
+					var obj:Object = new Object();
+					obj.container = controller;
+					// save just the styles
+					obj.attributes = new TextLayoutFormat(controller.format);
+					undoArray.push(obj);
+					startIdx++;
 				}
 			}
 		}
@@ -617,27 +616,28 @@ package flashx.textLayout.edit
 			CONFIG::debug { assert(begIdx <= endIdx,"bad indexes passed to ParaEdit.cacheContainerStyleInformation");  }
 			if (flowRoot.flowComposer)
 			{
+				var startIdx:int = flowRoot.flowComposer.findControllerIndexAtPosition(begIdx,false);
+				if (startIdx == -1)
+					return;
+				var endIdx:int = flowRoot.flowComposer.findControllerIndexAtPosition(endIdx,true);
+				if (endIdx == -1)
+					endIdx = flowRoot.flowComposer.numControllers-1;
 				var controllerIndex:int = flowRoot.flowComposer.findControllerIndexAtPosition(begIdx,false);
-				if (controllerIndex >= 0)
+				while (startIdx <= endIdx)
 				{
-					while (controllerIndex < flowRoot.flowComposer.numControllers)
-					{
-						var controller:ContainerController = flowRoot.flowComposer.getControllerAt(controllerIndex);
-						if (controller.absoluteStart >= endIdx)
-							break;
-						var newFormat:TextLayoutFormatValueHolder = new TextLayoutFormatValueHolder(controller.format);
-						if (applyFormat)
-							newFormat.apply(applyFormat);
-						undefineDefinedFormats(newFormat,undefineFormat);
-						controller.format = newFormat;
-						controllerIndex++;
-					}
+					var controller:ContainerController = flowRoot.flowComposer.getControllerAt(startIdx);
+					var newFormat:TextLayoutFormat = new TextLayoutFormat(controller.format);
+					if (applyFormat)
+						newFormat.apply(applyFormat);
+					undefineDefinedFormats(newFormat,undefineFormat);
+					controller.format = newFormat;
+					startIdx++;
 				}
 			}
 		}
 
 		/** obj is created by cacheContainerStyleInformation */
-		public static function setContainerStyleChange(flowRoot:TextFlow,obj:Object):void
+		public static function setContainerStyleChange(obj:Object):void
 		{
 			obj.container.format = obj.attributes as ITextLayoutFormat;
 		}

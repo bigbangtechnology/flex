@@ -13,6 +13,7 @@ package spark.components.supportClasses
 {
 
 import flash.events.Event;
+import flash.events.MouseEvent;
 
 import mx.collections.IList;
 import mx.core.FlexVersion;
@@ -27,11 +28,36 @@ import spark.components.IItemRenderer;
 import spark.components.IItemRendererOwner;
 import spark.components.SkinnableDataContainer;
 import spark.events.IndexChangeEvent;
+import spark.events.ListEvent;
 import spark.events.RendererExistenceEvent;
 import spark.layouts.supportClasses.LayoutBase;
 import spark.utils.LabelUtil;
 
 use namespace mx_internal;  //ListBase and List share selection properties that are mx_internal
+
+/**
+ *  Dispatched when the user rolls the mouse pointer over an item in the control.
+ *
+ *  @eventType spark.events.ListEvent.ITEM_ROLL_OVER
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10.2
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Event(name="itemRollOver", type="spark.events.ListEvent")]
+
+/**
+ *  Dispatched when the user rolls the mouse pointer out of an item in the control.
+ *
+ *  @eventType spark.events.ListEvent.ITEM_ROLL_OUT
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10.2
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Event(name="itemRollOut", type="spark.events.ListEvent")]
 
 //--------------------------------------
 //  Events
@@ -166,6 +192,14 @@ public class ListBase extends SkinnableDataContainer
      */
     mx_internal static var CUSTOM_SELECTED_ITEM:int = -3;
 
+    /**
+     *  @private
+     *  Static constant representing no item in focus. 
+     */
+    private static const TYPE_MAP:Object = { rollOver: "itemRollOver",
+                                             rollOut:  "itemRollOut" };
+    
+
     //--------------------------------------------------------------------------
     //
     //  Class mixins
@@ -212,6 +246,29 @@ public class ListBase extends SkinnableDataContainer
      *  @private
      */
     mx_internal var dispatchChangeAfterSelection:Boolean = false;
+    
+    /**
+     *  @private
+     *  Used to keep track of whether selection transitions should play 
+     *  in the updateRenderer() code.  See turnOnSelectionTransitionsForOneFrame()
+     */
+    private var allowSelectionTransitions:Boolean = false;
+    
+    /**
+     *  @private
+     *  Used to keep track of whether caret transitions should play 
+     *  in the updateRenderer() code.  See turnOnCaretTransitionsForOneFrame()
+     */
+    private var allowCaretTransitions:Boolean = false;
+    
+    /**
+     *  @private
+     *  Used to keep track of whether we are in updateRenderer().  This is 
+     *  so we know that any calls to itemSelected() and itemShowingCaret(), 
+     *  are called based on a user-action (either interaction or programattic) 
+     *  and not through item renderer recycling.
+     */
+    private var inUpdateRenderer:Boolean;
     
     //--------------------------------------------------------------------------
     //
@@ -282,6 +339,8 @@ public class ListBase extends SkinnableDataContainer
      */
     private var dataProviderChanged:Boolean;
     
+    [Inspectable(category="Data")]
+    
     /**
      *  @private
      *  
@@ -302,7 +361,7 @@ public class ListBase extends SkinnableDataContainer
         // the base class setter if the dataGroup already exists.  If the dataGroup isn't
         // created yet, then we still be first.
         if (value)
-            value.addEventListener(CollectionEvent.COLLECTION_CHANGE, dataProvider_collectionChangeHandler);
+            value.addEventListener(CollectionEvent.COLLECTION_CHANGE, dataProvider_collectionChangeHandler, false, 0, true);
 
         super.dataProvider = value;
         invalidateProperties();
@@ -317,7 +376,7 @@ public class ListBase extends SkinnableDataContainer
      */
     override public function set layout(value:LayoutBase):void
     {
-        if (useVirtualLayout)
+        if (value && useVirtualLayout)
             value.useVirtualLayout = true;
 
         super.layout = value;
@@ -378,6 +437,19 @@ public class ListBase extends SkinnableDataContainer
     mx_internal var doingWholesaleChanges:Boolean = false;
     
     //----------------------------------
+    //  caretItem
+    //---------------------------------- 
+
+    /**
+     *  @private
+     *  This private variable differs from selectedItem in that
+     *  the value is not computed, it's cached each time setCurrentCaretIndex() is called.  
+     *  It's used by List/dataProviderRefreshed() to provide a little scroll position and 
+     *  selection/caret stability after a dataProvider refresh.
+     */
+    mx_internal var caretItem:* = undefined;
+    
+    //----------------------------------
     //  labelField
     //----------------------------------
 
@@ -390,10 +462,16 @@ public class ListBase extends SkinnableDataContainer
      *  @private
      */
     private var labelFieldOrFunctionChanged:Boolean; 
+    
+    [Inspectable(category="Data", defaultValue="label")]
 
     /**
      *  The name of the field in the data provider items to display 
      *  as the label. 
+     * 
+     *  If labelField is set to an empty string (""), no field will 
+     *  be considered on the data provider to represent label.
+     * 
      *  The <code>labelFunction</code> property overrides this property.
      *
      *  @default "label" 
@@ -429,6 +507,8 @@ public class ListBase extends SkinnableDataContainer
      *  @private
      */
     private var _labelFunction:Function; 
+    
+    [Inspectable(category="Data")]
     
     /**
      *  A user-supplied function to run on each item to determine its label.  
@@ -486,10 +566,14 @@ public class ListBase extends SkinnableDataContainer
      */
     private var requireSelectionChanged:Boolean = false;
 
+    [Inspectable(category="General", defaultValue="false")]
+    
     /**
      *  If <code>true</code>, a data item must always be selected in the control.
      *  If the value is <code>true</code>, the <code>selectedIndex</code> property 
      *  is always set to a value between 0 and (<code>dataProvider.length</code> - 1).
+     * 
+     * <p>The default value is <code>false</code> for most subclasses, except TabBar. In that case, the default is <code>true</code>.</p>
      *
      *  @default false
      *  
@@ -552,12 +636,21 @@ public class ListBase extends SkinnableDataContainer
     
     /**
      *  @private
+     *  Keeps track of whether the caret should change when selection changes. 
+     *  By default it is true
+     */
+    mx_internal var changeCaretOnSelection:Boolean = true;
+    
+    /**
+     *  @private
      *  Internal storage for the selectedIndex property.
      */
     mx_internal var _selectedIndex:int = NO_SELECTION;
     
     [Bindable("change")]
     [Bindable("valueCommit")]
+    [Inspectable(category="General", defaultValue="-1")]
+    
     /**
      *  The 0-based index of the selected item, or -1 if no item is selected.
      *  Setting the <code>selectedIndex</code> property deselects the currently selected
@@ -612,14 +705,26 @@ public class ListBase extends SkinnableDataContainer
      * 
      *  @param dispatchChangeEvent if true, the component will dispatch a "change" event if the
      *  value has changed. Otherwise, it will dispatch a "valueCommit" event. 
+     * 
+     *  @param changeCaret if true, the caret will be set to the selectedIndex as a side-effect of calling 
+     *  this method.  If false, caretIndex won't change.
      */
-    mx_internal function setSelectedIndex(value:int, dispatchChangeEvent:Boolean = false):void
+    mx_internal function setSelectedIndex(value:int, dispatchChangeEvent:Boolean = false, changeCaret:Boolean = true):void
     {
         if (value == selectedIndex)
+        {
+            // this should short-circuit, but we should check to make sure 
+            // that caret doesn't need to be changed either, as that's a side
+            // effect of setting selectedIndex
+            if (changeCaret)
+                setCurrentCaretIndex(selectedIndex);
+            
             return;
+        }
         
         if (dispatchChangeEvent)
-            dispatchChangeAfterSelection = dispatchChangeEvent;
+            dispatchChangeAfterSelection = (dispatchChangeAfterSelection || dispatchChangeEvent);
+        changeCaretOnSelection = changeCaret;
         _proposedSelectedIndex = value;
         invalidateProperties();
     }
@@ -640,6 +745,8 @@ public class ListBase extends SkinnableDataContainer
     
     [Bindable("change")]
     [Bindable("valueCommit")]
+    [Inspectable(category="General", defaultValue="null")]
+    
     /**
      *  The item that is currently selected. 
      *  Setting this property deselects the currently selected 
@@ -706,7 +813,7 @@ public class ListBase extends SkinnableDataContainer
             return;
         
         if (dispatchChangeEvent)
-            dispatchChangeAfterSelection = dispatchChangeEvent;
+            dispatchChangeAfterSelection = (dispatchChangeAfterSelection || dispatchChangeEvent);
         
         _pendingSelectedItem = value;
         invalidateProperties();
@@ -816,6 +923,8 @@ public class ListBase extends SkinnableDataContainer
         {
             if (dataProvider)
                 _proposedSelectedIndex = dataProvider.getItemIndex(_pendingSelectedItem);
+            else
+                _proposedSelectedIndex = NO_SELECTION;
             
             if (allowCustomSelectedItem && _proposedSelectedIndex == -1)
             {
@@ -912,8 +1021,29 @@ public class ListBase extends SkinnableDataContainer
         if (instance == dataGroup)
         {
             // Not your typical delegation, see 'set useVirtualLayout'
-            if (_useVirtualLayout && dataGroup.layout)
+            if (_useVirtualLayout && dataGroup.layout && dataGroup.layout.virtualLayoutSupported)
                 dataGroup.layout.useVirtualLayout = true;
+            
+            dataGroup.addEventListener(
+                RendererExistenceEvent.RENDERER_ADD, dataGroup_rendererAddHandler);
+            dataGroup.addEventListener(
+                RendererExistenceEvent.RENDERER_REMOVE, dataGroup_rendererRemoveHandler);
+        }
+    }
+
+    /**
+     *  @private
+     */
+    override protected function partRemoved(partName:String, instance:Object):void
+    {        
+        super.partRemoved(partName, instance);
+        
+        if (instance == dataGroup)
+        {
+            dataGroup.removeEventListener(
+                RendererExistenceEvent.RENDERER_ADD, dataGroup_rendererAddHandler);
+            dataGroup.removeEventListener(
+                RendererExistenceEvent.RENDERER_REMOVE, dataGroup_rendererRemoveHandler);
         }
     }
 
@@ -922,44 +1052,61 @@ public class ListBase extends SkinnableDataContainer
      */
     override public function updateRenderer(renderer:IVisualElement, itemIndex:int, data:Object):void
     {
-        var transitions:Array;
-         
-        // First clean up any old, stale properties like selected and caret   
-        if (renderer is IItemRenderer)
-        {
-            // If there are transitions bound to the renderer, lets turn them 
-            // off while we clear stale properties by setting ItemRenderer's 
-            // mx_internal property, playTransitions, to false
-            if (renderer is ItemRenderer)
-                ItemRenderer(renderer).playTransitions = false; 
-            
-            // TODO (dsubrama): - Go through helper methods to do this. 
-            // Make itemSelected()/itemShowingCaret() pass around the renderer 
-            // instead of index
-            //IItemRenderer(renderer).selected = false;
-            IItemRenderer(renderer).showsCaret = false;
-            
-            // Now turn the transitions back on by setting playTransitions
-            // back to true 
-            if (renderer is ItemRenderer)
-                ItemRenderer(renderer).playTransitions = true;  
-        }    
+        // We keep track of whether we are in updateRenderer().  This is 
+        // so we know that any calls to itemSelected() and itemShowingCaret(), 
+        // are called based on a user-action (either interaction or programattic) 
+        // and not through item renderer recycling.
+        inUpdateRenderer = true;
         
-        // Set any new properties on the renderer now that it's going to 
-        // come back into use. 
-        itemSelected(itemIndex, isItemIndexSelected(itemIndex));
-	/*
-        if (isItemIndexSelected(itemIndex))
-            itemSelected(itemIndex, true);
-	*/
-
-        if (isItemIndexShowingCaret(itemIndex))
-            itemShowingCaret(itemIndex, true);
+        // We need to deal with transitions appropriately.  If selection transitions 
+        // are on for updateRenderer() but caret transitions are not, then we want to 
+        // set the caret first (with transitions off) and then set the selection. 
+        // We do it in this order for this case because we want the last change 
+        // we make to cause a transition (if it's on).
+        // Otherwise, we set selection first and then caret.
+        if (allowSelectionTransitions && !allowCaretTransitions)
+        {
+            // no transitions for caret, so turn them off since this is just 
+            // due to item renderer recycling
+            if (renderer is ItemRenderer)
+                ItemRenderer(renderer).playTransitions = false;
+            
+            itemShowingCaret(itemIndex, isItemIndexShowingCaret(itemIndex));
+            
+            // turn on transitions for selection
+            if (renderer is ItemRenderer)
+                ItemRenderer(renderer).playTransitions = true;
+            
+            itemSelected(itemIndex, isItemIndexSelected(itemIndex));
+        }
+        else
+        {
+            // if selection transitions are on, turn them on.  otherwise, turn them off, 
+            // so we don't see them for item renderer recycling
+            if (renderer is ItemRenderer)
+                ItemRenderer(renderer).playTransitions = allowSelectionTransitions;
+            
+            itemSelected(itemIndex, isItemIndexSelected(itemIndex));
+            
+            // deal with transitions for caret appropriately
+            if (renderer is ItemRenderer)
+                ItemRenderer(renderer).playTransitions = allowCaretTransitions;
+                
+            itemShowingCaret(itemIndex, isItemIndexShowingCaret(itemIndex));
+        }
+        
+        // Now turn the transitions back on by setting playTransitions
+        // back to true 
+        if (renderer is ItemRenderer)
+            ItemRenderer(renderer).playTransitions = true; 
         
         // Now run through and initialize the renderer correctly.  We 
         // call super.updateRenderer() last because super.updateRenderer()
         // sets the data on the item renderer, and that should be done last.
         super.updateRenderer(renderer, itemIndex, data); 
+        
+        // let us know we're out of updateRenderer()
+        inUpdateRenderer = false;
     }
     
     /**
@@ -1004,6 +1151,13 @@ public class ListBase extends SkinnableDataContainer
      */
     protected function itemSelected(index:int, selected:Boolean):void
     {
+        // if this method is called from anywhere besides the updateRenderer(), 
+        // then we want transitions for selection to play.  This way if it's called 
+        // from the selectedIndex setter or through the keyDown handler or through 
+        // commitProperties(), transitions will be enabled for it.
+        if (!inUpdateRenderer)
+            turnOnSelectionTransitionsForOneFrame();
+            
         // Subclasses must override this method to display the selection.
     }
     
@@ -1023,6 +1177,13 @@ public class ListBase extends SkinnableDataContainer
      */
     protected function itemShowingCaret(index:int, showsCaret:Boolean):void
     {
+        // if this method is called from anywhere besides the updateRenderer(), 
+        // then we want transitions for caret to play.  This way if it's called 
+        // from the keyDown handler or through 
+        // commitProperties(), transitions will be enabled for it.
+        if (!inUpdateRenderer)
+            turnOnCaretTransitionsForOneFrame();
+        
         // Subclasses must override this method to display the caret.
     }
     
@@ -1072,12 +1233,23 @@ public class ListBase extends SkinnableDataContainer
      */
     mx_internal function setCurrentCaretIndex(value:Number):void
     {
+        if (value == caretIndex)
+            return;
+        
         itemShowingCaret(caretIndex, false); 
         
         _caretIndex = value;
         
         if (caretIndex != CUSTOM_SELECTED_ITEM)
-            itemShowingCaret(caretIndex, true);
+        {
+            itemShowingCaret(_caretIndex, true);
+            
+            // Track the caretItem (often the same as the selectedItem), so that
+            // if the dataProvider is refreshed, we can relocate the caretIndex.
+            
+            const validIndex:Boolean = dataProvider && (_caretIndex >= 0) && (_caretIndex < dataProvider.length);
+            caretItem = (validIndex) ? dataProvider.getItemAt(_caretIndex) : undefined;
+        }
     }
     
     /**
@@ -1127,6 +1299,7 @@ public class ListBase extends SkinnableDataContainer
             if (!dispatchEvent(e))
             {
                 // The event was cancelled. Cancel the selection change and return.
+                itemSelected(_proposedSelectedIndex, false);
                 _proposedSelectedIndex = NO_PROPOSED_SELECTION;
                 return false;
             }
@@ -1140,7 +1313,8 @@ public class ListBase extends SkinnableDataContainer
             itemSelected(oldSelectedIndex, false);
         if (_selectedIndex != NO_SELECTION && _selectedIndex != CUSTOM_SELECTED_ITEM)
             itemSelected(_selectedIndex, true);
-        setCurrentCaretIndex(_selectedIndex); 
+        if (changeCaretOnSelection)
+            setCurrentCaretIndex(_selectedIndex); 
 
         // Step 4: dispatch the "change" event and "caretChange" 
         // events based on the dispatchChangeEvents parameter. Overrides may  
@@ -1158,17 +1332,21 @@ public class ListBase extends SkinnableDataContainer
                 dispatchEvent(e);
                 dispatchChangeAfterSelection = false;
             }
-            else
-            {
-                dispatchEvent(new FlexEvent(FlexEvent.VALUE_COMMIT));
-            }
+
+            dispatchEvent(new FlexEvent(FlexEvent.VALUE_COMMIT));
             
             //Dispatch the caretChange event 
-            e = new IndexChangeEvent(IndexChangeEvent.CARET_CHANGE); 
-            e.oldIndex = oldCaretIndex; 
-            e.newIndex = caretIndex; 
-            dispatchEvent(e);
+            if (changeCaretOnSelection)
+            {
+                e = new IndexChangeEvent(IndexChangeEvent.CARET_CHANGE); 
+                e.oldIndex = oldCaretIndex; 
+                e.newIndex = caretIndex; 
+                dispatchEvent(e);
+            }
         }
+        
+        // default changeCaretOnSelection back to true
+        changeCaretOnSelection = true;
         
         return true;
      }
@@ -1176,18 +1354,20 @@ public class ListBase extends SkinnableDataContainer
     /**
      *  Adjusts the selected index to account for items being added to or 
      *  removed from this component. This method adjusts the selected index
-     *  value and dispatches a <code>change</code> event. 
-     *  It does not dispatch a <code>changing</code> event 
+     *  value and dispatches a <code>valueCommit</code> event. It does not 
+     *  dispatch a <code>change</code> event because the change did not 
+     *  occur as a direct result of user-interaction.  Moreover, 
+     *  it does not dispatch a <code>changing</code> event 
      *  or allow the cancellation of the selection. 
      *  It also does not call the <code>itemSelected()</code> method, 
      *  since the same item is selected; 
      *  the only thing that has changed is the index of the item.
      * 
-     *  <p>A <code>change</code> event is dispatched in the next call to 
+     *  <p>A <code>valueCommit</code> event is dispatched in the next call to 
      *  the <code>commitProperties()</code> method.</p>
      *
-     *  <p>The <code>changing</code> event is not sent when
-     *  the <code>selectedIndex</code> is adjusted.</p>
+     *  <p>The <code>change</code> and <code>changing</code> events are 
+     *  not sent when the <code>selectedIndex</code> is adjusted.</p>
      *
      *  @param newIndex The new index.
      *   
@@ -1286,11 +1466,170 @@ public class ListBase extends SkinnableDataContainer
         }
     }
     
+    /**
+     *  @private
+     *  Default response to dataProvider refresh events: clear the selection and caret.
+     */
+    mx_internal function dataProviderRefreshed():void
+    {
+        setSelectedIndex(NO_SELECTION, false);
+        // TODO (rfrishbe): probably don't need the setCurrentCaretIndex below
+        setCurrentCaretIndex(NO_CARET);
+    }
+    
+    /**
+     *  @private
+     *  Turns on selection transitions for one frame.  We turn it on for 
+     *  one frame to make sure that no matter how the property gets set 
+     *  (synchronously in the event handler or asynchronously during validation)
+     *  that we make sure selection transitions will play appropriately.
+     */
+    private function turnOnSelectionTransitionsForOneFrame():void
+    {
+        // if already on, no need to run this again
+        // or if there's no systemManager, then we're not really initialized, so let's
+        // just keep transitions off.
+        if (allowSelectionTransitions || !systemManager)
+            return;
+        
+        allowSelectionTransitions = true;
+        
+        // We want to wait one frame after validation has occured before turning off 
+        // selection transitions again.  We tried using dataGroup's updateComplete event listener, 
+        // but because some validateNows() occur (before all of the event handling code has finished), 
+        // this was occuring too early.  We also tried just using callLater or ENTER_FRAME, but that 
+        // occurs before the LayoutManager has run, so we add an ENTER_FRAME handler with a 
+        // low priority to make sure it occurs after the LayoutManager pass.
+        systemManager.addEventListener(Event.ENTER_FRAME, allowSelectionTransitions_enterFrameHandler, false, -100);
+    }
+    
+    /**
+     *  @private
+     *  After waiting a frame, we want to turn off selection transitions
+     */
+    private function allowSelectionTransitions_enterFrameHandler(event:Event):void
+    {
+        event.target.removeEventListener(Event.ENTER_FRAME, allowSelectionTransitions_enterFrameHandler);
+        
+        allowSelectionTransitions = false;
+    }
+    
+    /**
+     *  @private
+     *  Turns on caret transitions for one frame.  We turn it on for 
+     *  one frame to make sure that no matter how the property gets set 
+     *  (synchronously in the event handler or asynchronously during validation)
+     *  that we make sure caret transitions will play appropriately.
+     */
+    private function turnOnCaretTransitionsForOneFrame():void
+    {
+        // if already on, no need to run this again
+        // or if there's no systemManager, then we're not really initialized, so let's
+        // just keep transitions off.
+        if (allowCaretTransitions || !systemManager)
+            return;
+        
+        allowCaretTransitions = true;
+        
+        // We want to wait one frame after validation has occured before turning off 
+        // selection transitions again.  We tried using dataGroup's updateComplete event listener, 
+        // but because some validateNows() occur (before all of the event handling code has finished), 
+        // this was occuring too early.  We also tried just using callLater or ENTER_FRAME, but that 
+        // occurs before the LayoutManager has run, so we add an ENTER_FRAME handler with a 
+        // low priority to make sure it occurs after the LayoutManager pass.
+        systemManager.addEventListener(Event.ENTER_FRAME, allowCaretTransitions_enterFrameHandler, false, -100);
+    }
+    
+    /**
+     *  @private
+     *  After waiting a frame, we want to turn off caret transitions
+     */
+    private function allowCaretTransitions_enterFrameHandler(event:Event):void
+    {
+        event.target.removeEventListener(Event.ENTER_FRAME, allowCaretTransitions_enterFrameHandler);
+        
+        allowCaretTransitions = false;
+    }
+    
     //--------------------------------------------------------------------------
     //
     //  Event handlers
     //
     //--------------------------------------------------------------------------
+    
+    /**
+     *  @private
+     *  Called when an item has been added to this component.
+     * 
+     *  @langversion 3.0
+     *  @playerversion Flash 10.2
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     */
+    protected function dataGroup_rendererAddHandler(event:RendererExistenceEvent):void
+    {
+        var renderer:IVisualElement = event.renderer;
+        
+        if (!renderer)
+            return;
+        
+        renderer.addEventListener(MouseEvent.ROLL_OVER, item_mouseEventHandler);
+        renderer.addEventListener(MouseEvent.ROLL_OUT, item_mouseEventHandler);
+    }
+    
+    /**
+     *  @private
+     *  Called when an item has been removed from this component.
+     * 
+     *  @langversion 3.0
+     *  @playerversion Flash 10.2
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     */
+    protected function dataGroup_rendererRemoveHandler(event:RendererExistenceEvent):void
+    {
+        var renderer:IVisualElement = event.renderer;
+        
+        if (!renderer)
+            return;
+        
+        renderer.removeEventListener(MouseEvent.ROLL_OVER, item_mouseEventHandler);
+        renderer.removeEventListener(MouseEvent.ROLL_OUT, item_mouseEventHandler);
+    }
+
+    /**
+     *  @private
+     *  Called when an item has been removed from this component.
+     */
+    private function item_mouseEventHandler(event:MouseEvent):void
+    {
+        var type:String = event.type;
+        type = TYPE_MAP[type];
+        if (hasEventListener(type))
+        {
+            var itemRenderer:IItemRenderer = event.currentTarget as IItemRenderer;
+            
+            var itemIndex:int = -1;
+            if (itemRenderer)
+                itemIndex = itemRenderer.itemIndex;
+            else
+                itemIndex = dataGroup.getElementIndex(event.currentTarget as IVisualElement);
+            
+            var listEvent:ListEvent = new ListEvent(type, false, false,
+                                                    event.localX,
+                                                    event.localY,
+                                                    event.relatedObject,
+                                                    event.ctrlKey,
+                                                    event.altKey,
+                                                    event.shiftKey,
+                                                    event.buttonDown,
+                                                    event.delta,
+                                                    itemIndex,
+                                                    dataProvider.getItemAt(itemIndex),
+                                                    itemRenderer);
+            dispatchEvent(listEvent);
+        }
+    }
     
     /**
      *  @private
@@ -1323,6 +1662,7 @@ public class ListBase extends SkinnableDataContainer
                 if (dataProvider.length == 0)
                 {
                     setSelectedIndex(NO_SELECTION, false);
+                    // TODO (rfrishbe): probably don't need the setCurrentCaretIndex below
                     setCurrentCaretIndex(NO_CARET);
                 }
                 else
@@ -1333,8 +1673,7 @@ public class ListBase extends SkinnableDataContainer
             }
             else if (ce.kind == CollectionEventKind.REFRESH)
             {
-                setSelectedIndex(NO_SELECTION, false);
-                setCurrentCaretIndex(NO_CARET);
+                dataProviderRefreshed();
             }
             else if (ce.kind == CollectionEventKind.REPLACE ||
                 ce.kind == CollectionEventKind.MOVE)

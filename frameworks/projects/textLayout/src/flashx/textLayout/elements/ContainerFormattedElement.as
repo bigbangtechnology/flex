@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
 	import flash.display.DisplayObjectContainer;
@@ -15,7 +15,6 @@ package flashx.textLayout.elements
 	import flashx.textLayout.compose.IFlowComposer;
 	import flashx.textLayout.container.ContainerController;
 	import flashx.textLayout.debug.assert;
-	import flashx.textLayout.formats.FlowElementDisplayType;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.tlf_internal;
@@ -35,31 +34,6 @@ package flashx.textLayout.elements
 	*/	
 	public class ContainerFormattedElement extends ParagraphFormattedElement
 	{
-		private var _display:String;	// FlowElementDisplayType
-
-		/** @private */
-		public override function shallowCopy(startPos:int = 0, endPos:int = -1):FlowElement
-		{
-			if (endPos == -1)
-				endPos = textLength;
-				
-			var retFlow:ContainerFormattedElement = super.shallowCopy(startPos, endPos) as ContainerFormattedElement;
-			retFlow._display = _display;	
-			return retFlow;						
-		}
-
-		/** @private */
-		public override function get display():String
-		{
-			return _display;
-		} 
-		/** @private */
-		public function set display(value:String):void
-		{
-			CONFIG::debug { assert(value == FlowElementDisplayType.INLINE || value == FlowElementDisplayType.FLOAT, "Illegal value for display"); }
-			_display = value;
-		}
-		
 		/** @private */
 		public function get flowComposer():IFlowComposer
 		{ 
@@ -109,10 +83,13 @@ package flashx.textLayout.elements
 			if (this.numChildren == 0)
 			{
 				var p:ParagraphElement = new ParagraphElement();
-				p.replaceChildren(0,0,new SpanElement());
-				replaceChildren(0,0,p);	
-				CONFIG::debug { assert(textLength == 1,"bad textlength"); }
-				p.normalizeRange(0,p.textLength);	
+				if (this.canOwnFlowElement(p))
+				{
+					p.replaceChildren(0,0,new SpanElement());
+					replaceChildren(0,0,p);	
+					CONFIG::debug { assert(textLength == 1,"bad textlength"); }
+					p.normalizeRange(0,p.textLength);	
+				}
 			}
 		}
 	}

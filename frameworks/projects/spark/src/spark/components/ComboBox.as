@@ -14,6 +14,7 @@ package spark.components
 import adobe.utils.CustomActions;
 
 import flash.display.DisplayObject;
+import flash.display.InteractiveObject;
 import flash.events.Event;
 import flash.events.FocusEvent;
 import flash.events.KeyboardEvent;
@@ -25,7 +26,9 @@ import flashx.textLayout.operations.DeleteTextOperation;
 import flashx.textLayout.operations.FlowOperation;
 import flashx.textLayout.operations.InsertTextOperation;
 
+import mx.core.IIMESupport;
 import mx.core.mx_internal;
+import mx.events.FlexEvent;
 import mx.styles.StyleProxy;
 
 import spark.components.supportClasses.DropDownListBase;
@@ -94,7 +97,16 @@ use namespace mx_internal;
 //--------------------------------------
 
 [AccessibilityClass(implementation="spark.accessibility.ComboBoxAccImpl")]
+
 [IconFile("ComboBox.png")]
+
+/**
+ * Because this component does not define a skin for the mobile theme, Adobe
+ * recommends that you not use it in a mobile application. Alternatively, you
+ * can define your own mobile skin for the component. For more information,
+ * see <a href="http://help.adobe.com/en_US/Flex/4.0/UsingSDK/WS53116913-F952-4b21-831F-9DE85B647C8A.html">Spark Skinning</a>.
+ */
+[DiscouragedForProfile("mobileDevice")]
 
 /**
  *  The ComboBox control is a child class of the DropDownListBase control. 
@@ -119,6 +131,12 @@ use namespace mx_internal;
  *  enters characters into the prompt area. As the user enters characters, 
  *  the drop-down area of the control opens. 
  *  It then and scrolls to and highlights the closest match in the item list.</p>
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  <p><b>Note: </b>The Spark list-based controls (the Spark ListBase class and its subclasses
  *  such as ButtonBar, ComboBox, DropDownList, List, and TabBar) do not support the BasicLayout class
@@ -160,6 +178,7 @@ use namespace mx_internal;
  *    labelToItemFunction="null"
  *    maxChars="0"
  *    openOnInput="true"
+ *    prompt="null"
  *    restrict=""
  *
  *    <strong>Styles</strong>
@@ -179,7 +198,7 @@ use namespace mx_internal;
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-public class ComboBox extends DropDownListBase
+public class ComboBox extends DropDownListBase implements IIMESupport
 {
     //--------------------------------------------------------------------------
     //
@@ -253,6 +272,8 @@ public class ComboBox extends DropDownListBase
     
     private var userTypedIntoText:Boolean;
     
+    private var previousTextInputText:String = "";
+    
     //--------------------------------------------------------------------------
     //
     //  Properties
@@ -298,6 +319,7 @@ public class ComboBox extends DropDownListBase
     //--------------------------------------------------------------------------
     //  labelToItemFunction
     //--------------------------------------------------------------------------
+    
     private var _labelToItemFunction:Function;
     private var labelToItemFunctionChanged:Boolean = false;
     
@@ -348,6 +370,8 @@ public class ComboBox extends DropDownListBase
     private var _maxChars:int = 0;
     private var maxCharsChanged:Boolean = false;
     
+    [Inspectable(category="General", defaultValue="0")]
+    
     /**
      *  The maximum number of characters that the prompt area can contain, as entered by a user. 
      *  A value of 0 corresponds to no limit.
@@ -393,12 +417,67 @@ public class ComboBox extends DropDownListBase
      */ 
     public var openOnInput:Boolean = true;
     
+    //----------------------------------
+    //  prompt
+    //----------------------------------
+    
+    private var _prompt:String;
+    private var promptChanged:Boolean;
+    
+    [Inspectable(category="General")]
+    
+    /**
+     *  Text to be displayed if/when the input text is null.
+     * 
+     *  <p>Prompt text appears when the control is first created. Prompt text disappears 
+     *  when the control gets focus, when the input text is non-null, or when an item in the list is selected. 
+     *  Prompt text reappears when the control loses focus, but only if no text was entered 
+     *  (if the value of the text field is null or the empty string).</p>
+     *  
+     *  <p>You can change the style of the prompt text with CSS. If the control has prompt text 
+     *  and is not disabled, the style is defined by the <code>normalWithPrompt</code> pseudo selector. 
+     *  If the control is disabled, then the styles defined by the <code>disabledWithPrompt</code> pseudo selector are used.</p>
+     *  
+     *  <p>The following example CSS changes the color of the prompt text in TextInput controls. The ComboBox control uses
+     *  a TextInput control as a subcomponent for the prompt text and input, so its prompt text changes when you use this CSS:
+     *  <pre>
+     *  &#64;namespace s "library://ns.adobe.com/flex/spark";
+     *  s|TextInput:normalWithPrompt {
+     *      color: #CCCCFF;
+     *  }
+     *  </pre>
+     *  </p>
+     *
+     *  @default null
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10.2
+     *  @playerversion AIR 2.0
+     *  @productversion Flex 4.5
+     */
+    public function get prompt():String
+    {
+        return _prompt;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set prompt(value:String):void
+    {
+        _prompt = value;
+        promptChanged = true;
+        invalidateProperties();
+    }
+
     //--------------------------------------------------------------------------
     //  restrict
     //--------------------------------------------------------------------------
     
     private var _restrict:String;
     private var restrictChanged:Boolean;
+    
+    [Inspectable(category="General", defaultValue="")]
     
     /**
      *  Specifies the set of characters that a user can enter into the prompt area.
@@ -436,6 +515,10 @@ public class ComboBox extends DropDownListBase
     //
     //--------------------------------------------------------------------------
     
+    //--------------------------------------------------------------------------
+    //  baselinePosition
+    //--------------------------------------------------------------------------
+    
     /**
      *  @private
      */
@@ -443,6 +526,12 @@ public class ComboBox extends DropDownListBase
     {
         return getBaselinePositionForPart(textInput);
     }
+    
+    //--------------------------------------------------------------------------
+    //  selectedIndex
+    //--------------------------------------------------------------------------
+    
+    [Inspectable(category="General", defaultValue="-1")]
     
     /**
      *  @private 
@@ -453,7 +542,13 @@ public class ComboBox extends DropDownListBase
         actualProposedSelectedIndex = value;
     }
     
+    //--------------------------------------------------------------------------
+    //  typicalItem
+    //--------------------------------------------------------------------------
+    
     private var typicalItemChanged:Boolean = false;
+    
+    [Inspectable(category="Data")]
     
     /**
      *  @private
@@ -468,6 +563,10 @@ public class ComboBox extends DropDownListBase
         typicalItemChanged = true;
         invalidateProperties();
     }
+    
+    //--------------------------------------------------------------------------
+    //  userProposedSelectedIndex
+    //--------------------------------------------------------------------------
     
     /**
      *  @private 
@@ -490,13 +589,14 @@ public class ComboBox extends DropDownListBase
     private function processInputField():void
     {
         var matchingItems:Vector.<int>;
-                
-        if (!dataProvider || dataProvider.length <= 0)
-            return;
         
         // If the textInput has been changed, then use the input string as the selectedItem
         actualProposedSelectedIndex = CUSTOM_SELECTED_ITEM; 
-                    
+        
+        // Even if there is no data provider, we still want to allow custom items. 
+        if (!dataProvider || dataProvider.length <= 0)
+            return;
+        
         if (textInput.text != "")
         {
             if (itemMatchingFunction != null)
@@ -584,8 +684,9 @@ public class ComboBox extends DropDownListBase
         {
             setSelectedIndex(actualProposedSelectedIndex, true);
         }
-                
-        textInput.selectRange(-1, -1);
+
+        if (textInput)
+            textInput.selectRange(-1, -1);
         
         userTypedIntoText = false;
     }
@@ -616,7 +717,7 @@ public class ComboBox extends DropDownListBase
         // If selectedIndex was set to CUSTOM_SELECTED_ITEM, and no selectedItem was specified,
         // then don't change the selectedIndex
         if (_proposedSelectedIndex == CUSTOM_SELECTED_ITEM && 
-            !_pendingSelectedItem)
+            _pendingSelectedItem == undefined)
         {
             _proposedSelectedIndex = NO_PROPOSED_SELECTION;
         }
@@ -629,6 +730,12 @@ public class ComboBox extends DropDownListBase
             {
                 textInput.maxChars = _maxChars;
                 maxCharsChanged = false;
+            }
+            
+            if (promptChanged)
+            {
+                textInput.prompt = _prompt;
+                promptChanged = false;
             }
             
             if (restrictChanged)
@@ -690,13 +797,15 @@ public class ComboBox extends DropDownListBase
         {
             updateLabelDisplay();
             textInput.addEventListener(TextOperationEvent.CHANGE, textInput_changeHandler);
+            textInput.addEventListener(TextOperationEvent.CHANGING, textInput_changingHandler);
             textInput.addEventListener(FocusEvent.FOCUS_IN, textInput_focusInHandler, true);
             textInput.addEventListener(FocusEvent.FOCUS_OUT, textInput_focusOutHandler, true);
             textInput.maxChars = maxChars;
             textInput.restrict = restrict;
             textInput.focusEnabled = false;
             
-            textInput.textDisplay.batchTextInput = false;
+            if (textInput.textDisplay is RichEditableText)
+                RichEditableText(textInput.textDisplay).batchTextInput = false;
         }
     }
     
@@ -710,6 +819,7 @@ public class ComboBox extends DropDownListBase
         if (instance == textInput)
         {
             textInput.removeEventListener(TextOperationEvent.CHANGE, textInput_changeHandler);
+            textInput.removeEventListener(TextOperationEvent.CHANGING, textInput_changingHandler);
             textInput.removeEventListener(FocusEvent.FOCUS_IN, textInput_focusInHandler, true);
             textInput.removeEventListener(FocusEvent.FOCUS_OUT, textInput_focusOutHandler, true);
         }
@@ -722,12 +832,12 @@ public class ComboBox extends DropDownListBase
     {
         super.changeHighlightedSelection(newIndex, scrollToTop);
         
-        if (newIndex > 0)
+        if (newIndex >= 0)
         {
             var item:Object = dataProvider ? dataProvider.getItemAt(newIndex) : undefined;
-            if (item)
+            if (item && textInput)
             {
-                var itemString:String = itemToLabel(item);
+                var itemString:String = itemToLabel(item); 
                 textInput.selectAll();
                 textInput.insertText(itemString);
                 textInput.selectAll();
@@ -782,7 +892,13 @@ public class ComboBox extends DropDownListBase
         else if (event.keyCode == Keyboard.ESCAPE)
         {
             // Restore the previous selectedItem
-            textInput.text = itemToLabel(selectedItem);
+            if (textInput)
+            {
+                if (selectedItem != null)
+                    textInput.text = itemToLabel(selectedItem);
+                else
+                textInput.text = "";
+            }
             changeHighlightedSelection(selectedIndex);
         }
     }
@@ -792,9 +908,9 @@ public class ComboBox extends DropDownListBase
      */
     override public function setFocus():void
     {
-        if (stage)
+        if (stage && textInput)
         {            
-            stage.focus = textInput.textDisplay;            
+            stage.focus = textInput.textDisplay as InteractiveObject;            
         }
     }
     
@@ -803,6 +919,9 @@ public class ComboBox extends DropDownListBase
      */
     override protected function isOurFocus(target:DisplayObject):Boolean
     {
+        if (!textInput)
+            return false;
+        
         return target == textInput.textDisplay;
     }
     
@@ -833,10 +952,14 @@ public class ComboBox extends DropDownListBase
         // always commit the selection if we focus out        
         if (!isDropDownOpen)
         {
-            if (textInput.text != itemToLabel(selectedItem))
+            if (textInput && 
+                ((selectedItem == null && textInput.text != "") ||
+                 textInput.text != itemToLabel(selectedItem)))
                 applySelection();
         }
             
+        dispatchEvent(new FlexEvent(FlexEvent.VALUE_COMMIT));
+        
         super.focusOutHandler(event);
     }
     
@@ -902,6 +1025,14 @@ public class ComboBox extends DropDownListBase
     /**
      *  @private 
      */ 
+    private function textInput_changingHandler(event:TextOperationEvent):void
+    {
+        previousTextInputText = textInput.text;
+    }
+    
+    /**
+     *  @private 
+     */ 
     protected function textInput_changeHandler(event:TextOperationEvent):void
     {  
         userTypedIntoText = true;
@@ -913,7 +1044,7 @@ public class ComboBox extends DropDownListBase
         {
             super.changeHighlightedSelection(CUSTOM_SELECTED_ITEM);
         }
-        else
+        else if (previousTextInputText != textInput.text)
         {
             if (openOnInput)
             {
@@ -937,6 +1068,61 @@ public class ComboBox extends DropDownListBase
     {
         removeEventListener(DropDownEvent.OPEN, editingOpenHandler);
         processInputField();
+    }
+
+    //----------------------------------
+    //  enableIME
+    //----------------------------------
+
+    /**
+     *  @copy spark.components.TextInput#enableIME
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    public function get enableIME():Boolean
+    {
+        if (textInput)
+        {
+            return textInput.enableIME;
+        }
+                  
+        return false;
+    }
+
+    //----------------------------------
+    //  imeMode
+    //----------------------------------
+
+    /**
+     *  @copy spark.components.TextInput#imeMode
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    public function get imeMode():String
+    {
+        if (textInput)
+        {
+            return textInput.imeMode;
+        }
+        return null;
+    }
+
+    /**
+     *  @public
+     */
+    public function set imeMode(value:String):void
+    {
+        if (textInput)
+        {
+            textInput.imeMode = value;
+            invalidateProperties();                    
+        }
     }
         
 }

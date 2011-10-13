@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit
 {
 	import flashx.textLayout.elements.TextFlow;
@@ -67,7 +67,7 @@ package flashx.textLayout.edit
 		public function SelectionState(root:TextFlow,anchorPosition:int,activePosition:int,format:ITextLayoutFormat = null)
 		{
 			super(root, anchorPosition, activePosition);
-			if (format && !TextLayoutFormat.isEqual(format, TextLayoutFormat.emptyTextLayoutFormat))
+			if (format)
 				_pointFormat = format;
 		}
 		
@@ -95,10 +95,10 @@ package flashx.textLayout.edit
 		 * The format attributes applied to inserted text. 
 		 * 
 		 * <p><b>Note:</b> The <code>pointFormat</code> object does not include inherited styles. To
-		 * get all the applicable style definitions, use the <code>getCommonCharacterFormats()</code>
+		 * get all the applicable style definitions, use the <code>getCommonCharacterFormat()</code>
 		 * method of the ISelectionManager class.</p>
 		 * 
-		 * @see ISelectionManager#getCommonCharacterFormats()
+		 * @see ISelectionManager#getCommonCharacterFormat()
 		 * 
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
@@ -112,6 +112,7 @@ package flashx.textLayout.edit
 		/** @private used to tell an operation that the SelectionState is from the SelectionManager and that the SelectionManager pointFormat should be updated. */
 		tlf_internal function get selectionManagerOperationState():Boolean
 		{ return _selectionManagerOperationState; }
+		/** @private */		
 		tlf_internal function set selectionManagerOperationState(val:Boolean):void
 		{ _selectionManagerOperationState = val; }
 		/** @private */

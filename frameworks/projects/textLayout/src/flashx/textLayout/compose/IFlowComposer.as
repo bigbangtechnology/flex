@@ -1,21 +1,19 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.compose
 {
-	import flashx.textLayout.compose.ISWFContext;
 	import flashx.textLayout.container.ContainerController;
 	import flashx.textLayout.edit.ISelectionManager;
 	import flashx.textLayout.elements.ContainerFormattedElement;
 	import flashx.textLayout.elements.TextFlow;
-	import flashx.textLayout.compose.TextFlowLine;
 
 	/**
 	 * IFlowComposer defines the interface for managing the layout and display of a text flow.
@@ -401,7 +399,8 @@ package flashx.textLayout.compose
 		function getLineAt(index:int):TextFlowLine;
 		
 		/** 
-		 * The total number of lines in the flow. 
+		 * The total number of lines composed in the flow.  By default TLF does not compose the entire flow and this value may be innacruate.
+		 * Use composeToPosition to get all lines composed.
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5

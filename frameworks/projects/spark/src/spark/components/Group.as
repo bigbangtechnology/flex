@@ -16,6 +16,8 @@ import flash.display.BlendMode;
 import flash.display.DisplayObject;
 import flash.geom.Rectangle;
 
+import mx.core.FlexVersion;
+import mx.styles.IAdvancedStyleClient;
 import mx.core.IFlexModule;
 import mx.core.IFontContextComponent;
 import mx.core.IUIComponent;
@@ -40,6 +42,7 @@ import mx.styles.StyleProtoChain;
 import spark.components.supportClasses.GroupBase;
 import spark.core.DisplayObjectSharingMode;
 import spark.core.IGraphicElement;
+import spark.core.IGraphicElementContainer;
 import spark.core.ISharedDisplayObject;
 import spark.events.ElementExistenceEvent;
 
@@ -74,6 +77,34 @@ use namespace mx_internal;
  *  @productversion Flex 4
  */
 [Event(name="elementRemove", type="spark.events.ElementExistenceEvent")]
+
+//--------------------------------------
+//  Styles
+//--------------------------------------
+
+/**
+ *  Color of text shadows.
+ * 
+ *  @default #FFFFFF
+ * 
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Style(name="textShadowColor", type="uint", format="Color", inherit="yes", theme="mobile")]
+
+/**
+ *  Alpha of text shadows.
+ * 
+ *  @default 0.55
+ * 
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Style(name="textShadowAlpha", type="Number",inherit="yes", minValue="0.0", maxValue="1.0", theme="mobile")]
 
 //--------------------------------------
 //  Excluded APIs
@@ -174,7 +205,9 @@ use namespace mx_internal;
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-public class Group extends GroupBase implements IVisualElementContainer, ISharedDisplayObject
+public class Group extends GroupBase implements IVisualElementContainer, 
+                                                IGraphicElementContainer, 
+                                                ISharedDisplayObject
 {
     /**
      *  Constructor.
@@ -207,6 +240,49 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
     //  Overridden properties
     //
     //--------------------------------------------------------------------------
+   
+    //----------------------------------
+    //  baselinePosition
+    //----------------------------------
+    
+    /**
+     *  @inheritDoc
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    override public function get baselinePosition():Number
+    {
+        if (FlexVersion.compatibilityVersion < FlexVersion.VERSION_4_5)
+            return super.baselinePosition;
+        
+        if (!validateBaselinePosition())
+            return NaN;
+        
+        var bElement:IVisualElement = baselinePositionElement;
+        
+        // If no baselinePositionElement is specified, use the first element
+        if (bElement == null)
+        {
+            for (var i:int = 0; i < numElements; i++)
+            {
+                var elt:IVisualElement = getElementAt(i);
+                if (elt.includeInLayout)
+                {
+                    bElement = elt;
+                    break;
+                }
+            }
+        }
+            
+        
+        if (bElement)
+            return bElement.baselinePosition + bElement.y;
+        else
+            return super.baselinePosition;
+    }
     
     [Inspectable(category="General", enumeration="noScale,scale", defaultValue="noScale")]
     
@@ -235,8 +311,16 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
         // scrollRect won't function correctly. 
         var previous:Boolean = canShareDisplayObject;
         super.scrollRect = value;
+        
         if (numGraphicElements > 0 && previous != canShareDisplayObject)
-            invalidateDisplayObjectOrdering();            
+            invalidateDisplayObjectOrdering(); 
+        
+        if (mouseEnabledWhereTransparent && hasMouseListeners)
+        {        
+            // Re-render our mouse event fill if necessary.
+            redrawRequested = true;
+            super.$invalidateDisplayList();
+         }
     }
 
     /**
@@ -320,6 +404,37 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
     }
     
     //----------------------------------
+    //  baselinePositionElement
+    //---------------------------------- 
+    
+    private var _baselinePositionElement:IVisualElement;
+    
+    /**
+     *  The element used to calculate the GroupBase's baselinePosition 
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    public function get baselinePositionElement():IVisualElement
+    {
+        return _baselinePositionElement;
+    }
+    
+    /**
+     *  @private 
+     */ 
+    public function set baselinePositionElement(value:IVisualElement):void
+    {
+        if (value === _baselinePositionElement)
+            return;
+        
+        _baselinePositionElement = value;
+        invalidateParentSizeAndDisplayList();
+    }
+    
+    //----------------------------------
     //  blendMode
     //----------------------------------
     
@@ -383,8 +498,14 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
         if (value == "auto")
         {
             _blendMode = value;
-            if (((alpha > 0 && alpha < 1) && super.blendMode != BlendMode.LAYER) ||
-                ((alpha == 1 || alpha == 0) && super.blendMode != BlendMode.NORMAL) )
+            // SDK-29631: Use super.$blendMode instead of super.blendMode
+            // since Group completely overrides blendMode and we 
+            // want to bypass the extra logic in UIComponent which
+            // has its own override.
+            // TODO (egeorgie): figure out whether we can share some
+            // of that logic in the future.
+            if (((alpha > 0 && alpha < 1) && super.$blendMode != BlendMode.LAYER) ||
+                ((alpha == 1 || alpha == 0) && super.$blendMode != BlendMode.NORMAL) )
             {
                 invalidateDisplayObjectOrdering();
             }
@@ -504,7 +625,7 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
             {   
                 var elt:IVisualElement = _mxmlContent[i];
 
-                // A common mistake is to bind the viewport property of an Scroller
+                // A common mistake is to bind the viewport property of a Scroller
                 // to a group that was defined in the MXML file with a different parent    
                 if (elt.parent && (elt.parent != this))
                     throw new Error(resourceManager.getString("components", "mxmlElementNoMultipleParents", [elt]));
@@ -738,6 +859,28 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
     /**
      *  @private
      */ 
+    override public function validateProperties():void
+    {
+        super.validateProperties();
+        
+        // Property validation happens top-down, so now let's 
+        // validate graphic element properties after 
+        // calling super.validateProperties()
+        if (numGraphicElements > 0)
+        {
+            var length:int = numElements;
+            for (var i:int = 0; i < length; i++)
+            {
+                var element:IGraphicElement = getElementAt(i) as IGraphicElement;
+                if (element)
+                    element.validateProperties();
+            }
+        }
+    }
+    
+    /**
+     *  @private
+     */ 
     override protected function commitProperties():void
     {
         super.commitProperties();
@@ -749,16 +892,22 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
             
             // Figure out the correct blendMode value
             // to set. 
+            // SDK-29631: Use super.$blendMode instead of super.blendMode
+            // since Group completely overrides blendMode and we 
+            // want to bypass the extra logic in UIComponent which
+            // has its own override.
+            // TODO (egeorgie): figure out whether we can share some
+            // of that logic in the future.
             if (_blendMode == "auto")
             {
                 if (alpha == 0 || alpha == 1) 
-                    super.blendMode = BlendMode.NORMAL;
+                    super.$blendMode = BlendMode.NORMAL;
                 else
-                    super.blendMode = BlendMode.LAYER;
+                    super.$blendMode = BlendMode.LAYER;
             }
             else if (!isAIMBlendMode(_blendMode))
             {
-                super.blendMode = _blendMode;
+                super.$blendMode = _blendMode;
             }
             
             if (blendShaderChanged) 
@@ -836,18 +985,6 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
             if (isValidScaleGrid())
                 resizeMode = ResizeMode.SCALE; // Force the resizeMode to scale 
         }
-        
-        // Validate element properties
-        if (numGraphicElements > 0)
-        {
-            var length:int = numElements;
-            for (var i:int = 0; i < length; i++)
-            {
-                var element:IGraphicElement = getElementAt(i) as IGraphicElement;
-                if (element)
-                    element.validateProperties();
-            }
-        }
     }
     
     /**
@@ -858,7 +995,9 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
         // Since IGraphicElement is not ILayoutManagerClient, we need to make sure we
         // validate sizes of the elements, even in cases where recursive==false.
         
-        // Validate element size
+        // Size validation happens bottom-up, so now let's 
+        // validate graphic element size before 
+        // calling super.validateSize()
         if (numGraphicElements > 0)
         {
             var length:int = numElements;
@@ -894,39 +1033,31 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
     /**
      *  @private
      */
-    override protected function updateDisplayList(unscaledWidth:Number, unscaledHeight:Number):void
-    {       
-        super.updateDisplayList(unscaledWidth, unscaledHeight);
+    override public function validateDisplayList():void
+    {
+        // call super.validateDisplayList() and let updateDisplayList() run
+        super.validateDisplayList();
 
         // If the DisplayObject assignment is still not completed, then postpone validation
-        // of the GraphicElements
+        // of the GraphicElements. invalidateDisplayList() will be called during the next 
+        // commitProperties() call since needsDisplayObjectAssignment=true, 
+        // so we will be re-running validateDisplayList() anyways
         if (needsDisplayObjectAssignment && invalidatePropertiesFlag)
             return;
         
-        // Clear the group's graphic because graphic elements might be drawing to it
-        // This isn't needed for DataGroup because there's no DisplayObject sharing
-        var sharedDisplayObject:ISharedDisplayObject = this;
-        if (sharedDisplayObject.redrawRequested)
-        {
-            graphics.clear();
-            drawBackground();
-            
-            // If a scaleGrid is set, make sure the extent of the groups bounds are filled so
-            // the player will scale our contents as expected. 
-            if (isValidScaleGrid() && resizeMode == ResizeMode.SCALE)
-            {
-                graphics.lineStyle();
-                graphics.beginFill(0, 0);
-                graphics.drawRect(0, 0, 1, 1);
-                graphics.drawRect(measuredWidth - 1, measuredHeight - 1, 1, 1);
-                graphics.endFill();
-            }
-        }
-                
+        // DisplayList validation happens top-down, so we should
+        // validate graphic element DisplayList after 
+        // calling super.validateDisplayList().  This is 
+        // gets tricky because of graphic-element sharing.  We clear
+        // Group's graphic's object in updateDisplayList() and handle the 
+        // rest of the DisplayList validation in here.
+        
         // Iterate through the graphic elements. If an element has a displayObject that has been 
         // invalidated, then validate all graphic elements that draw to this displayObject. 
         // The algorithm assumes that all of the elements that share a displayObject are in between
         // the element with the shared displayObject and the next element that has a displayObject.
+        
+        var sharedDisplayObject:ISharedDisplayObject = this;
         if (numGraphicElements > 0)
         {
             var length:int = numElements;
@@ -934,8 +1065,8 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
             {
                 var element:IGraphicElement = getElementAt(i) as IGraphicElement;
                 if (!element)
-                   continue;
-
+                    continue;
+                
                 // Do a special check for layer, we may stumble upon an element with layer != 0
                 // before we're done with the current shared sequence and we don't want to mark
                 // the sequence as valid, until we reach the next sequence.   
@@ -962,18 +1093,60 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
                     var elementDisplayObject:ISharedDisplayObject = element.displayObject as ISharedDisplayObject;
                     if (!elementDisplayObject || elementDisplayObject.redrawRequested)
                     {
-                       element.validateDisplayList();
-
-                       if (elementDisplayObject)
-                           elementDisplayObject.redrawRequested = false;
+                        element.validateDisplayList();
+                        
+                        if (elementDisplayObject)
+                            elementDisplayObject.redrawRequested = false;
                     }
                 }
             }
         }
-            
+        
         // Mark the last shared displayObject valid
         if (sharedDisplayObject)
             sharedDisplayObject.redrawRequested = false;
+    }
+    
+    /**
+     *  @private
+     */
+    override protected function updateDisplayList(unscaledWidth:Number, unscaledHeight:Number):void
+    {
+        // let user's code (layout) run first before dealing with graphic element 
+        // sharing because that's when redraws can be requested
+        super.updateDisplayList(unscaledWidth, unscaledHeight);
+        
+        // Clear the group's graphic because graphic elements might be drawing to it
+        // This isn't needed for DataGroup because there's no DisplayObject sharing
+        // This code exists in updateDisplayList() as opposed to validateDisplayList() 
+        // because of compatibility issues since most of this code was 
+        // refactored from updateDisplayList() and in to validateDisplayList().  User's code 
+        // already assumed that they could call super.updateDisplayList() and then be able to draw 
+        // into the Group's graphics object.  Because of that, the graphics.clear() call is left 
+        // in updateDisplayList() instead of in validateDisplayList() with the rest of the graphic 
+        // element sharing code.
+        var sharedDisplayObject:ISharedDisplayObject = this;
+        if (sharedDisplayObject.redrawRequested)
+        {
+            // clear the graphics here.  The pattern is usually to call graphics.clear() 
+            // before calling super.updateDisplayList() so what happens in super.updateDisplayList() 
+            // isn't erased.  However, in this case, what happens in super.updateDisplayList() isn't 
+            // much, and we want to make sure super.updateDisplayList() runs first since the layout 
+            // is what actually triggers the the shareDisplayObject to request to be redrawn.
+            graphics.clear();
+            drawBackground();
+            
+            // If a scaleGrid is set, make sure the extent of the groups bounds are filled so
+            // the player will scale our contents as expected. 
+            if (isValidScaleGrid() && resizeMode == ResizeMode.SCALE)
+            {
+                graphics.lineStyle();
+                graphics.beginFill(0, 0);
+                graphics.drawRect(0, 0, 1, 1);
+                graphics.drawRect(measuredWidth - 1, measuredHeight - 1, 1, 1);
+                graphics.endFill();
+            }
+        }
         
         if (scaleGridChanged)
         {
@@ -1022,6 +1195,20 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
                     IStyleClient(child).notifyStyleChangeInChildren(styleProp, recursive);
             }
         }
+        
+        if (advanceStyleClientChildren != null)
+        {
+            for (var styleClient:Object in advanceStyleClientChildren)
+            {
+                var iAdvanceStyleClientChild:IAdvancedStyleClient = styleClient 
+                    as IAdvancedStyleClient;
+                
+                if (iAdvanceStyleClientChild)
+                {
+                    iAdvanceStyleClientChild.styleChanged(styleProp);
+                }
+            }
+        }
     }
     
     /**
@@ -1057,6 +1244,23 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
                 // If not, there's no need to regenerate a new one.
                 if (IUITextField(child).inheritingStyles)
                     StyleProtoChain.initTextField(IUITextField(child));
+            }
+        }
+        
+        // Call this method on each non-visual StyleClient
+        if (advanceStyleClientChildren != null)
+        {
+            for (var styleClient:Object in advanceStyleClientChildren)
+            {
+                var iAdvanceStyleClientChild:IAdvancedStyleClient = styleClient
+                    as IAdvancedStyleClient;
+                
+                if (iAdvanceStyleClientChild && 
+                    iAdvanceStyleClientChild.inheritingStyles !=
+                    StyleProtoChain.STYLE_UNINITIALIZED)
+                {
+                    iAdvanceStyleClientChild.regenerateStyleCache(recursive);
+                }
             }
         }
     }
@@ -1228,6 +1432,11 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
         
     /**
      *  @inheritDoc
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
     public function removeAllElements():void
     {
@@ -1263,6 +1472,9 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
         // check for RangeError...this is done in addItemAt
         // but we want to do it before removing the element
         checkForRangeError(index);
+        
+        if (getElementIndex(element) == index)
+            return;
         
         removeElement(element);
         addElementAt(element, index);
@@ -1526,10 +1738,10 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
      *  <p>This method doesn't necessarily trigger new <code>DisplayObject</code>
      *  reassignment for the passed in <code>element</code>.
      *  To request new display object reassignment, call the
-     *  <code>graphicElementLayerChanged</code> method.</p> 
+     *  <code>invalidateGraphicElementSharing()</code> method.</p> 
      *
      *  @param element The graphic element whose display object is discarded.
-     *  @see #graphicElementLayerChanged
+     *  @see #invalidateGraphicElementSharing
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -1561,7 +1773,7 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
             super.$invalidateDisplayList();
         }
     }
-    
+
     /**
      *  @private
      *  
@@ -1983,7 +2195,8 @@ public class Group extends GroupBase implements IVisualElementContainer, IShared
     /**
      *  @private
      *  Contains <code>true</code> when any of the <code>IGraphicElement</code> objects that share
-     *  this <code>DisplayObject</code> object needs to redraw.  
+     *  this <code>DisplayObject</code> object needs to redraw or the background for the container
+     *  needs to be redrawn.  
      *  This is used internally
      *  by the <code>Group</code> class and developers don't typically use this. 
      *  

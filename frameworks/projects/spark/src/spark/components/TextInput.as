@@ -43,30 +43,6 @@ use namespace mx_internal;
 [Event(name="enter", type="mx.events.FlexEvent")]
 
 //--------------------------------------
-//  Skin states
-//--------------------------------------
-
-/**
- *  Normal State
- *  
- *  @langversion 3.0
- *  @playerversion Flash 10
- *  @playerversion AIR 1.5
- *  @productversion Flex 4
- */
-[SkinState("normal")]
-
-/**
- *  Disabled State
- *  
- *  @langversion 3.0
- *  @playerversion Flash 10
- *  @playerversion AIR 1.5
- *  @productversion Flex 4
- */
-[SkinState("disabled")]
-
-//--------------------------------------
 //  Excluded APIs
 //--------------------------------------
 
@@ -87,13 +63,17 @@ use namespace mx_internal;
  *  TextInput is a text-entry control that lets users enter and edit
  *  a single line of uniformly-formatted text.
  *
- *  <p>This Spark version of TextInput 
- *  makes use of the Text Layout Framework (TLF) library,
- *  which in turn builds on the new Flash Text Engine (FTE) in Flash Player 10.
- *  In combination, they provide text editing with
- *  high-quality international typography.
- *  The MX version of TextInput displays text using the older
- *  TextField class.</p>
+ *  <p><b>The TextInput skin for the Spark theme
+ *  uses the RichEditableText class. This means that the Spark TextInput control supports 
+ *  the Text Layout Framework (TLF) library,
+ *  which builds on the Flash Text Engine (FTE).</b>
+ *  In combination, these layers provide text editing with
+ *  high-quality international typography and layout.</p>
+ * 
+ *  <p><b>The TextInput skin for the mobile theme uses the StyleableTextField class instead of RichEditableText.</b>
+ *  As a result, TLF-only features are not supported in the mobile theme including
+ *  TextFlow, right-to-left or bidirectional text, and advanced text 
+ *  styles.</p>
  *
  *  <p>You can set the text to be displayed, or get the text that the user
  *  has entered, using the <code>text</code> property.
@@ -105,6 +85,10 @@ use namespace mx_internal;
  *
  *  <p>The <code>widthInChars</code> property provides a convenient way
  *  to specify the width in a way that scales with the font size.
+ *  You can use the <code>typicalText</code> property as well.
+ *  Note that if you use <code>typicalText</code>, the
+ *  <code>widthInChars</code> and <code>heightInLines</code>
+ *  are ignored.
  *  Of course, you can also specify an explicit width in pixels,
  *  a percent width, or use constraints such as <code>left</code>
  *  and <code>right</code>.
@@ -123,7 +107,7 @@ use namespace mx_internal;
  *  break, because this control does not support entering multiple
  *  lines of text. By default, this control has explicit line breaks.</p>
  *
- *  <p>This control is a skinnable control whose skin contains a
+ *  <p>This control is a skinnable control whose default skin contains a
  *  RichEditableText instance that handles displaying and editing the text.
  *  (The skin also handles drawing the border and background.)
  *  This RichEditableText can be accessed as the <code>textDisplay</code>
@@ -146,6 +130,12 @@ use namespace mx_internal;
  *  unlimited undo/redo within one editing session.
  *  An editing session starts when the control gets keyboard focus
  *  and ends when the control loses focus.</p>
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  <p>The TextInput control has the following default characteristics:</p>
  *     <table class="innertable">
@@ -177,6 +167,7 @@ use namespace mx_internal;
  *  <pre>
  *  &lt;s:TextInput
  *    <strong>Properties</strong>
+ *    typicalText=null
  *    widthInChars="<i>Calculated default</i>"
  *  
  *    <strong>Events</strong>
@@ -270,7 +261,7 @@ public class TextInput extends SkinnableTextBase
     //  widthInChars
     //----------------------------------
     
-    [Inspectable(minValue="0.0")]    
+    [Inspectable(category="General", minValue="0.0")]    
 
     /**
      *  The default width of the control, measured in em units.
@@ -290,6 +281,11 @@ public class TextInput extends SkinnableTextBase
      *  a percent width, or both <code>left</code> and <code>right</code>
      *  constraints.</p>
      *
+     *  <p>This property will also be ignored if the <code>typicalText</code> 
+     *  property is specified.</p>
+     * 
+     *  <p><b>For the Mobile theme, this is not supported.</b></p>
+     *      
      *  @default 10
      *
      *  @see spark.primitives.heightInLines
@@ -331,10 +327,11 @@ public class TextInput extends SkinnableTextBase
 
             // Single line for interactive input.  Multi-line text can be
             // set.
-            textDisplay.setStyle("lineBreak", "explicit");
+            textDisplay.lineBreak = "explicit";
             
             // TextInput should always be 1 line.
-            textDisplay.heightInLines = 1;
+            if (textDisplay is RichEditableText)
+                RichEditableText(textDisplay).heightInLines = 1;
         }
     }
 }

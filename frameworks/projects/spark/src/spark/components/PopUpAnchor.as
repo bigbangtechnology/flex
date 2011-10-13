@@ -22,6 +22,7 @@ import flash.geom.Point;
 import flash.geom.Rectangle;
 
 import mx.core.IFlexDisplayObject;
+import mx.core.IUIComponent;
 import mx.core.LayoutDirection;
 import mx.core.UIComponent;
 import mx.core.mx_internal;
@@ -356,7 +357,8 @@ public class PopUpAnchor extends UIComponent
     protected function calculatePopUpPosition():Point
     {
         // This implementation doesn't handle rotation
-        var matrix:Matrix = MatrixUtil.getConcatenatedMatrix(this);
+        var sandboxRoot:DisplayObject = systemManager.getSandboxRoot();
+        var matrix:Matrix = MatrixUtil.getConcatenatedMatrix(this, sandboxRoot);
              
         var regPoint:Point = new Point();
         
@@ -461,7 +463,7 @@ public class PopUpAnchor extends UIComponent
         
         if (layoutDirection == LayoutDirection.RTL)
             regPoint.x += popUpBounds.width;
-        return MatrixUtil.getConcatenatedComputedMatrix(this).transformPoint(regPoint);
+        return MatrixUtil.getConcatenatedComputedMatrix(this, sandboxRoot).transformPoint(regPoint);
     }
     
     //--------------------------------------------------------------------------
@@ -484,6 +486,8 @@ public class PopUpAnchor extends UIComponent
         if (DisplayObject(popUp).parent == null && displayPopUp)
         {
             PopUpManager.addPopUp(popUp,this,false);
+			if (popUp is IUIComponent)
+				IUIComponent(popUp).owner = this;
             popUpIsDisplayed = true;
             if (popUp is UIComponent && !popUpSizeCaptured)
             {
@@ -544,20 +548,13 @@ public class PopUpAnchor extends UIComponent
         }
         
         var popUpAsDisplayObject:DisplayObject = popUp as DisplayObject;
-                
-        var globalTL:Point = matrix.transformPoint(registrationPoint);
-        registrationPoint.y += popUpAsDisplayObject.height;
-        var globalBL:Point = matrix.transformPoint(registrationPoint);
-        registrationPoint.x += popUpAsDisplayObject.width;
-        var globalBR:Point = matrix.transformPoint(registrationPoint);
-        registrationPoint.y -= popUpAsDisplayObject.height;
-        var globalTR:Point = matrix.transformPoint(registrationPoint);
-        registrationPoint.x -= popUpAsDisplayObject.width;
         
-        bounds.left = Math.min(globalTL.x, globalBL.x, globalBR.x, globalTR.x);
-        bounds.right = Math.max(globalTL.x, globalBL.x, globalBR.x, globalTR.x);
-        bounds.top = Math.min(globalTL.y, globalBL.y, globalBR.y, globalTR.y);
-        bounds.bottom = Math.max(globalTL.y, globalBL.y, globalBR.y, globalTR.y);
+        var topLeft:Point = registrationPoint.clone();
+        var size:Point = MatrixUtil.transformBounds(popUpAsDisplayObject.width, popUpAsDisplayObject.height, matrix, topLeft);
+        bounds.left = topLeft.x;
+        bounds.top = topLeft.y;
+        bounds.width = size.x;
+        bounds.height = size.y;
     }
     
     /**
@@ -568,7 +565,7 @@ public class PopUpAnchor extends UIComponent
         if (!popUpIsDisplayed)
             return;
                 
-        var m:Matrix = MatrixUtil.getConcatenatedMatrix(this);
+        var m:Matrix = MatrixUtil.getConcatenatedMatrix(this, systemManager.getSandboxRoot());
          
         // Set the dimensions explicitly because UIComponents always set themselves to their
         // measured / explicit dimensions if they are parented by the SystemManager. 
@@ -613,8 +610,8 @@ public class PopUpAnchor extends UIComponent
             return;
         
         // Position the popUp. 
-        m.tx = popUpPoint.x;
-        m.ty = popUpPoint.y;
+        m.tx = Math.round(popUpPoint.x);
+        m.ty = Math.round(popUpPoint.y);
         if (popUp is UIComponent)
             UIComponent(popUp).setLayoutMatrix(m,false);
         else if (popUp is DisplayObject)

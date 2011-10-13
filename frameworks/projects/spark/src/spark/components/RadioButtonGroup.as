@@ -81,9 +81,9 @@ use namespace mx_internal;
  *  @eventType mx.events.FlexEvent.VALUE_COMMIT
  *  
  *  @langversion 3.0
- *  @playerversion Flash 9
- *  @playerversion AIR 1.1
- *  @productversion Flex 3
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
  */
 [Event(name="valueCommit", type="mx.events.FlexEvent")]
 
@@ -109,6 +109,12 @@ use namespace mx_internal;
  *  The RadioButtonGroup component declaration must
  *  be contained within the <code>&lt;Declarations&gt;</code> tag since it is
  *  not assignable to IVisualElement.</p> 
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  @mxml
  *
@@ -315,6 +321,14 @@ public class RadioButtonGroup extends EventDispatcher implements IMXMLObject
         // value until it can be put in the group.
         _selectedValue = value;
         
+        // Clear the exisiting selecton if there is one.
+        if (value == null)
+        {
+            setSelection(null, false);
+            return;
+        }
+        
+        // Find the radio button value specified.
         var n:int = numRadioButtons;
         for (var i:int = 0; i < n; i++)
         {
@@ -540,12 +554,15 @@ public class RadioButtonGroup extends EventDispatcher implements IMXMLObject
         if (_selection == value)
             return;
             
-        if (value == null && _selection != null)
+        if (value == null)
         {
-            _selection.selected = false;
-            _selection = null;
-            if (fireChange)
-                dispatchEvent(new Event(Event.CHANGE));
+            if (selection != null)
+            {
+                _selection.selected = false;
+                _selection = null;
+                if (fireChange)
+                    dispatchEvent(new Event(Event.CHANGE));
+            }
         }
         else
         {

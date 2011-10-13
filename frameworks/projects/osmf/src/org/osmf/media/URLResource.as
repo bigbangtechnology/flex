@@ -23,13 +23,19 @@
 *****************************************************/
 package org.osmf.media
 {
-	import org.osmf.metadata.Metadata;
-	import org.osmf.utils.URL;
-	
 	/**
-	 * Default implementation of IURLResource.
-	 **/
-	public class URLResource implements IURLResource
+	 * URLResource is a media resource that has a URL. It serves as an input
+	 * object for MediaElements that can process and present media represented
+	 * by URLs.	 
+	 * 
+	 * @includeExample URLResourceExample.as -noswf
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
+	public class URLResource extends MediaResourceBase
 	{		
 		// Public interface
 		//
@@ -38,38 +44,30 @@ package org.osmf.media
 		 * Constructor.
 		 * 
 		 * @param url The URL of the resource.
-		 **/
-		public function URLResource(url:URL)
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public function URLResource(url:String)
 		{
-			_url = (url == null) ? new URL(null) : url;	
+			_url = url;	
 		}
 		
 		/**
-		 * Required by the IURLResource interface, returns a URL object.
+		 * The URL of the resource.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
-		public function get url():URL
+		public function get url():String
 		{
 			return _url;
 		}
 		
-		/**
-		 *  @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */ 
-		public function get metadata():Metadata
-		{
-			if (!_metadata)
-			{
-				_metadata = new Metadata();
-			}
-			return _metadata;
-		}
-		
-		private var _metadata:Metadata;	
-		private var _url:URL;	
+		private var _url:String;	
 	}
 }

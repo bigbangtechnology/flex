@@ -18,19 +18,27 @@
 <component id="SparkScrollerAutomationImpl"  class="spark.automation.delegates.components.SparkScrollerAutomationImpl"/>
 <component id="SparkButtonBarButtonAutomationImpl"  class="spark.automation.delegates.components.SparkButtonBarButtonAutomationImpl"/> 
 <component id="SparkSkinnableContainerAutomationImpl"  class="spark.automation.delegates.components.SparkSkinnableContainerAutomationImpl"/>
+<component id="SparkSkinnableDataContainerAutomationImpl"  class="spark.automation.delegates.components.SparkSkinnableDataContainerAutomationImpl"/>
 <component id="SparkCheckBoxAutomationImpl"  class="spark.automation.delegates.components.SparkCheckBoxAutomationImpl"/>         
 <component id="SparkSpinnerAutomationImpl"  class="spark.automation.delegates.components.SparkSpinnerAutomationImpl"/>
 <component id="SparkDataGroupAutomationImpl"  class="spark.automation.delegates.components.SparkDataGroupAutomationImpl"/>            
-<component id="SparkDropDownListAutomationImpl"  class="spark.automation.delegates.components.SparkDropDownListAutomationImpl"/>     
+<component id="SparkDropDownListAutomationImpl"  class="spark.automation.delegates.components.SparkDropDownListAutomationImpl"/>
+<component id="SparkFormAutomationImpl"  class="spark.automation.delegates.components.SparkFormAutomationImpl"/>
+<component id="SparkFormItemAutomationImpl"  class="spark.automation.delegates.components.SparkFormItemAutomationImpl"/>
+<component id="SparkImageAutomationImpl"  class="spark.automation.delegates.components.SparkImageAutomationImpl"/>     
 <component id="SparkToggleButtonAutomationImpl"  class="spark.automation.delegates.components.SparkToggleButtonAutomationImpl"/>
 <component id="SparkGroupAutomationImpl"  class="spark.automation.delegates.components.SparkGroupAutomationImpl"/>            
+<component id="SparkVideoDisplayAutomationImpl"  class="spark.automation.delegates.components.SparkVideoDisplayAutomationImpl"/>
 <component id="SparkVideoPlayerAutomationImpl"  class="spark.automation.delegates.components.SparkVideoPlayerAutomationImpl"/>
 <component id="SparkLabelAutomationImpl"  class="spark.automation.delegates.components.SparkLabelAutomationImpl"/>            
 <component id="SparkTextAreaAutomationImpl"  class="spark.automation.delegates.components.SparkTextAreaAutomationImpl"/>
 <component id="SparkListAutomationImpl"  class="spark.automation.delegates.components.SparkListAutomationImpl"/>             
 <component id="SparkTextInputAutomationImpl"  class="spark.automation.delegates.components.SparkTextInputAutomationImpl"/>
 <component id="SparkNumericStepperAutomationImpl"  class="spark.automation.delegates.components.SparkNumericStepperAutomationImpl"/>   
-<component id="SparkPanelAutomationImpl"  class="spark.automation.delegates.components.SparkPanelAutomationImpl"/>         
+<component id="SparkPanelAutomationImpl"  class="spark.automation.delegates.components.SparkPanelAutomationImpl"/>
+<component id="SparkPopUpAnchorAutomationImpl" class="spark.automation.delegates.components.SparkPopUpAnchorAutomationImpl"/>         
+
+<component id="SparkGridItemRendererAutomationImpl"  class="spark.automation.delegates.components.gridClasses.SparkGridItemRendererAutomationImpl"/>  
 
 <component id="SparkMuteButtonAutomationImpl"  class="spark.automation.delegates.components.mediaClasses.SparkMuteButtonAutomationImpl"/>  
 <component id="SparkVolumeBarAutomationImpl"  class="spark.automation.delegates.components.mediaClasses.SparkVolumeBarAutomationImpl"/>
@@ -50,17 +58,24 @@
 <component id="SparkToggleButtonBaseAutomationImpl"  class="spark.automation.delegates.components.supportClasses.SparkToggleButtonBaseAutomationImpl"/>
 <component id="SparkTrackBaseAutomationImpl"  class="spark.automation.delegates.components.supportClasses.SparkTrackBaseAutomationImpl"/>
 <component id="SparkSkinnableTextBaseAutomationImpl"  class="spark.automation.delegates.components.supportClasses.SparkSkinnableTextBaseAutomationImpl"/>
-
+<component id="SparkDataGridAutomationImpl"  class="spark.automation.delegates.components.SparkDataGridAutomationImpl"/>  
 
 
 <component id="SparkListItemSelectEvent"  class="spark.automation.events.SparkListItemSelectEvent"/>  
+<component id="SparkDataGridItemSelectEvent"  class="spark.automation.events.SparkDataGridItemSelectEvent"/>  
 <component id="SparkValueChangeAutomationEvent"  class="spark.automation.events.SparkValueChangeAutomationEvent"/>
 
 <component id="RichEditableTextTabularData"  class="spark.automation.tabularData.RichEditableTextTabularData"/>    
 <component id="SparkListBaseTabularData"  class="spark.automation.tabularData.SparkListBaseTabularData"/>
 <component id="SkinnableContainerTabularData"  class="spark.automation.tabularData.SkinnableContainerTabularData"/>
+<component id="SkinnableDataContainerTabularData"  class="spark.automation.tabularData.SkinnableDataContainerTabularData"/>
+<component id="SparkDataGridTabularData"  class="spark.automation.tabularData.SparkDataGridTabularData"/>
+
 
 <component id="SparkDefaultItemRendererAutomationImpl" class="spark.automation.delegates.skins.spark.SparkDefaultItemRendererAutomationImpl"/>
 <component id="SparkDefaultComplexItemRendererAutomationImpl" class="spark.automation.delegates.skins.spark.SparkDefaultComplexItemRendererAutomationImpl"/>
+<component id="SparkDefaultGridItemRendererAutomationImpl" class="spark.automation.delegates.skins.spark.SparkDefaultGridItemRendererAutomationImpl"/>
+<component id="SparkDefaultGridHeaderRendererAutomationImpl" class="spark.automation.delegates.skins.spark.SparkDefaultGridHeaderRendererAutomationImpl"/>
+<component id="SparkUITextFieldGridItemRendererAutomationImpl" class="spark.automation.delegates.skins.spark.SparkUITextFieldGridItemRendererAutomationImpl"/>
 
 </componentPackage>

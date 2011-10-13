@@ -16,30 +16,26 @@ import flash.display.DisplayObject;
 import flash.display.DisplayObjectContainer;
 import flash.display.Graphics;
 import flash.display.InteractiveObject;
-import flash.display.Shape;
 import flash.display.Sprite;
 import flash.display.Stage;
 import flash.events.Event;
 import flash.events.EventDispatcher;
-import flash.events.IEventDispatcher;
 import flash.events.MouseEvent;
 import flash.geom.Point;
 import flash.geom.Rectangle;
-import flash.utils.Proxy;
 
 import mx.automation.IAutomationObject;
-import mx.containers.Canvas;
-import mx.controls.Alert;
 import mx.core.FlexGlobals;
 import mx.core.FlexSprite;
+import mx.core.FlexVersion;
 import mx.core.IChildList;
 import mx.core.IFlexDisplayObject;
 import mx.core.IFlexModule;
 import mx.core.IFlexModuleFactory;
 import mx.core.IInvalidating;
 import mx.core.ILayoutDirectionElement;
-import mx.core.ISWFLoader;
 import mx.core.IUIComponent;
+import mx.core.LayoutDirection;
 import mx.core.UIComponent;
 import mx.core.UIComponentGlobals;
 import mx.core.mx_internal;
@@ -50,13 +46,9 @@ import mx.events.DynamicEvent;
 import mx.events.EffectEvent;
 import mx.events.FlexEvent;
 import mx.events.FlexMouseEvent;
-import mx.events.MoveEvent;
 import mx.events.Request;
-import mx.managers.ISystemManager;
-import mx.managers.SystemManager;
 import mx.managers.systemClasses.ActiveWindowManager;
 import mx.styles.IStyleClient;
-import mx.utils.NameUtil;
 
 use namespace mx_internal;
 
@@ -333,18 +325,20 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
             if (!dispatchEvent(request))
                 smp = request.value as ISystemManager;
         }
-            
+                
         if (window is IUIComponent)
             IUIComponent(window).isPopUp = true;
-        
+                
         if (!childList || childList == PopUpManagerChildList.PARENT)
             topMost = smp.popUpChildren.contains(parent);
         else
             topMost = (childList == PopUpManagerChildList.POPUP);
         
         children = topMost ? smp.popUpChildren : smp;
-        children.addChild(DisplayObject(window));
-
+        
+        if (DisplayObject(window).parent != children)
+            children.addChild(DisplayObject(window));
+                            
         window.visible = false;
         
         const o:PopUpData = createPopUpData();
@@ -389,12 +383,17 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
         {
             IUIComponent(window).setActualSize(
                 IUIComponent(window).getExplicitOrMeasuredWidth(),
-                IUIComponent(window).getExplicitOrMeasuredHeight());
+                IUIComponent(window).getExplicitOrMeasuredHeight());            
+        }
+                    
+        // The layout direction may have changed since last time the
+        // popup was opened so need to reinit mirroring fields.
+        if (FlexVersion.compatibilityVersion >= FlexVersion.VERSION_4_0)
+        {
+           if (window is ILayoutDirectionElement)
+                ILayoutDirectionElement(window).invalidateLayoutDirection();
         }
         
-        if (window is ILayoutDirectionElement)
-            ILayoutDirectionElement(window).invalidateLayoutDirection();
-
         if (modal)
         {
             // create a modal window shield which blocks input and sets up mouseDownOutside logic
@@ -438,7 +437,7 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
     }
 
 
-	mx_internal function getTopLevelSystemManager(parent:DisplayObject):ISystemManager
+    mx_internal function getTopLevelSystemManager(parent:DisplayObject):ISystemManager
 	{
 	    var localRoot:DisplayObjectContainer;
 		var sm:ISystemManager;
@@ -484,7 +483,7 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
      *  @productversion Flex 3
      */
     public function centerPopUp(popUp:IFlexDisplayObject):void
-    {
+    {        
         if (popUp is IInvalidating)
             IInvalidating(popUp).validateNow();
 
@@ -502,7 +501,6 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
             var appHeight:Number;
             var parentWidth:Number;
             var parentHeight:Number;
-            var s:Rectangle;            // the screen
             var rect:Rectangle;
             var clippingOffset:Point = new Point();
             var pt:Point;
@@ -523,17 +521,18 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
             {
                 // The sandbox root is the top level root.
                 // The application width is just the screen width.
-                s = systemManager.screen;
-                appWidth = s.width;
-                appHeight = s.height;
+                var screen:Rectangle = systemManager.screen;
+                appWidth = screen.width;
+                appHeight = screen.height;
             }            
             else
             {
                 rect = systemManager.getVisibleApplicationRect();
+                rect.topLeft = DisplayObject(systemManager).globalToLocal(rect.topLeft);
+                rect.bottomRight = DisplayObject(systemManager).globalToLocal(rect.bottomRight);
             
                 // Offset the top, left of the window to bring it into view.        
-                clippingOffset = new Point(rect.x, rect.y);
-                clippingOffset = DisplayObject(systemManager).globalToLocal(clippingOffset);
+                clippingOffset = rect.topLeft.clone();
                 appWidth = rect.width;
                 appHeight = rect.height;
             } 
@@ -543,6 +542,8 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
             if (popUpParent is UIComponent)
             {
                 rect = UIComponent(popUpParent).getVisibleRect();
+				if (UIComponent(popUpParent).systemManager != sbRoot)
+					rect = UIComponent(popUpParent).systemManager.getVisibleApplicationRect(rect);
                 var offset:Point = popUpParent.globalToLocal(rect.topLeft);
                 clippingOffset.x += offset.x;
                 clippingOffset.y += offset.y;
@@ -560,7 +561,21 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
             x = Math.max(0, (Math.min(appWidth, parentWidth) - popUp.width) / 2);
             y = Math.max(0, (Math.min(appHeight, parentHeight) - popUp.height) / 2);
             
-            pt = new Point(clippingOffset.x, clippingOffset.y);
+            // If the layout has been mirrored, then 0,0 is the uppper
+            // right corner; compensate here.
+            if (FlexVersion.compatibilityVersion >= FlexVersion.VERSION_4_0)
+            {
+                if (popUp is ILayoutDirectionElement &&
+                    ILayoutDirectionElement(popUp).layoutDirection == 
+                    LayoutDirection.RTL)
+                {
+                     x = -x /* to flip it on the other side of the x axis*/ 
+                         -popUp.width /* because 0 is the right edge */;
+    
+                }
+            }
+            
+            pt = new Point(clippingOffset.x, clippingOffset.y);            
             pt = popUpParent.localToGlobal(pt);
             pt = popUp.parent.globalToLocal(pt);
             popUp.move(Math.round(x) + pt.x, Math.round(y) + pt.y);
@@ -705,7 +720,7 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
 		
         modalWindow.tabEnabled = false;
         
-        const s:Rectangle = sm.screen;
+        const screen:Rectangle = sm.screen;
         const g:Graphics = modalWindow.graphics;
         
         var c:Number = 0xFFFFFF;
@@ -729,7 +744,7 @@ public class PopUpManagerImpl extends EventDispatcher implements IPopUpManager
         // trace("createModalWindow: drawing modal " + s);
         g.clear();
         g.beginFill(c, 100);
-        g.drawRect(s.x, s.y, s.width, s.height);
+        g.drawRect(screen.x, screen.y, screen.width, screen.height);
         g.endFill();
 
         if (hasEventListener("updateModalMask"))

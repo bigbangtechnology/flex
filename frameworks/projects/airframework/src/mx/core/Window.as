@@ -677,6 +677,8 @@ public class Window extends LayoutContainer implements IWindow
      *  Returns the Window to which a component is parented.
      *
      *  @param component the component whose Window you wish to find.
+     *
+     *  @return The Window to which a component is parented.
      *  
      *  @langversion 3.0
      *  @playerversion AIR 1.1
@@ -1840,6 +1842,8 @@ public class Window extends LayoutContainer implements IWindow
      */
     private var _systemChrome:String = NativeWindowSystemChrome.STANDARD;
     
+    [Inspectable(enumeration="none,standard", defaultValue="standard" )]
+
     /**
      *  Specifies the type of system chrome (if any) the window has.
      *  The set of possible values is defined by the constants
@@ -2788,6 +2792,7 @@ public class Window extends LayoutContainer implements IWindow
             stage.nativeWindow.dispatchEvent(e);
             if (!(e.isDefaultPrevented()))
             {
+                removeEventListener(Event.ENTER_FRAME, enterFrameHandler);
                 stage.nativeWindow.close();
                 _nativeWindow = null;
                 systemManager.removeChild(this);
@@ -2944,7 +2949,13 @@ public class Window extends LayoutContainer implements IWindow
     public function activate():void
     {
         if (!nativeWindow.closed)
+        {
             _nativeWindow.activate();   
+            
+            // activate makes the native window visible so this 
+            // component should become visible as well.
+            visible = true;             
+        }
     }
 
     /**
@@ -3221,6 +3232,7 @@ public class Window extends LayoutContainer implements IWindow
     }
 
     /**
+     *  @private
      *  Manages mouse down events on the window border.
      *  
      *  @langversion 3.0

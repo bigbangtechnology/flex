@@ -27,7 +27,7 @@ import java.util.Iterator;
 
 
 /**
- *
+ * Implements the &lt;asc&gt; Ant task. 
  */
 public final class AscTask extends FlexTask implements DynamicAttribute
 {

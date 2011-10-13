@@ -21,151 +21,71 @@
 *****************************************************/
 package org.osmf.logging
 {
+	[ExcludeClass]
+	
 	/**
-	 * This class implements the ILogger interface. This is just a 
-	 * "bare-bone" implementation. It intends to provide a quick out-of-box
-	 * logging solution. It writes all the messages to the debug console. 
-	 * However, it does not allow users to do message-level-based logging
-	 * control.
+	 * @private
+	 * 
+	 * A Logger implementation which sends log messages to the trace console.
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */
-	public class TraceLogger implements ILogger
+	public class TraceLogger extends Logger
 	{
-		public function TraceLogger(name:String)
+		/**
+		 * Constructor.
+		 * 
+		 * @param category The category value for the Logger.
+		 **/
+		public function TraceLogger(category:String)
 		{
-			this.name = name;
+			super(category);
 		}
 
 		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 * @private
 		 */
-		public function debug(message:String, ...params):void
+		override public function debug(message:String, ...rest):void
 		{
-			log(LEVEL_DEBUG, message, params);
+			logMessage(LEVEL_DEBUG, message, rest);
 		}
 		
 		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 * @private
 		 */
-		public function info(message:String, ...params):void
+		override public function info(message:String, ...rest):void
 		{
-			log(LEVEL_INFO, message, params);
+			logMessage(LEVEL_INFO, message, rest);
 		}
 		
 		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 * @private
 		 */
-		public function warn(message:String, ...params):void
+		override public function warn(message:String, ...rest):void
 		{
-			log(LEVEL_WARN, message, params);
+			logMessage(LEVEL_WARN, message, rest);
 		}
 		
 		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 * @private
 		 */
-		public function error(message:String, ...params):void
+		override public function error(message:String, ...rest):void
 		{
-			log(LEVEL_ERROR, message, params);
+			logMessage(LEVEL_ERROR, message, rest);
 		}
 		
 		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 * @private
 		 */
-		public function fatal(message:String, ...params):void
+		override public function fatal(message:String, ...rest):void
 		{
-			log(LEVEL_FATAL, message, params);
+			logMessage(LEVEL_FATAL, message, rest);
 		}
 		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get debugEnabled():Boolean
-		{
-			return true;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get infoEnabled():Boolean
-		{
-			return true;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get warnEnabled():Boolean
-		{
-			return true;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get errorEnabled():Boolean
-		{
-			return true;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function get fatalEnabled():Boolean
-		{
-			return true;
-		}
-
-		// internal
+		// Internals
 		//
 		
 		/**
@@ -175,24 +95,21 @@ package org.osmf.logging
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
-		protected function log(level:String, message:String, params:Array):void
+		protected function logMessage(level:String, message:String, params:Array):void
 		{
-			CONFIG::LOGGING
-			{
 			var msg:String = "";
 			
 			// add datetime
 			msg += new Date().toLocaleString() + " [" + level + "] ";
 			
-			// add name and params
-			msg += "[" + name + "] " + applyParams(message, params);
+			// add category and params
+			msg += "[" + category + "] " + applyParams(message, params);
 			
 			// trace the message
 			trace(msg);
-		}
 		}
 		
 		/**
@@ -200,10 +117,10 @@ package org.osmf.logging
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
-		protected function applyParams(message:String, params:Array):String
+		private function applyParams(message:String, params:Array):String
 		{
 			var result:String = message;
 			var numParams:int = params.length;
@@ -215,8 +132,6 @@ package org.osmf.logging
 			
 			return result;
 		}
-		
-		private var name:String;
 		
 		private static const LEVEL_DEBUG:String = "DEBUG";
 		private static const LEVEL_WARN:String = "WARN";

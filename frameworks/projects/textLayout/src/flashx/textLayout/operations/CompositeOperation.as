@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
 	import flashx.textLayout.edit.SelectionState;
@@ -57,6 +57,8 @@ package flashx.textLayout.operations
 		{
 			super(null);
 			this.operations = operations;
+			if (_operations.length)
+				setGenerations(_operations[0].beginGeneration,_operations[_operations.length-1].endGeneration);
 		}
 
 		/** @private */
@@ -183,6 +185,7 @@ package flashx.textLayout.operations
 					_operations[_operations.length - 1] = mergedOp;
 				else
 					_operations.push(operation);
+				setGenerations(beginGeneration,operation.endGeneration);
 				return this;
 			}
 			return null;

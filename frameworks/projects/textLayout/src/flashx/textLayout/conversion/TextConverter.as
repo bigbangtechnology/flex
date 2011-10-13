@@ -1,21 +1,33 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.conversion
 {
-	import flashx.textLayout.elements.TextFlow;
+	import flash.utils.Dictionary;
+	
 	import flashx.textLayout.elements.IConfiguration;
+	import flashx.textLayout.elements.TextFlow;
+	import flashx.textLayout.elements.TextRange;
+	import flashx.textLayout.tlf_internal;
+	
+	use namespace tlf_internal;
 	
 	/** 
 	 * This is the gateway class for handling import and export. It serves as a unified access point to the 
-	 * conversion functionality in the Text Layout Framework.
+	 * conversion functionality in the Text Layout Framework. It contains a registry for predefined as well
+	 * as user defined input and/or output converters, plus a set of conversion methods.
+	 * <p>
+	 * The format of the converted data is not predefined; user written converters are free to accept and return
+	 * any format of their choice. Common formats are strings, XML, and ByteArray instances. Converter authors 
+	 * should document which formats are supported.
+	 * </p>
 	 * @includeExample examples\TextConverter_example.as -noswf
 	 * @playerversion Flash 10
 	 * @playerversion AIR 1.5
@@ -310,7 +322,12 @@ package flashx.textLayout.conversion
 		 * </tr>
 		 * 
 		 * </table>
-
+		 * 
+		 * <p>When an unknown tag is imported the <code>textFieldHTMLFormat</code> importer will either set a single FlowElement's typeName property to that tag name
+		 * or create a DivElement or a SubParagraphGroupElement with its typeName property set to the tag name.</p>
+		 * <p>The <code>textFieldHTMLFormat</code> exporter will export <code>typeName</code> as the XML tag when it is different from the default.</p>
+		 * 
+		 * @see flashx.textLayout.elements.FlowElement#typeName
 		 *
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
@@ -342,12 +359,28 @@ package flashx.textLayout.conversion
 	 	 * @langversion 3.0 
 		 */
 		public static const TEXT_LAYOUT_FORMAT:String = "textLayoutFormat";
-	
+		
+		// Descriptors - ordered list of all FormatDescriptors
+		/** @private */
+		static tlf_internal var _descriptors:Array = [];
+
+		// register standard importers and exporters
+		setFormatsToDefault();
+		
+		/** @private */
+		static tlf_internal function setFormatsToDefault():void	// No PMD
+		{
+			_descriptors = [];
+			addFormat(TEXT_LAYOUT_FORMAT, TextLayoutImporter, TextLayoutExporter, TEXT_LAYOUT_FORMAT);
+			addFormat(TEXT_FIELD_HTML_FORMAT, TextFieldHtmlImporter,  TextFieldHtmlExporter, null);
+			addFormat(PLAIN_TEXT_FORMAT, PlainTextImporter, PlainTextExporter, "air:text");
+		}
+		
 		/** 
 		 * Creates a TextFlow from source content in a specified format.
-		 * Supported formats include HTML, plain text, and TextLayout Markup.
-		 * <p>Use one of the four static constants supplied with this class
-		 * to specify the <code>format</code> parameter:
+		 * <p>Use one of the static constants supplied with this class, a MIME type,
+		 * to specify the <code>format</code> parameter, or use a user defined
+		 * value for user-registered importers:
 		 * <ul>
 		 * <li>TextConverter.TEXT_FIELD_HTML_FORMAT</li>
 		 * <li>TextConverter.PLAIN_TEXT_FORMAT</li>
@@ -357,10 +390,10 @@ package flashx.textLayout.conversion
 		 * @param source	Source content
 		 * @param format	Format of source content
 		 * @param config    IConfiguration to use when creating new TextFlows
-		 * @return TextFlow that was created from the source.
+		 * @return TextFlow that was created from the source, or null on errors.
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
-	 	 * @langversion 3.0 
+		 * @langversion 3.0 
 		 * @see #TEXT_FIELD_HTML_FORMAT
 		 * @see #PLAIN_TEXT_FORMAT
 		 * @see #TEXT_LAYOUT_FORMAT
@@ -368,14 +401,17 @@ package flashx.textLayout.conversion
 		public static function importToFlow(source:Object, format:String, config:IConfiguration = null) : TextFlow
 		{
 			var parser:ITextImporter = getImporter(format, config);
+			if (!parser)
+				return null;
+			parser.throwOnError = false;
 			return parser.importToFlow(source);
 		}
 		
 		/** 
-		 * Exports a TextFlow to a specified format. Supported formats
-		 * include FXG, HTML, plain text, and TextLayout Markup.
-		 * <p>Use one of the four static constants supplied with this class
-		 * to specify the <code>format</code> parameter:
+		 * Exports a TextFlow to a specified format. 
+		 * <p>Use one of the static constants supplied with this class, a MIME type,
+		 * or a user defined format for user defined exporters to specify 
+		 * the <code>format</code> parameter:
 		 * <ul>
 		 * <li>TextConverter.TEXT_FIELD_HTML_FORMAT</li>
 		 * <li>TextConverter.PLAIN_TEXT_FORMAT</li>
@@ -383,21 +419,22 @@ package flashx.textLayout.conversion
 		 * </ul>
 		 * </p>
 		 * <p>Specify the type of the exported data in the <code>conversionType</code> parameter 
-		 * with one of the two static constants supplied by the ConversionType class:
+		 * with one of the static constants supplied by the ConversionType class, or a user defined
+		 * data type for user defined exporters:
 		 * <ul>
 		 * <li>ConversionType.STRING_TYPE</li>
 		 * <li>ConversionType.XML_TYPE</li>
 		 * </ul>
 		 * </p>
 		 * 
-		 * Returns a representation of the TextFlow in the specified format.
+		 * Returns a representation of the TextFlow in the specified format, or null on errors.
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
 	 	 * @langversion 3.0 
 		 * @param source	Source content
 		 * @param format	Output format
 		 * @param conversionType	Type of exported data
-		 * @return Object	Exported form of the TextFlow
+		 * @return Object	Exported form of the TextFlow, or null on errors
 		 * @see #TEXT_FIELD_HTML_FORMAT
 		 * @see #PLAIN_TEXT_FORMAT
 		 * @see #TEXT_LAYOUT_FORMAT
@@ -406,56 +443,65 @@ package flashx.textLayout.conversion
 		public static function export(source:TextFlow, format:String, conversionType:String) : Object
 		{
 			var exporter:ITextExporter = getExporter(format);
+			if (!exporter)
+				return null;
+			exporter.throwOnError = false;
 			return exporter.export(source, conversionType);
 		}
 		
 		/** 
-		 * Creates an import filter. 
-		 * Returns an import filter, which you can then use to import from a 
-		 * source string or XML object to a TextFlow. Use this function
-		 * if you have many separate imports to perform, or if you want to 
+		 * Creates and returns an import converter, which you can then use to import from a 
+		 * source string, an XML object, or any user defined data formats to a TextFlow. 
+		 * Use this method if you have many separate imports to perform, or if you want to 
 		 * handle errors during import. It is equivalent to calling 
 		 * <code>flashx.textLayout.conversion.TextConverter.importToFlow()</code>.
-		 * <p>Use one of the four static constants supplied with this class
-		 * to specify the <code>format</code> parameter:
+		 * <p>Use one of the static constants supplied with this class
+		 * to specify the <code>format</code> parameter, a MIME type, or a user defined
+		 * data format.
 		 * <ul>
 		 * <li>TextConverter.TEXT_FIELD_HTML_FORMAT</li>
 		 * <li>TextConverter.PLAIN_TEXT_FORMAT</li>
 		 * <li>TextConverter.TEXT_LAYOUT_FORMAT</li>
 		 * </ul>
 		 * </p>
+		 * <p>If the format has been added multiple times, the first one found will be used.</p>
 		 * @includeExample examples\getImporter_example.as -noswf
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
 	 	 * @langversion 3.0 
-		 * @param format	Format of source content.  Use constants from flashx.textLayout.conversion.TextConverter.TEXT_LAYOUT_FORMAT, PLAIN_TEXT_FORMAT, TEXT_FIELD_HTML_FORMAT etc.
-		 * @param config    configuration to use during this import.  null means take the current default.
-		 * @return ITextImporter	Text filter that can import the source data
+		 * @param format	Format of source content. Use constants from 
+		 * 					flashx.textLayout.conversion.TextConverter.TEXT_LAYOUT_FORMAT, PLAIN_TEXT_FORMAT, TEXT_FIELD_HTML_FORMAT etc,
+		 * 					a MIME type, or a user defined format.
+		 * @param config    configuration to use during this import. null means take the current default.
+		 * 					You can also set the configuration via the <code>ITextImporter.configuration</code>
+		 * 					property.
+		 * @return ITextImporter	Text importer that can import the source data
 		 * @see #TEXT_FIELD_HTML_FORMAT
 		 * @see #PLAIN_TEXT_FORMAT
 		 * @see #TEXT_LAYOUT_FORMAT
 		 */
 		public static function getImporter(format:String,config:IConfiguration =  null): ITextImporter
 		{
-			switch (format)
+			var importer:ITextImporter = null;
+			var i:int = findFormatIndex(format);
+			if (i >= 0)
 			{
-				case TEXT_LAYOUT_FORMAT:
-					return new TextLayoutImporter(config);
-				case PLAIN_TEXT_FORMAT:
-					return new PlainTextImporter(config);
-				case TEXT_FIELD_HTML_FORMAT:
-					return new HtmlImporter(config);
+				var descriptor:FormatDescriptor = _descriptors[i];
+				if (descriptor && descriptor.importerClass)
+				{
+					importer = new descriptor.importerClass();
+					importer.configuration = config;
+				}
 			}
-			return null;
+			return importer;
 		}
 
 		/** 
-		 * Creates an export filter.
-		 * Returns an export filter, which you can then use to export from 
+		 * Creates and returns an export converter, which you can then use to export from 
 		 * a TextFlow to a source string or XML object. Use this function if 
 		 * you have many separate exports to perform. It is equivalent to calling 
 		 * <code>flashx.textLayout.conversion.TextConverter.export()</code>.
-		 * <p>Use one of the four static constants supplied with this class
+		 * <p>Use one of the static constants supplied with this class
 		 * to specify the <code>format</code> parameter:
 		 * <ul>
 		 * <li>TextConverter.TEXT_FIELD_HTML_FORMAT</li>
@@ -463,29 +509,138 @@ package flashx.textLayout.conversion
 		 * <li>TextConverter.TEXT_LAYOUT_FORMAT</li>
 		 * </ul>
 		 * </p>
+		 * <p>If the format has been added multiple times, the first one found will be used.</p>
 		 * @includeExample examples\getExporter_example.as -noswf
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
 	 	 * @langversion 3.0 
 		 * @param format	Target format for exported data
-		 * @return ITextExporter	Text filter that can export in the specified format
+		 * @return ITextExporter	Text exporter that can export in the specified format
 		 * @see #TEXT_FIELD_HTML_FORMAT
 		 * @see #PLAIN_TEXT_FORMAT
 		 * @see #TEXT_LAYOUT_FORMAT
 		 */
 		public static function getExporter(format:String) : ITextExporter
 		{
-			switch (format)
+			var exporter:ITextExporter = null;
+			var i:int = findFormatIndex(format);
+			if (i >= 0)
 			{
-				case TEXT_LAYOUT_FORMAT:
-					return new TextLayoutExporter();
-				case PLAIN_TEXT_FORMAT:
-					return new PlainTextExporter();
-				case TEXT_FIELD_HTML_FORMAT:
-					return new HtmlExporter();
+				var descriptor:FormatDescriptor = _descriptors[i];
+				if (descriptor && descriptor.exporterClass)
+					exporter = new descriptor.exporterClass();
 			}
-			
-			return null;
+			return exporter;
+		}
+
+		/**
+		 * Register a new format for import/export, at the specified location.
+		 * Location can be significant for clients that have multiple 
+		 * choices for which format to use, such as when importing from the external clipboard. 
+		 * Lower numbers indicate higher priority; these converters will be tried first.
+		 * The new format may support importing and/or exporting.
+		 * If the format has already been added, then it will be present in multiple locations. The 
+		 * first one found will be used.
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0 
+		 * @param importClass    The import converter class to register or null
+		 * @param exportClass    The export converter class to register or null
+		 * @param format         The format string tagging the converter classes
+		 * @param clipboardFormat	The string used as the clipboard format when converting to/from the clipboard. Make this null if the format doesn't support clipboard access.
+		 */
+		public static function addFormatAt(index:int, format:String, importerClass:Class, exporterClass:Class = null, clipboardFormat:String = null):void
+		{
+			var descriptor:FormatDescriptor = new FormatDescriptor(format, importerClass, exporterClass, clipboardFormat);
+			_descriptors.splice(index, 0, descriptor);
+		}
+		
+		/**
+		 * Register a new format for import/export. The new format will be added at the end,
+		 * as the lowest priority. Location can be significant for clients that have multiple 
+		 * choices for which format to use, such as when importing from the external clipboard. 
+		 * The new format may support importing and/or exporting.
+		 * If the format has already been added, then it will be present in multiple locations. The 
+		 * first one found will be used.
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0 
+		 * @param importClass    The import converter class to register or null
+		 * @param exportClass    The export converter class to register or null
+		 * @param format         The format string tagging the converter classes. Formats can be any name, but must be unique. 
+		 * @param clipboardFormat	The string used as the clipboard format when converting to/from the clipboard. Make this null if the format doesn't support clipboard access.
+		 */
+		public static function addFormat(format:String, importerClass:Class, exporterClass:Class, clipboardFormat:String):void
+		{
+			addFormatAt(_descriptors.length, format, importerClass, exporterClass, clipboardFormat);
+		}
+		
+		/**
+		 * Remove the format at the index location. 
+		 *
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0 
+		 * @param index     The format to remove
+		 */
+		public static function removeFormatAt(index:int):void
+		{
+			if (index >= 0 && index < _descriptors.length)
+				_descriptors.splice(index, 1);
+		}
+
+		private static function findFormatIndex(format:String):int
+		{
+			for (var i:int = 0; i < numFormats; i++)
+			{
+				if (_descriptors[i].format == format)
+					return i;
+			}
+			return -1;
+		}
+		/**
+		 * Remove the format. 
+		 * If a format was added multiple times, only the first one found is removed.
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0 
+		 * @param format     The converter format string to remove
+		 */
+		public static function removeFormat(format:String):void
+		{
+			removeFormatAt(findFormatIndex(format));
+		}
+		
+		/** Returns the format name for the index'th format.
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0 
+	     */
+		public static function getFormatAt(index:int):String
+		{
+			return _descriptors[index].format;
+		}
+
+		/** Returns the FormatDescriptor for the index'th format. 
+		* @playerversion Flash 10
+		* @playerversion AIR 1.5
+		* @langversion 3.0 
+		*/
+		public static function getFormatDescriptorAt(index:int):FormatDescriptor
+		{
+			return _descriptors[index];
+		}
+	
+		/** Number of formats.
+		* @playerversion Flash 10
+		* @playerversion AIR 1.5
+		* @langversion 3.0 
+		*/
+		public static function get numFormats():int
+		{
+			return _descriptors.length;
 		}
 	}
 }

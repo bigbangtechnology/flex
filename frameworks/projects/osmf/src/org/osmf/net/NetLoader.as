@@ -27,179 +27,82 @@ package org.osmf.net
 	
 	import flash.net.NetConnection;
 	import flash.net.NetStream;
+	import flash.utils.Dictionary;
 	
 	import org.osmf.events.MediaError;
 	import org.osmf.events.MediaErrorCodes;
 	import org.osmf.events.MediaErrorEvent;
 	import org.osmf.events.NetConnectionFactoryEvent;
-	import org.osmf.media.IMediaResource;
-	import org.osmf.media.IURLResource;
-	import org.osmf.metadata.MediaType;
-	import org.osmf.metadata.MetadataUtils;
-	import org.osmf.metadata.MimeTypes;
-	import org.osmf.traits.ILoadable;
+	import org.osmf.media.MediaResourceBase;
+	import org.osmf.media.MediaType;
+	import org.osmf.media.MediaTypeUtil;
+	import org.osmf.media.URLResource;
 	import org.osmf.traits.LoadState;
+	import org.osmf.traits.LoadTrait;
 	import org.osmf.traits.LoaderBase;
+	import org.osmf.utils.URL;
 
 	/**
-	 * The NetLoader class implements ILoader to provide
+	 * The NetLoader class extends LoaderBase to provide
 	 * loading support to the AudioElement and VideoElement classes.
 	 * <p>Supports both streaming and progressive media resources.
-	 * If the resource URL is RTMP, connects to an RTMP server by invoking a NetConnectionFactory. 
-	 * NetConnections may be shared between ILoadable instances.
+	 * If the resource URL is RTMP, connects to an RTMP server by invoking a NetConnectionFactoryBase. 
+	 * NetConnections may be shared between LoadTrait instances.
 	 * If the resource URL is HTTP, performs a <code>connect(null)</code>
 	 * for progressive downloads.</p>
+	 * The NetLoader supports Flash Media Token Authentication,  
+	 * for passing authentication tokens through the NetConnection.
+	 *
+	 * @includeExample NetLoaderExample.as -noswf
 	 * 
-	 * @param allowConnectionSharing if true, the NetLoader will allow sharing. Note that this param implies
-	 * that an already existing NetConnection may be used to satisfy this ILoadable, as well as whether a
-	 * new NetConnection established by this loader can be shared with future ILoadables. 
-	 * 
-	 * @param factory the NetConnectionFactory instance to use for managing NetConnections. Since the NetConnectionFactory
-	 * facilitates connection sharing, this is an easy way of enabling global sharing, by creating a single NetConnectionFactory
-	 * instance within the player and then handing it to all NetLoader instances. 
-	 * 
-	 * @see NetLoadedContext
-	 * @see NetConnectionFactory
-	 * @see flash.net.NetConnection
-	 * @see flash.net.NetStream
-	 * 
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */
 	public class NetLoader extends LoaderBase
 	{
 		/**
-		 * Constructor
+		 * Constructor.
 		 * 
-		 * @param allowConnectionSharing true if the NetLoader can invoke a NetConnectionFactory which
-		 * re-uses (shares) an existing NetConnection. 
-		 * 
-		 * @param factory the NetConnectionFactory instance to use for managing NetConnections. Since the NetConnectionFactory
-		 * facilitates connection sharing, this is an easy way of enabling global sharing, by creating a single NetConnectionFactory
-		 * instance within the player and then handing it to all NetLoader instances. 
+		 * @param factory The NetConnectionFactoryBase instance to use for managing NetConnections.
+		 * If factory is null, a NetConnectionFactory will be created and used. Since the
+		 * NetConnectionFactory class facilitates connection sharing, this is an easy way of
+		 * enabling global sharing, by creating a single NetConnectionFactory instance within
+		 * the player and then handing it to all NetLoader instances.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
-		public function NetLoader(allowConnectionSharing:Boolean = true, factory:NetConnectionFactory = null)
+		public function NetLoader(factory:NetConnectionFactoryBase=null)
 		{
 			super();
-			_allowConnectionSharing = allowConnectionSharing;
-			netConnectionFactory = factory;
-			if (netConnectionFactory != null)
-			{
-				addListenersToFactory();
-			}
-			
+
+			netConnectionFactory = factory || new NetConnectionFactory();
+			netConnectionFactory.addEventListener(NetConnectionFactoryEvent.CREATION_COMPLETE, onCreationComplete);
+			netConnectionFactory.addEventListener(NetConnectionFactoryEvent.CREATION_ERROR, onCreationError);
 		}
 		
 		/**
-		 * Sets whether this NetLoader will invoke a NetConnectionFactory which allows
-		 * NetConnection reuse. Changes to this property will apply to future calls to <code>load()</code>
-		 * and will not be retro-actively applied to previously loaded, or loading operations that are underway.
+		 * @private
 		 * 
-		 * @param value true if the NetConnectionFactory can share an existing NetConnection
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function set allowConnectionSharing(value:Boolean):void
-		{
-			_allowConnectionSharing = value;
-		}
-		
-		/**
-		 * Validates the loadable to verify that this class can in fact load it. Examines the protocol
-		 * associated with the loadable's resource. If the protocol is HTTP, calls the <code>startLoadingHTTP()</code>
-		 * method. If the protocol is RTMP-based, calls the  <code>startLoadingRTMP()</code> method. If the URL protocol is invalid,
-		 * dispatches a mediaErroEvent against the loadable and updates the loadable's state to LoadState.LOAD_ERROR.
-	     *
-	     * @param loadable ILoadable trait requesting this load operation.
-	     * @see org.osmf.traits.ILoadable
-	     * @see org.osmf.traits.LoadState
-	     * @see org.osmf.events.MediaErrorEvent
-		 * @inheritDoc
-		**/
-		override public function load(loadable:ILoadable):void
-		{	
-			super.load(loadable);
-			updateLoadable(loadable, LoadState.LOADING);
-			switch ((loadable.resource as IURLResource).url.protocol)
-			{
-				case PROTOCOL_RTMP:
-				case PROTOCOL_RTMPS:
-				case PROTOCOL_RTMPT:
-				case PROTOCOL_RTMPE:
-				case PROTOCOL_RTMPTE:
-					startLoadingRTMP(loadable);
-					break;
-				case PROTOCOL_HTTP:
-				case PROTOCOL_HTTPS:
-				case PROTOCOL_FILE:
-				case PROTOCOL_EMPTY: 
-					startLoadingHTTP(loadable);
-					break;
-				default:
-					updateLoadable(loadable, LoadState.LOAD_ERROR);
-					loadable.dispatchEvent
-						( new MediaErrorEvent
-							( MediaErrorEvent.MEDIA_ERROR
-							, false
-							, false
-							, new MediaError(MediaErrorCodes.INVALID_URL_PROTOCOL)
-							)
-						);
-					break;
-			}
-		}
-		
-		/**
-	     * Unloads the media after validating the unload operation against the loadable. Examines the NetLoadedContext
-	     * object associated with the loadable. If the object is null, throws a OSMFStrings.NULL_PARAM error.
-	     * Closes the NetStream defines within the NetLoadedContext object. 
-	     * If the shareable property of the object is true, calls the NetConnectionFactory to close() the NetConnection
-	     * otherwise closes the NetConnection directly. Dispatches the loaderStateChange event with every state change.
-	     * 
-	     * @throws IllegalOperationError if the parameter is <code>null</code>.
-	     * @param ILoadable ILoadable to be unloaded.
-	     * @see org.osmf.loaders.LoaderBase#event:loaderStateChange	
-		**/
-		override public function unload(loadable:ILoadable):void
-		{
-			super.unload(loadable); /// <- loadable.loadedContext gets set to null here
-			var netLoadedContext:NetLoadedContext = loadable.loadedContext as NetLoadedContext;			
-			
-			updateLoadable(loadable, LoadState.UNLOADING, loadable.loadedContext); 			
-			netLoadedContext.stream.close();
-			if (netLoadedContext.shareable)
-			{
-				netLoadedContext.netConnectionFactory.closeNetConnectionByResource(netLoadedContext.resource);
-			}		
-			else
-			{
-				netLoadedContext.connection.close();
-			}	
-			updateLoadable(loadable, LoadState.UNINITIALIZED); 				
-		}
-		
-		/**
-		 * The NetLoader returns true for IURLResources which support the media and mime-types
+		 * The NetLoader returns true for URLResources which support the media and mime-types
 		 * (or file extensions) for streaming audio and streaming or progressive video, or
 		 * implement one of the following schemes: http, https, file, rtmp, rtmpt, rtmps,
 		 * rtmpe or rtmpte.
 		 * 
 		 * @param resource The URL of the source media.
-		 * @return Returns <code>true</code> for IURLResources which it can load
+		 * @return Returns <code>true</code> for URLResources which it can load
 		 * @inheritDoc
 		**/
-		override public function canHandleResource(resource:IMediaResource):Boolean
+		override public function canHandleResource(resource:MediaResourceBase):Boolean
 		{
-			var rt:int = MetadataUtils.checkMetadataMatchWithResource(resource, MEDIA_TYPES_SUPPORTED, MimeTypes.SUPPORTED_VIDEO_MIME_TYPES);
-			if (rt != MetadataUtils.METADATA_MATCH_UNKNOWN)
+			var rt:int = MediaTypeUtil.checkMetadataMatchWithResource(resource, MEDIA_TYPES_SUPPORTED, MIME_TYPES_SUPPORTED);
+			if (rt != MediaTypeUtil.METADATA_MATCH_UNKNOWN)
 			{
-				return rt == MetadataUtils.METADATA_MATCH_FOUND;
+				return rt == MediaTypeUtil.METADATA_MATCH_FOUND;
 			}			
 
 			/*
@@ -213,25 +116,28 @@ package org.osmf.net
 			 *
 			 * We assume being unable to handle the resource for conditions not mentioned above
 			 */
-			var res:IURLResource = resource as IURLResource;
-			if (res == null || res.url == null || res.url.rawUrl == null || res.url.rawUrl.length <= 0)
+			var res:URLResource = resource as URLResource;
+			var extensionPattern:RegExp = new RegExp("\.flv$|\.f4v$|\.mov$|\.mp4$|\.mp4v$|\.m4v$|\.3gp$|\.3gpp2$|\.3g2$", "i");
+			var url:URL = res != null ? new URL(res.url) : null;
+			if (url == null || url.rawUrl == null || url.rawUrl.length <= 0)
 			{
 				return false;
 			}
-			if (res.url.protocol == "")
+			if (url.protocol == "")
 			{
-				return res.url.path.search(/\.flv$|\.f4v$|\.mov$|\.mp4$|\.mp4v$|\.m4v$|\.3gp$|\.3gpp2$|\.3g2$/i) != -1;
+				return extensionPattern.test(url.path);
 			}
-			if (res.url.protocol.search(/rtmp$|rtmp[tse]$|rtmpte$/i) != -1)
+			if (NetStreamUtils.isRTMPStream(url.rawUrl))
 			{
 				return true;
 			}
-			if (res.url.protocol.search(/file$|http$|https$/i) != -1)
+			if (url.protocol.search(/file$|http$|https$/i) != -1)
 			{
-				return (res.url.path == null ||
-						res.url.path.length <= 0 ||
-						res.url.path.indexOf(".") == -1 ||
-						res.url.path.search(/\.flv$|\.f4v$|\.mov$|\.mp4$|\.mp4v$|\.m4v$|\.3gp$|\.3gpp2$|\.3g2$/i) != -1);
+				
+				return (url.path == null ||
+						url.path.length <= 0 ||
+						url.path.indexOf(".") == -1 ||
+						extensionPattern.test(url.path));
 			}
 			
 			return false;
@@ -239,77 +145,184 @@ package org.osmf.net
 		
 		/**
 		 *
-		 * The factory function for creating a NetStream.  Allows third party plugins to create custom net streams.
+		 * The factory function for creating a NetStream.
 		 * 
-		 * @param connection the NetConnnection to associate with the new NetStream.
-		 * @param loadable the ILoadable instance requesting this NetStream. Developers of custom NetStreams can use this 
-		 * loadable reference to dispatch custom media errors against the loadable.
+		 * @param connection The NetConnection to associate with the new NetStream.
+		 * @param resource The resource whose content will be played in the NetStream.
 		 * 
-		 *  @return a new NetStream associated with the NetConnection.
+		 * @return A new NetStream associated with the NetConnection.
 		**/
-		protected function createNetStream(connection:NetConnection,loadable:ILoadable):NetStream
+		protected function createNetStream(connection:NetConnection, resource:URLResource):NetStream
 		{
 			return new NetStream(connection);
 		}
 
 		/**
-		 *  Function for creating a NetConnectionFactory  
-		 *
-		 *  @return An NetConnectionFactory
+		 * The factory function for creating a NetStreamSwitchManagerBase.
+		 * 
+		 * @param connection The NetConnection that's associated with the NetStreamSwitchManagerBase.
+		 * @param netStream The NetStream upon which the NetStreamSwitchManagerBase will operate.
+		 * @param dsResource The resource upon which the NetStreamSwitchManagerBase will operate.
+		 * 
+		 * @return The NetStreamSwitchManagerBase for the NetStream, null if multi-bitrate switching
+		 * is not enabled for the NetStream.
 		 **/
-		private function createNetConnectionFactory():NetConnectionFactory
+ 		protected function createNetStreamSwitchManager(connection:NetConnection, netStream:NetStream, dsResource:DynamicStreamingResource):NetStreamSwitchManagerBase
 		{
-			if (netConnectionFactory == null)
-			{
-				netConnectionFactory = new NetConnectionFactory();
-				addListenersToFactory();
-			}
-			return netConnectionFactory;
+			return null;
+		}
+				
+		/**
+		 * @private
+		 * 
+		 * Subclass stub that can be used to do special processing just upfront
+		 * the loader finishing loading. Also, the overriding method must 
+		 * call the updateLoadTrait method at the end.
+		 *  
+		 * @param loadTrait
+		 */		
+		protected function processFinishLoading(loadTrait:NetStreamLoadTrait):void
+		{	
+			updateLoadTrait(loadTrait, LoadState.READY);
 		}
 
+		/**
+		 * @private
+		 * 
+		 * Validates the LoadTrait to verify that this class can in fact load it. Examines the protocol
+		 * associated with the LoadTrait's resource. If the protocol is HTTP, calls the <code>startLoadingHTTP()</code>
+		 * method. If the protocol is RTMP-based, calls the  <code>startLoadingRTMP()</code> method. If the URL protocol is invalid,
+		 * dispatches a mediaErroEvent against the LoadTrait and updates the LoadTrait's state to LoadState.LOAD_ERROR.
+	     *
+	     * @param loadTrait LoadTrait requesting this load operation.
+	     * @see org.osmf.traits.LoadTrait
+	     * @see org.osmf.traits.LoadState
+	     * @see org.osmf.events.MediaErrorEvent
+		 * @inheritDoc
+		**/
+		override protected function executeLoad(loadTrait:LoadTrait):void
+		{	
+			updateLoadTrait(loadTrait, LoadState.LOADING);
+			var url:URL = new URL((loadTrait.resource as URLResource).url);
+			switch (url.protocol)
+			{
+				case PROTOCOL_RTMP:
+				case PROTOCOL_RTMPS:
+				case PROTOCOL_RTMPT:
+				case PROTOCOL_RTMPE:
+				case PROTOCOL_RTMPTE:
+					startLoadingRTMP(loadTrait);
+					break;
+				case PROTOCOL_HTTP:
+				case PROTOCOL_HTTPS:
+				case PROTOCOL_FILE:
+				case PROTOCOL_EMPTY: 
+					startLoadingHTTP(loadTrait);
+					break;
+				default:
+					updateLoadTrait(loadTrait, LoadState.LOAD_ERROR);
+					loadTrait.dispatchEvent
+						( new MediaErrorEvent
+							( MediaErrorEvent.MEDIA_ERROR
+							, false
+							, false
+							, new MediaError(MediaErrorCodes.URL_SCHEME_INVALID)
+							)
+						);
+					break;
+			}
+		}
+		
+		/**
+		 * @private
+		 * 
+	     * Unloads the media after validating the unload operation against the LoadTrait.
+	     * Closes the NetStream defined within the NetStreamLoadTrait object,
+	     * as well as the NetConnection defined within the trait object.  Dispatches the
+	     * loadStateChange event with every state change.
+	     * 
+	     * @throws IllegalOperationError if the parameter is <code>null</code>.
+	     * @param loadTrait LoadTrait to be unloaded.
+	     * @see org.osmf.loaders.LoaderBase#event:loadStateChange	
+		**/
+		override protected function executeUnload(loadTrait:LoadTrait):void
+		{
+			var netLoadTrait:NetStreamLoadTrait = loadTrait as NetStreamLoadTrait;			
+			
+			updateLoadTrait(loadTrait, LoadState.UNLOADING); 			
+			netLoadTrait.netStream.close();
+			if (netLoadTrait.netConnectionFactory != null)
+			{
+				netLoadTrait.netConnectionFactory.closeNetConnection(netLoadTrait.connection);
+			}
+			else
+			{
+				netLoadTrait.connection.close();
+			}
+			updateLoadTrait(loadTrait, LoadState.UNINITIALIZED); 				
+		}
+		
 		/**
 		 *  Establishes a new NetStream on the connected NetConnection and signals that loading is complete.
 		 *
 		 *  @private
 		**/
-		private function finishLoading(connection:NetConnection, loadable:ILoadable, shareable:Boolean = false, factory:NetConnectionFactory = null):void
+		private function finishLoading(connection:NetConnection, loadTrait:LoadTrait, factory:NetConnectionFactoryBase = null):void
 		{
-			var stream:NetStream = createNetStream(connection, loadable);				
-			stream.client = new NetClient();				
-			updateLoadable(loadable, LoadState.READY, new NetLoadedContext(connection, stream, shareable, factory, loadable.resource as IURLResource));		
+			var netLoadTrait:NetStreamLoadTrait = loadTrait as NetStreamLoadTrait;
+			if (netLoadTrait != null)
+			{
+				netLoadTrait.connection = connection;
+				var netStream:NetStream = createNetStream(connection, netLoadTrait.resource as URLResource);				
+				netStream.client = new NetClient();
+				netLoadTrait.netStream = netStream;
+				netLoadTrait.switchManager = createNetStreamSwitchManager(connection, netStream, netLoadTrait.resource as DynamicStreamingResource);
+				netLoadTrait.netConnectionFactory = factory;
+				
+				processFinishLoading(loadTrait as NetStreamLoadTrait);
+			}
 		}	
 		
 		/**
 		 * Initiates the process of creating a connected NetConnection
 		 * 
 		 * @private
-		 **/
-		private function startLoadingRTMP(loadable:ILoadable):void
+		 */
+		private function startLoadingRTMP(loadTrait:LoadTrait):void
 		{
-			var factory:NetConnectionFactory  = createNetConnectionFactory();
-
-			factory.create(loadable,_allowConnectionSharing);
+			addPendingLoad(loadTrait);
+			
+			netConnectionFactory.create(loadTrait.resource as URLResource);
 		}
 		
 		/**
-		 * Called once the NetConnectionFactory has successfully created a NetConnection
+		 * Called once the NetConnectionFactoryBase has successfully created a NetConnection
 		 * 
 		 * @private
-		 **/
-		private function onCreated(event:NetConnectionFactoryEvent):void
+		 */
+		private function onCreationComplete(event:NetConnectionFactoryEvent):void
 		{
-			finishLoading(event.netConnection,event.loadable, event.shareable, event.currentTarget as NetConnectionFactory);
+			finishLoading
+				( event.netConnection
+				, findAndRemovePendingLoad(event.resource)
+				, event.currentTarget as NetConnectionFactoryBase
+				);
 		}
 		
 		/**
-		 * Called once the NetConnectionFactory has failed to create a NetConnection
+		 * Called once the NetConnectionFactoryBase has failed to create a NetConnection
 		 * TBD - error dispatched at lower level.
 		 * 
 		 * @private
-		 **/
-		private function onCreationFailed(event:NetConnectionFactoryEvent):void
+		 */
+		private function onCreationError(event:NetConnectionFactoryEvent):void
 		{
-			updateLoadable(event.loadable, LoadState.LOAD_ERROR);
+			var loadTrait:LoadTrait = findAndRemovePendingLoad(event.resource);
+			if (loadTrait != null)
+			{
+				loadTrait.dispatchEvent(new MediaErrorEvent(MediaErrorEvent.MEDIA_ERROR, false, false, event.mediaError));
+				updateLoadTrait(loadTrait, LoadState.LOAD_ERROR);
+			}
 		}
 		
 		/**
@@ -317,39 +330,61 @@ package org.osmf.net
 		 * 
 		 * @private
 		 * 
-		 **/
-		private function startLoadingHTTP(loadable:ILoadable):void
+		 */
+		private function startLoadingHTTP(loadTrait:LoadTrait):void
 		{
 			var connection:NetConnection = new NetConnection();
 			connection.client = new NetClient();
 			connection.connect(null);
-			finishLoading(connection,loadable);
+			finishLoading(connection, loadTrait);
 		}
 		
-		/**
-		 * Adds listeners to the netConnectionFactory instance. It is possible that a non-null
-		 * NetConnectionFactory is supplied in the constructor and then modified later via the 
-		 * createNetConnectionFactory() method, which is why any prior listeners are removed before the 
-		 * new ones are added.
-		 * @private
-		 * 
-		 **/
-		private function addListenersToFactory():void
+		private function addPendingLoad(loadTrait:LoadTrait):void
 		{
-			if (netConnectionFactory.hasEventListener(NetConnectionFactoryEvent.CREATED))
+			// It's an edge case, but we don't want to assume that we'll never
+			// have two LoadTraits that use the same URLResource, so we have to
+			// maintain an Array.
+			if (pendingLoads[loadTrait.resource] == null)
 			{
-				netConnectionFactory.removeEventListener(NetConnectionFactoryEvent.CREATED,onCreated);
+				pendingLoads[loadTrait.resource] = [loadTrait];
 			}
-			if (netConnectionFactory.hasEventListener(NetConnectionFactoryEvent.CREATION_FAILED))
+			else
 			{
-				netConnectionFactory.removeEventListener(NetConnectionFactoryEvent.CREATION_FAILED,onCreationFailed);
+				pendingLoads[loadTrait.resource].push(loadTrait);
 			}
-			netConnectionFactory.addEventListener(NetConnectionFactoryEvent.CREATED,onCreated);
-			netConnectionFactory.addEventListener(NetConnectionFactoryEvent.CREATION_FAILED,onCreationFailed);
 		}
 		
-		private var _allowConnectionSharing:Boolean;
-		private var netConnectionFactory:NetConnectionFactory;
+		private function findAndRemovePendingLoad(resource:URLResource):LoadTrait
+		{
+			var loadTrait:LoadTrait = null;
+			
+			var pendingLoadsArray:Array = pendingLoads[resource];
+			if (pendingLoadsArray != null)
+			{
+				if (pendingLoadsArray.length == 1)
+				{
+					loadTrait = pendingLoadsArray[0] as LoadTrait;
+					delete pendingLoads[resource];
+				}
+				else
+				{
+					for (var i:int = 0; i < pendingLoadsArray.length; i++)
+					{
+						loadTrait = pendingLoadsArray[i];
+						if (loadTrait.resource == resource)
+						{
+							pendingLoadsArray.splice(i, 1);
+							break;
+						}
+					}
+				}
+			}
+
+			return loadTrait;
+		}
+
+		private var netConnectionFactory:NetConnectionFactoryBase;
+		private var pendingLoads:Dictionary = new Dictionary();
 		
 		private static const PROTOCOL_RTMP:String = "rtmp";
 		private static const PROTOCOL_RTMPS:String = "rtmps";
@@ -362,6 +397,17 @@ package org.osmf.net
 		private static const PROTOCOL_EMPTY:String = "";
 				
 		private static const MEDIA_TYPES_SUPPORTED:Vector.<String> = Vector.<String>([MediaType.VIDEO]);
+		private static const MIME_TYPES_SUPPORTED:Vector.<String> = Vector.<String>
+		([
+			"video/x-flv", 
+			"video/x-f4v", 
+			"video/mp4", 
+			"video/mp4v-es", 
+			"video/x-m4v", 
+			"video/3gpp", 
+			"video/3gpp2", 
+			"video/quicktime", 
+		]);
 	}
 }
 

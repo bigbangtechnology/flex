@@ -149,6 +149,11 @@
 				</xsl:if>
 			</xsl:when>
 			<xsl:when test="@conref">
+				<xsl:if test="normalize-space(.)">
+					<shortdesc>
+						<xsl:apply-templates select="node()"/>
+					</shortdesc>
+				</xsl:if>
 				<xsl:variable name="entryType" select="'method'"/>
 				<xsl:variable name="currentPackage" select="ancestor-or-self::apiPackage/apiName"/>
 				<xsl:call-template name="getConRefText">

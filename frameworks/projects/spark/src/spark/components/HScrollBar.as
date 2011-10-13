@@ -11,20 +11,52 @@
 
 package spark.components
 {
+import flash.events.Event;
 import flash.events.MouseEvent;
 import flash.geom.Point;
 
 import mx.core.EventPriority;
 import mx.core.IInvalidating;
+import mx.core.InteractionMode;
 import mx.core.mx_internal;
+import mx.events.FlexMouseEvent;
 import mx.events.PropertyChangeEvent;
 import mx.events.ResizeEvent;
 
 import spark.components.supportClasses.ScrollBarBase;
 import spark.core.IViewport;
 import spark.core.NavigationUnit;
+import spark.utils.MouseEventUtil;
 
 use namespace mx_internal;
+
+//--------------------------------------
+//  Events
+//--------------------------------------
+
+/**
+ *  Dispatched when the <code>horizontalScrollPosition</code> is going
+ *  to change due to a <code>mouseWheel</code> event.
+ * 
+ *  <p>The default behavior is to scroll horizontally by the event 
+ *  <code>delta</code> number of "steps".  
+ *  The viewport's <code>getHorizontalScrollPositionDelta</code> method using 
+ *  either <code>LEFT</code> or <code>RIGHT</code>, depending on the scroll 
+ *  direction, determines the width of the step.</p>
+ * 
+ *  <p>Calling the <code>preventDefault()</code> method
+ *  on the event prevents the horizontal scroll position from changing.
+ *  Otherwise if you modify the <code>delta</code> property of the event,
+ *  that value will be used as the number horizontal of "steps".</p>
+ *
+ *  @eventType mx.events.FlexMouseEvent.MOUSE_WHEEL_CHANGING
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Event(name="mouseWheelChanging", type="mx.events.FlexMouseEvent")]
 
 //--------------------------------------
 //  Other metadata
@@ -128,7 +160,21 @@ public class HScrollBar extends ScrollBarBase
         // updated yet.  Making the maximum==hsp here avoids trouble later
         // when Range constrains value
         var cWidth:Number = viewport.contentWidth;
-        maximum = (cWidth == 0) ? hsp : cWidth - viewportWidth;
+
+        if (getStyle("interactionMode") == InteractionMode.TOUCH)
+        {
+            // For mobile, we allow the min/max to extend a little beyond the ends so
+            // we can support bounce/pull kinetic effects.
+            minimum = -viewportWidth;
+            maximum = (cWidth == 0) ? hsp + viewportWidth : cWidth;
+        }
+        else
+        {
+            minimum = 0;
+            maximum = (cWidth == 0) ? hsp : cWidth - viewportWidth;
+        }
+        
+        
         pageSize = viewportWidth;
     }
     
@@ -201,15 +247,33 @@ public class HScrollBar extends ScrollBarBase
             return;
         
         var trackSize:Number = track.getLayoutBoundsWidth();
-        var range:Number = maximum - minimum;
         
+        var min:Number;
+        var max:Number;
+        if (getStyle("interactionMode") == InteractionMode.TOUCH && viewport)
+        {
+            // For calculating thumb position/size on mobile, we want to exclude
+            // the extra margin we added to minimum and maximum for bounce/pull. 
+            var viewportWidth:Number = isNaN(viewport.width) ? 0 : viewport.width;
+
+            min = 0;
+            max = Math.max(0, maximum - viewportWidth);
+        }
+        else
+        {
+            min = minimum;
+            max = maximum;
+        }
+        var range:Number = max - min;
+        
+        var fixedThumbSize:Boolean = !(getStyle("fixedThumbSize") === false); 
         var thumbPos:Point;
         var thumbPosTrackX:Number = 0;
         var thumbPosParentX:Number = 0;
         var thumbSize:Number = trackSize;
         if (range > 0)
         {
-            if (getStyle("fixedThumbSize") === false)
+            if (!fixedThumbSize)
             {
                 thumbSize = Math.min((pageSize / (range + pageSize)) * trackSize, trackSize)
                 thumbSize = Math.max(thumb.minWidth, thumbSize);
@@ -220,17 +284,41 @@ public class HScrollBar extends ScrollBarBase
             }
             
             // calculate new thumb position.
-            thumbPosTrackX = (value - minimum) * ((trackSize - thumbSize) / range);
+            thumbPosTrackX = (pendingValue - min) * ((trackSize - thumbSize) / range);
+        }
+
+        // Special thumb behavior for bounce/pull.  When the component is positioned
+        // beyond its min/max, we want the scroll thumb to shink in size. 
+        // Note: not checking interactionMode==TOUCH here because it is assumed that
+        // value will never exceed min/max unless in touch mode.
+        if (pendingValue < min)
+        {
+            if (!fixedThumbSize)
+            {
+                // The minimum size we'll shrink the thumb to is either thumb.minWidth or thumbSize: whichever is smaller.
+                thumbSize = Math.max(Math.min(thumb.minWidth, thumbSize), thumbSize + pendingValue);
+            }
+            thumbPosTrackX = min;
+        }
+        if (pendingValue > max)
+        {
+            if (!fixedThumbSize)
+            {
+                // The minimum size we'll shrink the thumb to is either thumb.minWidth or thumbSize: whichever is smaller.
+                thumbSize = Math.max(Math.min(thumb.minWidth, thumbSize), thumbSize - (pendingValue - max));
+            }
+            thumbPosTrackX = trackSize - thumbSize;
         }
         
-        if (getStyle("fixedThumbSize") === false)
+        if (!fixedThumbSize)
             thumb.setLayoutBoundsSize(thumbSize, NaN);
         if (getStyle("autoThumbVisibility") === true)
             thumb.visible = thumbSize < trackSize;
         
         // convert thumb position to parent's coordinates.
         thumbPos = track.localToGlobal(new Point(thumbPosTrackX, 0));
-        thumbPosParentX = thumb.parent.globalToLocal(thumbPos).x;
+        if (thumb.parent)
+            thumbPosParentX = thumb.parent.globalToLocal(thumbPos).x;
         
         thumb.setLayoutBoundsPosition(Math.round(thumbPosParentX), thumb.getLayoutBoundsY());
     }
@@ -353,7 +441,7 @@ public class HScrollBar extends ScrollBarBase
         {
             // Want to use ScrollBarBase's changeValueByStep() implementation to get the same
             // animated behavior for scrollbars with and without viewports.
-            // For now, just change pageSize temporarily and call the superclass
+            // For now, just change stepSize temporarily and call the superclass
             // implementation.
             oldStepSize = stepSize;
             stepSize = Math.abs(viewport.getHorizontalScrollPositionDelta(
@@ -408,8 +496,32 @@ public class HScrollBar extends ScrollBarBase
     {
         if (viewport)
         {
-            var viewportWidth:Number = isNaN(viewport.width) ? 0 : viewport.width;        
-            maximum = viewport.contentWidth - viewportWidth;
+            if (getStyle("interactionMode") == InteractionMode.TOUCH)
+            {
+                updateMaximumAndPageSize();
+            }
+            else
+            {
+                // SDK-28898: reverted previous behavior for desktop, resets
+                // scroll position to zero when all content is removed.
+                maximum = viewport.contentWidth - viewport.width;
+            }
+        }
+    }
+    
+    /**
+     *  @private 
+     */
+    override public function styleChanged(styleName:String):void
+    {
+        super.styleChanged(styleName);
+        
+        var allStyles:Boolean = !styleName || styleName == "styleName";
+        
+        if (allStyles || styleName == "interactionMode")
+        {
+            if (viewport)
+                updateMaximumAndPageSize();
         }
     }
     
@@ -422,25 +534,42 @@ public class HScrollBar extends ScrollBarBase
     mx_internal function mouseWheelHandler(event:MouseEvent):void
     {
         const vp:IViewport = viewport;
-        if (event.isDefaultPrevented() || !vp || !vp.visible)
+        if (event.isDefaultPrevented() || !vp || !vp.visible || !visible)
             return;
         
-        var nSteps:uint = Math.abs(event.delta);
-        var navigationUnit:uint;
+        // Dispatch the "mouseWheelChanging" event. If preventDefault() is called
+        // on this event, the event will be cancelled.  Otherwise if  the delta
+        // is modified the new value will be used.
+        var changingEvent:FlexMouseEvent = MouseEventUtil.createMouseWheelChangingEvent(event);
+        if (!dispatchEvent(changingEvent))
+        {
+            event.preventDefault();
+            return;
+        }
         
-        // Scroll event.delta "steps".  
-        navigationUnit = (event.delta < 0) ? NavigationUnit.RIGHT : NavigationUnit.LEFT;
+        const delta:int = changingEvent.delta;
+        
+        var nSteps:uint = Math.abs(delta);
+        var navigationUnit:uint;
+        var scrollPositionChanged:Boolean;
+
+        // Scroll delta "steps".  
+        navigationUnit = (delta < 0) ? NavigationUnit.RIGHT : NavigationUnit.LEFT;
         for (var hStep:int = 0; hStep < nSteps; hStep++)
         {
             var hspDelta:Number = vp.getHorizontalScrollPositionDelta(navigationUnit);
             if (!isNaN(hspDelta))
             {
                 vp.horizontalScrollPosition += hspDelta;
+                scrollPositionChanged = true;
                 if (vp is IInvalidating)
                     IInvalidating(vp).validateNow();
             }
         }
         
+        if (scrollPositionChanged)
+            dispatchEvent(new Event(Event.CHANGE));
+
         event.preventDefault();
     }
     

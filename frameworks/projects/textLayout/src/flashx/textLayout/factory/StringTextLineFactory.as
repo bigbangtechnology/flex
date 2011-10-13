@@ -1,30 +1,21 @@
-//========================================================================================
-//  $File: //a3t/argon/branches/v1/1.1/dev/textLayout_core/src/flashx/textLayout/factory/StringTextLineFactory.as $
-//  $DateTime: 2010/03/15 11:44:20 $
-//  $Revision: #1 $
-//  $Change: 744811 $
-//  
-//  ADOBE CONFIDENTIAL
-//  
-//  Copyright 2008 Adobe Systems Incorporated. All rights reserved.
-// 
-//  NOTICE:  All information contained herein is, and remains
-//  the property of Adobe Systems Incorporated and its suppliers,
-//  if any.  The intellectual and technical concepts contained
-//  herein are proprietary to Adobe Systems Incorporated and its
-//  suppliers, and are protected by trade secret or copyright law.
-//  Dissemination of this information or reproduction of this material
-//  is strictly forbidden unless prior written permission is obtained
-//  from Adobe Systems Incorporated.
-
-//  
-//========================================================================================
+////////////////////////////////////////////////////////////////////////////////
+//
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
+//
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
+//
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.factory
 {
+	import flash.display.Shape;
 	import flash.geom.Rectangle;
 	import flash.text.engine.TextLine;
 	
 	import flashx.textLayout.compose.FlowComposerBase;
+	import flashx.textLayout.compose.SimpleCompose;
 	import flashx.textLayout.container.ScrollPolicy;
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.elements.Configuration;
@@ -61,7 +52,7 @@ package flashx.textLayout.factory
  *
  * @see flashx.textLayout.factory.TextFlowTextLineFactory TextFlowTextLineFactory
 */
-	public final class StringTextLineFactory extends TextLineFactoryBase
+	public class StringTextLineFactory extends TextLineFactoryBase
 	{
 		private var _tf:TextFlow;
 		private var _para:ParagraphElement;
@@ -111,7 +102,7 @@ package flashx.textLayout.factory
 		 * @playerversion AIR 1.5
 		 * @langversion 3.0
 		 */
-		public function StringTextLineFactory(configuration:IConfiguration = null):void
+		public function StringTextLineFactory(configuration:IConfiguration = null)
 		{
 			super();
 			initialize(configuration);
@@ -222,6 +213,8 @@ package flashx.textLayout.factory
 		 * <p>To create a different set of lines, change any properties desired and call
 		 * <code>createTextLines()</code> again.</p>
 		 *  
+		 * <p>Note that the scroll policies of the factory will control how many lines are generated.</p>
+		 * 
 		 * @param callback	The callback function called for each TextLine object created.
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
@@ -229,10 +222,18 @@ package flashx.textLayout.factory
 		 */
 		public function createTextLines(callback:Function):void
 		{
-			createTextLinesInternal(callback);
-			_factoryComposer._lines.splice(0);
-			if (_pass0Lines)
-				_pass0Lines.splice(0);
+			var saved:SimpleCompose = TextLineFactoryBase.beginFactoryCompose();
+			try
+			{
+				createTextLinesInternal(callback);
+			}
+			finally
+			{
+				_factoryComposer._lines.splice(0);
+				if (_pass0Lines)
+					_pass0Lines.splice(0);
+				TextLineFactoryBase.endFactoryCompose(saved);
+			}
 		}
 		
 		/** Internal version preserves generated lines
@@ -270,7 +271,37 @@ package flashx.textLayout.factory
 			// Need truncation if all the following are true
 			// - truncation options exist
 			// - content doesn't fit		
-			if (truncationOptions && !doesComposedTextFit(truncationOptions.lineCountLimit, _tf.textLength, bp))
+			if (truncationOptions)
+				doTruncation(bp, measureWidth, measureHeight);
+			
+			var xadjust:Number = compositionBounds.x;
+			// toptobottom sets zero to the right edge - adjust the locations
+			var controllerBounds:Rectangle = containerController.getContentBounds();
+			if (bp == BlockProgression.RL)
+				xadjust += (measureWidth ? controllerBounds.width : compositionBounds.width);
+				
+			// apply x and y adjustment to the bounds
+			controllerBounds.left += xadjust;
+			controllerBounds.right += xadjust;
+			controllerBounds.top += compositionBounds.y;
+			controllerBounds.bottom += compositionBounds.y;			
+			
+			if (_tf.backgroundManager)
+				processBackgroundColors(_tf,callback,xadjust,compositionBounds.y,containerController.compositionWidth,containerController.compositionHeight);				
+			callbackWithTextLines(callback,xadjust,compositionBounds.y);
+
+			setContentBounds(controllerBounds);
+			containerController.clearCompositionResults();
+		}
+		
+		// Need truncation if all the following are true
+		// - truncation options exist
+		// - content doesn't fit		
+		/** @private */
+		tlf_internal function doTruncation(bp:String, measureWidth:Boolean, measureHeight:Boolean):void
+		{
+			var bp:String = _tf.computedFormat.blockProgression;
+			if (!doesComposedTextFit(truncationOptions.lineCountLimit, _tf.textLength, bp))
 			{
 				_isTruncated = true;
 				var somethingFit:Boolean = false; // were we able to fit something?
@@ -308,7 +339,7 @@ package flashx.textLayout.factory
 							}
 							
 							var allowedWidth:Number = targetWidth - (_measurementLines[_measurementLines.length-1] as TextLine).unjustifiedTextWidth;
-													
+							
 							// 4. Get the initial truncation position on the target line given this allowed width 
 							truncateAtCharPosition = getTruncationPosition(_factoryComposer._lines[_truncationLineIndex], allowedWidth);
 						}
@@ -361,26 +392,9 @@ package flashx.textLayout.factory
 					_factoryComposer._lines.splice(0); // return no lines
 				}
 				
-				 _span.text = originalText;
+				_span.text = originalText;
 			}
-			
-			var xadjust:Number = compositionBounds.x;
-			// toptobottom sets zero to the right edge - adjust the locations
-			var controllerBounds:Rectangle = containerController.getContentBounds();
-			if (bp == BlockProgression.RL)
-				xadjust += (measureWidth ? controllerBounds.width : compositionBounds.width);
-				
-			// apply x and y adjustment to the bounds
-			controllerBounds.left += xadjust;
-			controllerBounds.right += xadjust;
-			controllerBounds.top += compositionBounds.y;
-			controllerBounds.bottom += compositionBounds.y;			
-
-			callbackWithTextLines(callback,xadjust,compositionBounds.y);
-
-			setContentBounds(controllerBounds);
 		}
-		
 		
 		/** @private 
 		 * Gets the text that is composed in the preceding call to <code>createTextLines</code>
@@ -406,18 +420,21 @@ package flashx.textLayout.factory
 			measureFactory.paragraphFormat = paragraphFormat;
 			measureFactory.textFlowFormat = textFlowFormat;
 			measureFactory.truncationOptions = null;
-			measureFactory.createTextLinesInternal(noOpCallback);
+			measureFactory.createTextLinesInternal(noopfunction);
 			_factoryComposer.swapLines(originalLines); // restore
 		}
+		
+		static private function noopfunction(o:Object):void	// No PMD
+		{ }
 		
 
 		/** 
 		 * Gets the truncation position on a line given the allowed width 
 		 * - Must be at an atom boundary
 		 * - Must scan the line for atoms in logical order, not physical position order
-		 * For example, given bi-di text ABאבCD
+         * For example, given bi-di text ABאבCD
 		 * atoms must be scanned in this order 
-		 * A, B, א
+         * A, B, א
          * ג, C, D  
 		 */
 		private function getTruncationPosition (line:TextLine, allowedWidth:Number):uint
@@ -438,11 +455,6 @@ package flashx.textLayout.factory
 			
 			line.flushAtomData();
 			return charPosition;
-		}
-		
-		
-		private function noOpCallback(line:TextLine):void
-		{	
 		}
 		
 	}

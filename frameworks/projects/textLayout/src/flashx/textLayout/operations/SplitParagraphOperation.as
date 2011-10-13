@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
 	import flash.utils.getQualifiedClassName;
@@ -18,8 +18,8 @@ package flashx.textLayout.operations
 	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.elements.SpanElement;
 	import flashx.textLayout.elements.TextFlow;
-	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.tlf_internal;
 
 
@@ -41,11 +41,8 @@ package flashx.textLayout.operations
 	 * @playerversion AIR 1.5
 	 * @langversion 3.0 
 	 */			
-	public class SplitParagraphOperation extends FlowTextOperation
-	{
-		private var delSelOp:DeleteTextOperation;
-		private var _characterFormat:ITextLayoutFormat;
-		
+	public class SplitParagraphOperation extends SplitElementOperation
+	{		
 		/** 
 		 * Creates a SplitParagraphOperation object.
 		 * 
@@ -56,103 +53,10 @@ package flashx.textLayout.operations
 		 * @playerversion AIR 1.5
 	 	 * @langversion 3.0 
 		 */
-		function SplitParagraphOperation(operationState:SelectionState)
+		public function SplitParagraphOperation(operationState:SelectionState)
 		{
-			super(operationState);
-			characterFormat = operationState.pointFormat;
-		}
-		
-		/** 
-		 * The format applied to the new empty paragraph when a paragraph is split at the end.
-		 * 
-		 * @playerversion Flash 10
-		 * @playerversion AIR 1.5
-	 	 * @langversion 3.0 
-		 */
-		private function get characterFormat():ITextLayoutFormat
-		{
-			return _characterFormat;
-		}
-		private function set characterFormat(value:ITextLayoutFormat):void
-		{
-			_characterFormat = value ? new TextLayoutFormat(value) : null;
-		}
-		
-		/** @private */
-		public override function doOperation():Boolean
-		{ 
-			if (absoluteStart < absoluteEnd)
-			{
-				delSelOp = new DeleteTextOperation(originalSelectionState);
-				delSelOp.doOperation();
-			}
-			
-			var para:ParagraphElement = textFlow.findAbsoluteParagraph(absoluteStart);
-			
-			// paragraph relative offset - into the store
-			var paraSelBegIdx:int = absoluteStart-para.getAbsoluteStart();
-			
-			var nextPara:ParagraphElement = ParaEdit.splitParagraph(para, paraSelBegIdx, _characterFormat);
-			if (textFlow.interactionManager)
-				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, 1);
-
-			// splitParagraph guarantees these exist
-			var lastParaLeaf:FlowLeafElement = para.getLastLeaf(); 
-			if (lastParaLeaf != null && lastParaLeaf.textLength == 1)
-			{
-				//if the lastParaLeaf is only a newline, you really want the span right before
-				var elementIdx:int = lastParaLeaf.parent.getChildIndex(lastParaLeaf);
-				if (elementIdx > 0)
-				{
-					var prevSpan:SpanElement = lastParaLeaf.parent.getChildAt(elementIdx - 1) as SpanElement;
-					if (prevSpan != null) lastParaLeaf = prevSpan;
-				}
-			}
-			
-			var firstNextParaLeaf:FlowLeafElement = nextPara.getFirstLeaf();
-			
-			var newCharAttrs:TextLayoutFormat; // Point format for new selection position
-			if (getQualifiedClassName(lastParaLeaf.parent) != getQualifiedClassName(firstNextParaLeaf.parent))
-			{
-				// Reset it; no easy way to migrate point format when parent types differ
-				newCharAttrs = new TextLayoutFormat();
-			} 
-			else
-			{
-				// 1. Convert to absolute (position-independent) value by concatenating with the actual attribute of para's last leaf
-				newCharAttrs = new TextLayoutFormat(_characterFormat);
-				
-				if (nextPara.textLength == 1)
-				{
-					//we have a completely new paragraph.  Just append on the character
-					//attributes of the last leaf and stop.
-					if (lastParaLeaf.format != null)
-					{
-						newCharAttrs.concat(lastParaLeaf.format);
-					}
-				}
-				else
-				{
-					newCharAttrs.concat(lastParaLeaf.computedFormat);
-					
-					// 2. Convert to a relative value (dependent on the new position) by removing attributes 
-					// that match the actual  attributes of nextPar's first leaf 
-					newCharAttrs.removeMatching(firstNextParaLeaf.computedFormat);
-				}
-			}		
-
-			return true;
-		}
-	
-		/** @private */
-		public override function undo():SelectionState
-		{ 
-			var para:ParagraphElement = textFlow.findAbsoluteParagraph(absoluteStart);
-			ParaEdit.mergeParagraphWithNext(para);
-			if (textFlow.interactionManager)
-				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, -1);
-			
-			return absoluteStart < absoluteEnd ? delSelOp.undo() : originalSelectionState;
+			var para:ParagraphElement = operationState.textFlow.findLeaf(operationState.absoluteStart).getParagraph();
+			super(operationState, para);
 		}
 		
 		/** @private */

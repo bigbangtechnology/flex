@@ -689,6 +689,9 @@ public class ToolTipManagerImpl extends EventDispatcher
     	//target hitTest will return true. 
     	if ((target.stage.mouseX == 0)	 && (target.stage.mouseY == 0))
     		return false;
+        
+        if (target is ILayoutManagerClient && !ILayoutManagerClient(target).initialized)
+            return false;
     		
     	return target.hitTestPoint(target.stage.mouseX,
     							   target.stage.mouseY, true);
@@ -772,7 +775,10 @@ public class ToolTipManagerImpl extends EventDispatcher
             if (displayObject is IValidatorListener)
             {
                 currentText = IValidatorListener(displayObject).errorString;
-                if (currentText != null && currentText != "")
+                var showErrorTip:Boolean;
+                if (displayObject is IStyleClient)
+                    showErrorTip = IStyleClient(displayObject).getStyle("showErrorTip");
+                if (currentText != null && currentText != "" && showErrorTip)
                 {
                     currentTarget = displayObject;
                     isError = true;

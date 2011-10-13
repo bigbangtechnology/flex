@@ -1,20 +1,22 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit
 {
-	import flashx.textLayout.elements.FlowGroupElement;
+	import flashx.textLayout.conversion.ConverterBase;
+	import flashx.textLayout.conversion.TextConverter;
 	import flashx.textLayout.elements.FlowElement;
+	import flashx.textLayout.elements.ParagraphElement;
+	import flashx.textLayout.elements.SpanElement;
 	import flashx.textLayout.elements.TextFlow;
 	import flashx.textLayout.elements.TextRange;
-	import flashx.textLayout.edit.TextFlowEdit;
 	import flashx.textLayout.tlf_internal;
 	
 	use namespace tlf_internal;
@@ -35,9 +37,13 @@ package flashx.textLayout.edit
 	public class TextScrap
 	{	
 		private var _textFlow:TextFlow;
-		private var _beginMissingArray:Array;
-		private var _endMissingArray:Array;
+		private var _plainText:int;		/* flag to tell if text in scrap is plain or formatted: -1 = unknown, 0 = false, 1 = true
 
+		// These are duplicates of same entries in TextConverter, here to avoid dragging in more code caused by compiler bug.
+		// Remove this when http://bugs.adobe.com/jira/browse/ASC-4092 is fixed. 
+		/** @private */
+		static tlf_internal const MERGE_TO_NEXT_ON_PASTE:String = "mergeToNextOnPaste";
+		
 		/**
 		 * Creates a TextScrap object.
 		 * 
@@ -55,8 +61,7 @@ package flashx.textLayout.edit
 		{
 			_textFlow = textFlow;
 			_textFlow.flowComposer = null;	// no flowcomposer in a TextScrap
-			_beginMissingArray = new Array();
-			_endMissingArray = new Array();
+			_plainText = -1;
 		}
 
 		/**
@@ -70,121 +75,45 @@ package flashx.textLayout.edit
 		 */
 		public static function createTextScrap(range:TextRange):TextScrap
 		{
-			return TextFlowEdit.createTextScrap(range.textFlow, range.absoluteStart, range.absoluteEnd);
+			var startPos:int = range.absoluteStart;
+			var endPos:int = range.absoluteEnd;
+			var theFlow:TextFlow = range.textFlow;
+			
+			if (!theFlow || startPos >= endPos) 
+				return null;
+			var newTextFlow:TextFlow = theFlow.deepCopy(startPos, endPos) as TextFlow;
+			newTextFlow.normalize();
+			var retTextScrap:TextScrap = new TextScrap(newTextFlow);
+			if (newTextFlow.textLength > 0)
+			{
+				var fl:FlowElement = newTextFlow.getLastLeaf();
+				
+				var srcElem:FlowElement = theFlow.findLeaf(endPos - 1);
+				var copyElem:FlowElement = newTextFlow.getLastLeaf();
+				if ((copyElem is SpanElement) && (!(srcElem is SpanElement)))
+					copyElem = newTextFlow.findLeaf(newTextFlow.textLength - 2);
+				
+				while (copyElem && srcElem)
+				{
+					if (endPos < srcElem.getAbsoluteStart() + srcElem.textLength)
+						copyElem.setStyle(MERGE_TO_NEXT_ON_PASTE, "true");
+					copyElem = copyElem.parent;
+					srcElem = srcElem.parent;
+				}
+				return retTextScrap;
+			}
+			return null;
 		}
 		
-		/** @private
+		/** 
 		 * Gets the TextFlow that is currently in the TextScrap.
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
  	 	 * @langversion 3.0
 		 */												
-		tlf_internal function get textFlow():TextFlow
+		public function get textFlow():TextFlow
 		{
 			return _textFlow;
-		}
-		
-		/**
-		 * @private
-		 * 
-		 * Indicates whether the specified FlowElement has it's beginning part missing.
-		 */												
-		tlf_internal function isBeginMissing(fl:FlowElement):Boolean
-		{
-			var arrLen:int = _beginMissingArray.length;
-			var currPos:int = 0;
-			while (currPos < arrLen)
-			{
-				if (_beginMissingArray[currPos] == fl)
-				{
-					return true;
-				}
-				currPos++;
-			}
-			return false;
-		}
-		
-		/**
-		 * @private
-		 * 
-		 * Indicates whether the specified FlowElement has it's end part missing.
-		 */												
-		tlf_internal function isEndMissing(fl:FlowElement):Boolean
-		{
-			var arrLen:int = _endMissingArray.length;
-			var currPos:int = 0;
-			while (currPos < arrLen)
-			{
-				if (_endMissingArray[currPos] == fl)
-				{
-					return true;
-				}
-				currPos++;
-			}
-			return false;			
-		}
-
-		/**
-		 * @private
-		 * 
-		 * Indicates that the specified FlowElement has it's beginning part missing.
-		 */														
-		tlf_internal function addToBeginMissing(fl:FlowElement):void
-		{
-			_beginMissingArray.push(fl);
-		}
-
-		/**
-		 * @private
-		 * 
-		 * Indicates that the specified FlowElement has it's end part missing.
-		 */																
-		tlf_internal function addToEndMissing(fl:FlowElement):void
-		{
-			_endMissingArray.push(fl);			
-		}
-
-		/**
-		 * @private
-		 * 
-		 * Returns all the FlowElements in the TextFlow that have their beginning
-		 * parts missing.
-		 */																		
-		tlf_internal function get beginMissingArray():Array
-		{
-			return _beginMissingArray;
-		}
-
-		/**
-		 * @private
-		 * 
-		 * Returns all the FlowElements in the TextFlow that have their ending
-		 * parts missing.
-		 */																				
-		tlf_internal function get endMissingArray():Array
-		{
-			return _endMissingArray;
-		}
-
-		/**
-		 * @private
-		 * 
-		 * Sets an array of FlowElements that are missing their
-		 * beginning parts in this TextFlow.
-		 */																						
-		tlf_internal function set beginMissingArray(arr:Array):void
-		{
-			_beginMissingArray = arr;
-		}	
-
-		/**
-		 * Sets an array of FlowElements that are missing their
-		 * ending parts in this TextFlow.
-		 * @private
-		 */																						
-		tlf_internal function set endMissingArray(arr:Array):void
-		{	
-			_endMissingArray = arr;
 		}
 		
 		/**
@@ -198,56 +127,54 @@ package flashx.textLayout.edit
 		 */
 		public function clone():TextScrap
 		{
-			var t:TextFlow = textFlow.deepCopy() as TextFlow;
-			var newTextScrap:TextScrap = new TextScrap(t);
-			
-			var beginMissingArray:Array = _beginMissingArray;
-			var endMissingArray:Array = _endMissingArray;
-			
-			var curPos:int = beginMissingArray.length - 2;
-			var curFlElement:FlowElement;
-			var curFlElementIndex:int;
-			var newFlowElement:FlowElement = newTextScrap.textFlow;
-			
-			if (beginMissingArray.length > 0)
-			{
-				var newBeginArray:Array = new Array();
-				newBeginArray.push(newFlowElement);
-				while (curPos >= 0)
-				{
-					curFlElement = beginMissingArray[curPos];
-					curFlElementIndex = curFlElement.parent.getChildIndex(curFlElement);
-					if (newFlowElement is FlowGroupElement)
-					{
-						newFlowElement = (newFlowElement as FlowGroupElement).getChildAt(curFlElementIndex);
-						newBeginArray.push(newFlowElement);
-					}
-					curPos--;
-				}
-				newTextScrap.beginMissingArray = newBeginArray;
-			}
-			
-			curPos = endMissingArray.length - 2;
-			newFlowElement = newTextScrap.textFlow;
-			if (endMissingArray.length > 0)
-			{
-				var newEndArray:Array = new Array();
-				newEndArray.push(newFlowElement);
-				while (curPos >= 0)
-				{
-					curFlElement = endMissingArray[curPos];
-					curFlElementIndex = curFlElement.parent.getChildIndex(curFlElement);
-					if (newFlowElement is FlowGroupElement)
-					{
-						newFlowElement = (newFlowElement as FlowGroupElement).getChildAt(curFlElementIndex);
-						newEndArray.push(newFlowElement);
-					}
-					curPos--;					
-				}
-				newTextScrap.endMissingArray = newEndArray;
-			}
-			return newTextScrap;
+			return new TextScrap(textFlow.deepCopy() as TextFlow);
 		}
 
-	} // end TextScap class
+		/** Marks the TextScrap's content as being either plain or formatted */
+		tlf_internal function setPlainText(plainText:Boolean):void
+		{
+			_plainText = plainText ? 0 : 1;
+		}
+		
+		/** 
+		 * Returns true if the text is plain text (not formatted)
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 */												
+		tlf_internal function isPlainText():Boolean
+		{
+			var foundAttributes:Boolean = false;
+			
+			if (_plainText == -1)
+			{
+				for (var i:int = _textFlow.numChildren - 1; i >= 0; --i)
+					_textFlow.getChildAt(i).applyFunctionToElements(isPlainElement);
+				_plainText = foundAttributes ? 1 : 0;
+			}
+			return _plainText == 0;
+			
+			function isPlainElement(element:FlowElement):Boolean
+			{
+				if (!(element is ParagraphElement) && !(element is SpanElement))
+				{
+					foundAttributes = true;
+					return true;
+				}
+				var styles:Object = element.styles;
+				if (styles)
+				{
+					for (var prop:String in styles)
+					{
+						if (prop != ConverterBase.MERGE_TO_NEXT_ON_PASTE)
+						{
+							foundAttributes = true;
+							return true;		// stops iteration
+						}
+					}
+				}
+				return false;
+			}
+		}
+	} // end TextScrap class
 } // end package

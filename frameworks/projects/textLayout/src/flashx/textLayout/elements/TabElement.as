@@ -1,16 +1,17 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
-{
-	import flash.text.engine.TextElement;
+{	
+	import flashx.textLayout.tlf_internal;
+	use namespace tlf_internal;
 	
 	/** 
 	 * The TabElement class represents a &lt;tab/&gt; in the text flow. You assign tab stops as an array of TabStopFormat objects to the 
@@ -28,7 +29,7 @@ package flashx.textLayout.elements
 	 * @langversion 3.0
 	 *
 	 * @see flashx.textLayout.formats.TabStopFormat
-	 * @see ParagraphElement#tabStops
+	 * @see FlowElement#tabStops
 	 * @see SpanElement
 	 */
 	 
@@ -48,8 +49,10 @@ package flashx.textLayout.elements
 		
 		/** @private */
 		override protected function get abstract():Boolean
-		{
-			return false;
-		}		
+		{ return false; }
+
+		/** @private */
+		tlf_internal override function get defaultTypeName():String
+		{ return "tab"; }
 	}
 }

@@ -21,15 +21,23 @@
 *  Contributor(s): Akamai Technologies
 *  
 *****************************************************/
-
 package org.osmf.utils
 {
+	[ExcludeClass]
+	
 	/**
+	 * @private
+	 * 
 	 * URL parses a Uniform Resource Identifier (URI/URL) into individual properties and provides easy access
 	 * to query string parameters.  This also works with rtmp:// urls, but will assume the instance isn't specified.  
 	 * To use rtmp:// urls with an instance name, use the FMSURL class instead of URL.
 	 * 
 	 * @see FMSURL
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */
 	public class URL
 	{		
@@ -39,8 +47,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function URL(url:String) 
 		{
@@ -64,8 +72,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get rawUrl():String
 		{
@@ -80,8 +88,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get protocol():String
 		{
@@ -107,8 +115,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get userInfo():String
 		{
@@ -132,8 +140,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get host():String
 		{
@@ -153,8 +161,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get port():String
 		{
@@ -177,8 +185,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get path():String
 		{
@@ -204,8 +212,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get query():String
 		{
@@ -228,8 +236,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function get fragment():String
 		{
@@ -249,8 +257,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function toString():String
 		{
@@ -266,8 +274,8 @@ package org.osmf.utils
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function getParamValue(param:String):String
 		{
@@ -283,14 +291,47 @@ package org.osmf.utils
 			
 			return value;
 		}
-				
+		
+		/**
+		 * The url is fully qualified.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */ 
+		public function get absolute():Boolean
+		{
+			return protocol != "";
+		}
+		
+		/**
+		 * Returns the file extension of the URL, the empty string if there is
+		 * no extension.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public function get extension():String
+		{
+			var lastDot:int = path.lastIndexOf(".");
+			if (lastDot != -1)
+			{
+				return path.substr(lastDot+1);
+			}
+			
+			return "";
+		}
+		
 		/**
 		 * Parses the url into properties.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		private function parseUrl():void
 		{

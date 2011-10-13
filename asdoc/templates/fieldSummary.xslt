@@ -335,13 +335,36 @@
 								</xsl:for-each>
 							</xsl:variable>
 							<xsl:variable name="skin.desc">
-								<xsl:choose>
-									<xsl:when test="contains($entryType,'property')">
-										<xsl:for-each select="./prolog/asMetadata/skinParts/SkinPart[@name=$nameToMatch]/description">
-											<xsl:apply-templates select="node()"/>
-										</xsl:for-each>    
-									</xsl:when>
-								</xsl:choose>
+								<xsl:for-each select="./prolog/asMetadata/skinParts/SkinPart[@name=$nameToMatch]">
+							      <xsl:choose>
+							        <xsl:when test="$descriptionType='shortdesc'">
+							          <xsl:if test="./shortdesc[@conref]">
+							            <xsl:call-template name="getConRefText">
+							              <xsl:with-param name="conref" select="./shortdesc/@conref"/>
+							              <xsl:with-param name="descriptionType" select="local-name(./shortdesc)"/>
+							            </xsl:call-template>
+							          </xsl:if>
+							          <xsl:if test="not(./shortdesc[@conref])">
+							            <xsl:for-each select="./shortdesc/.">
+							              <xsl:apply-templates select="node()"/>
+							            </xsl:for-each>
+							          </xsl:if>
+							        </xsl:when>
+							        <xsl:otherwise>
+							          <xsl:if test="./description[@conref]">
+							            <xsl:call-template name="getConRefText">
+							              <xsl:with-param name="conref" select="./description/@conref"/>
+							              <xsl:with-param name="descriptionType" select="local-name(./description)"/>
+							            </xsl:call-template>
+							          </xsl:if>
+							          <xsl:if test="not(./description[@conref])">
+							            <xsl:for-each select="./description">
+							              <xsl:apply-templates select="node()"/>
+							            </xsl:for-each>
+							          </xsl:if>
+							        </xsl:otherwise>
+							      </xsl:choose>
+							    </xsl:for-each>						
 							</xsl:variable>
 							<xsl:if test="$property.desc=''">
 								<xsl:copy-of select="$skin.desc" copy-namespaces="no"/>

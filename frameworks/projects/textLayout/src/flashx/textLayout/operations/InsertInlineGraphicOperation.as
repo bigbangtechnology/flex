@@ -1,22 +1,24 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
 	import flashx.textLayout.edit.ElementRange;
 	import flashx.textLayout.edit.ParaEdit;
+	import flashx.textLayout.edit.PointFormat;
 	import flashx.textLayout.edit.SelectionState;
 	import flashx.textLayout.elements.FlowElement;
 	import flashx.textLayout.elements.FlowGroupElement;
 	import flashx.textLayout.elements.FlowLeafElement;
-	import flashx.textLayout.elements.SubParagraphGroupElement;
+	import flashx.textLayout.elements.InlineGraphicElement;
+	import flashx.textLayout.elements.SubParagraphGroupElementBase;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.tlf_internal;
@@ -45,6 +47,7 @@ package flashx.textLayout.operations
 		private var imageHeight:Object;
 		private var _options:Object;
 		private var selPos:int = 0;
+		private var _inlineGraphicElement:InlineGraphicElement;
 		
 		/** 
 		 * Creates an InsertInlineGraphicsOperation object.
@@ -54,13 +57,13 @@ package flashx.textLayout.operations
 		 * @param	source	The graphic source (uri string, URLRequest, DisplayObject, or Class of an embedded asset). 
 		 * @param	width	The width to assign (number of pixels, percent, or the string 'auto')
 		 * @param	height	The height to assign (number of pixels, percent, or the string 'auto')
-		 * @param	options	None supported
+		 * @param	options	The float to assign (String value, none for inline with text, left/right/start/end for float)
 		 * 
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
 	 	 * @langversion 3.0 
 		 */
-		function InsertInlineGraphicOperation(operationState:SelectionState, source:Object, width:Object, height:Object, options:Object = null)
+		public function InsertInlineGraphicOperation(operationState:SelectionState, source:Object, width:Object, height:Object, options:Object = null)
 		{
 			super(operationState);
 			
@@ -124,7 +127,7 @@ package flashx.textLayout.operations
 		}
 		
 		/** 
-		 * options are not supported
+		 * @copy flashx.textLayout.elements.InlineGraphicElement#float
 		 * 
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
@@ -139,6 +142,18 @@ package flashx.textLayout.operations
 			_options = value;
 		}
 
+		/** 
+		 * The InlineGraphicElement that was created by doOperation.
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0 
+		 */
+		public function get newInlineGraphicElement():InlineGraphicElement
+		{
+			return _inlineGraphicElement;
+		}
+		
 		/** @private */
 		public override function doOperation():Boolean
 		{
@@ -148,7 +163,7 @@ package flashx.textLayout.operations
 			if (delSelOp) 
 			{
 				var leafEl:FlowLeafElement = textFlow.findLeaf(absoluteStart);
-				var deleteFormat:ITextLayoutFormat = new TextLayoutFormat(textFlow.findLeaf(absoluteStart).format);
+				var deleteFormat:PointFormat = new PointFormat(textFlow.findLeaf(absoluteStart).format);
 				if (delSelOp.doOperation())
 					pointFormat = deleteFormat;
 			}
@@ -159,11 +174,11 @@ package flashx.textLayout.operations
 			var range:ElementRange = ElementRange.createElementRange(textFlow,selPos, selPos);		
 			var leafNode:FlowElement = range.firstLeaf;
 			var leafNodeParent:FlowGroupElement = leafNode.parent;
-			while (leafNodeParent is SubParagraphGroupElement)
+			while (leafNodeParent is SubParagraphGroupElementBase)
 			{
 				var subParInsertionPoint:int = selPos - leafNodeParent.getAbsoluteStart();
-				if (((subParInsertionPoint == 0) && (!(leafNodeParent as SubParagraphGroupElement).acceptTextBefore())) ||
-					((subParInsertionPoint == leafNodeParent.textLength) && (!(leafNodeParent as SubParagraphGroupElement).acceptTextAfter())))
+				if (((subParInsertionPoint == 0) && (!(leafNodeParent as SubParagraphGroupElementBase).acceptTextBefore())) ||
+					((subParInsertionPoint == leafNodeParent.textLength) && (!(leafNodeParent as SubParagraphGroupElementBase).acceptTextAfter())))
 				{
 					leafNodeParent = leafNodeParent.parent;
 				} else {
@@ -171,7 +186,7 @@ package flashx.textLayout.operations
 				}
 			}
 			
-			ParaEdit.createImage(leafNodeParent, selPos - leafNodeParent.getAbsoluteStart(), _source, imageWidth, imageHeight, options, pointFormat);
+			_inlineGraphicElement = ParaEdit.createImage(leafNodeParent, selPos - leafNodeParent.getAbsoluteStart(), _source, imageWidth, imageHeight, options, pointFormat);
 			if (textFlow.interactionManager)
 				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, 1);
 			

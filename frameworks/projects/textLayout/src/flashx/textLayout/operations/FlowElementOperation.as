@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
 	import flashx.textLayout.debug.assert;
@@ -62,17 +62,9 @@ package flashx.textLayout.operations
 		public function FlowElementOperation(operationState:SelectionState, targetElement:FlowElement, relativeStart:int = 0, relativeEnd:int = -1)
 		{
 			super(operationState);
-			
-			CONFIG::debug { 
-				var elem:FlowElement = this.targetElement;
-				for (var i:int = nestLevel; i > 0; i--)
-					elem = elem.parent;
-				
-				assert (elem is TextFlow, "ChangeElementIdOperation targetElement root is not a TextFlow!"); 
-				assert (elem == operationState.textFlow, "ChangeElementIdOperation element is not part of selectionState TextFlow"); 
-			}
-			
 			initialize(targetElement,relativeStart,relativeEnd);
+			
+			CONFIG::debug { assert(targetElement.getTextFlow() == operationState.textFlow, "ChangeElementIdOperation element is not part of selectionState TextFlow"); }
 		}
 		
 		
@@ -97,6 +89,7 @@ package flashx.textLayout.operations
 				
 			origAbsStart = absStart = targetElement.getAbsoluteStart() + relativeStart;
 			origAbsEnd   = absEnd   = absStart - relativeStart + relativeEnd;
+
 			
 		}
 		

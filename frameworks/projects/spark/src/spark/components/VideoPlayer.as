@@ -36,14 +36,13 @@ import org.osmf.events.MediaPlayerStateChangeEvent;
 import org.osmf.events.TimeEvent;
 import org.osmf.media.MediaPlayerState;
 
-import spark.components.mediaClasses.DynamicStreamingVideoSource;
 import spark.components.mediaClasses.MuteButton;
 import spark.components.mediaClasses.ScrubBar;
 import spark.components.mediaClasses.VolumeBar;
 import spark.components.supportClasses.ButtonBase;
 import spark.components.supportClasses.SkinnableComponent;
-import spark.components.supportClasses.TextBase;
 import spark.components.supportClasses.ToggleButtonBase;
+import spark.core.IDisplayText;
 import spark.events.TrackBaseEvent;
 
 use namespace mx_internal;
@@ -371,6 +370,14 @@ include "../styles/metadata/BasicInheritingTextStyles.as";
 [IconFile("VideoPlayer.png")]
 
 /**
+ * Because this component does not define a skin for the mobile theme, Adobe
+ * recommends that you not use it in a mobile application. Alternatively, you
+ * can define your own mobile skin for the component. For more information,
+ * see <a href="http://help.adobe.com/en_US/Flex/4.0/UsingSDK/WS53116913-F952-4b21-831F-9DE85B647C8A.html">Spark Skinning</a>.
+ */
+[DiscouragedForProfile("mobileDevice")]
+
+/**
  *  The VideoPlayer control is a skinnable video player that supports
  *  progressive download, multi-bitrate streaming, and streaming video.
  *  It supports playback of FLV and F4v files. The VideoPlayer control
@@ -648,7 +655,7 @@ public class VideoPlayer extends SkinnableComponent
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-    public var currentTimeDisplay:TextBase;
+    public var currentTimeDisplay:IDisplayText;
     
     [SkinPart(required="false")]
     
@@ -764,7 +771,7 @@ public class VideoPlayer extends SkinnableComponent
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-    public var durationDisplay:TextBase;
+    public var durationDisplay:IDisplayText;
     
     [SkinPart(required="false")]
     
@@ -1909,6 +1916,7 @@ public class VideoPlayer extends SkinnableComponent
      */
     public function play():void
     {
+        //trace("play");
         videoDisplay.play();
     }
     
@@ -1961,7 +1969,7 @@ public class VideoPlayer extends SkinnableComponent
         
         // if streaming, then we pretend to have everything in view
         // if progressive, then look at the bytesLoaded and bytesTotal
-        if (!videoDisplay.videoPlayer.downloadable)
+        if (!videoDisplay.videoPlayer.canLoad)
             scrubBar.loadedRangeEnd = videoDisplay.duration;
         else if (videoDisplay.bytesTotal == 0)
             scrubBar.loadedRangeEnd = 0;
@@ -1981,9 +1989,14 @@ public class VideoPlayer extends SkinnableComponent
      *  Formats a time value, specified in seconds, into a String that 
      *  gets used for <code>currentTime</code> and the <code>duration</code>.
      * 
-     *  @param value Value in seconds of the time to format
+     *  @param value Value in seconds of the time to format.
      * 
-     *  @return Formatted time value
+     *  @return Formatted time value.
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
     protected function formatTimeValue(value:Number):String
     {
@@ -2028,19 +2041,25 @@ public class VideoPlayer extends SkinnableComponent
      */
     mx_internal function getScreenBounds():Rectangle
     {       
+        var resultRect:Rectangle = new Rectangle(0, 0, stage.fullScreenWidth, stage.fullScreenHeight);
+        
         if (screenClass)
         {
             // Get the screen where the application resides
-            var nativeWindowBounds:Rectangle = stage["nativeWindow"]["bounds"];             
-            var currentScreen:Object = screenClass["getScreensForRectangle"](nativeWindowBounds)[0];
+            try 
+            {
+                var nativeWindowBounds:Rectangle = stage["nativeWindow"]["bounds"];             
+                var currentScreen:Object = screenClass["getScreensForRectangle"](nativeWindowBounds)[0];
           
-            // Return the bounds of that screen
-            return currentScreen["bounds"];
+                // Return the bounds of that screen
+                resultRect = currentScreen["bounds"];
+            }
+            catch (e:Error)
+            {
+            }
         }
-        else
-        {
-            return new Rectangle(0, 0, stage.fullScreenWidth, stage.fullScreenHeight);
-        }
+        
+        return resultRect;
     }
     
     //--------------------------------------------------------------------------
@@ -2092,6 +2111,8 @@ public class VideoPlayer extends SkinnableComponent
         
         if (playPauseButton)
             playPauseButton.selected = playing;
+        
+        //trace("mediaPlayerStateChangeHandler " + event + " state = " + event.state + " playing = " + playing);
         
         dispatchEvent(event);
     }
@@ -2184,25 +2205,31 @@ public class VideoPlayer extends SkinnableComponent
                 x: this.x,
                 y: this.y,
                 explicitWidth: this.explicitWidth,
-                explicitHeight: this.explicitHeight};
+                explicitHeight: this.explicitHeight,
+                percentWidth: this.percentWidth,
+                percentHeight: this.percentHeight,
+                isPopUp: this.isPopUp};
             
             pauseWhenHidden = false;
             
-            // remove from old parent
-            if (parent is IVisualElementContainer)
+            if (!isPopUp)
             {
-                var ivec:IVisualElementContainer = IVisualElementContainer(parent);
-                beforeFullScreenInfo.childIndex = ivec.getElementIndex(this);
-                ivec.removeElement(this);
+                // remove from old parent
+                if (parent is IVisualElementContainer)
+                {
+                    var ivec:IVisualElementContainer = IVisualElementContainer(parent);
+                    beforeFullScreenInfo.childIndex = ivec.getElementIndex(this);
+                    ivec.removeElement(this);
+                }
+                else
+                {
+                    beforeFullScreenInfo.childIndex = parent.getChildIndex(this);
+                    parent.removeChild(this);
+                }
+                
+                // add as a popup
+                PopUpManager.addPopUp(this, FlexGlobals.topLevelApplication as DisplayObject, false, null, moduleFactory);
             }
-            else
-            {
-                beforeFullScreenInfo.childIndex = parent.getChildIndex(this);
-                parent.removeChild(this);
-            }
-            
-            // add as a popup
-            PopUpManager.addPopUp(this, FlexGlobals.topLevelApplication as DisplayObject);
             
             // Resize the component to be the full screen of the stage.
             // Push the component at (0,0).  It should be on top of everything 
@@ -2210,7 +2237,8 @@ public class VideoPlayer extends SkinnableComponent
             setLayoutBoundsSize(screenBounds.width, screenBounds.height, true);
             // set the explicit width/height to make sure this value sticks regardless 
             // of any other code or layout passes.  Calling setLayoutBoundsSize() before hand
-            // allows us to use postLayout width/height
+            // allows us to use postLayout width/height.
+            // Setting explictWidth/Height sets percentWidth/Height to NaN. 
             this.explicitWidth = width;
             this.explicitHeight = height;
             setLayoutBoundsPosition(0, 0, true);
@@ -2343,6 +2371,8 @@ public class VideoPlayer extends SkinnableComponent
         this.y = beforeFullScreenInfo.y;
         this.explicitWidth = beforeFullScreenInfo.explicitWidth;
         this.explicitHeight = beforeFullScreenInfo.explicitHeight;
+        this.percentWidth = beforeFullScreenInfo.percentWidth;
+        this.percentHeight = beforeFullScreenInfo.percentHeight;
         
         // sometimes there's no video object currently or there might not've been a 
         // video object when we went in to fullScreen mode.  There may be no videoObject
@@ -2353,15 +2383,18 @@ public class VideoPlayer extends SkinnableComponent
             videoDisplay.videoObject.deblocking = beforeFullScreenInfo.deblocking;
         }
         
-        // remove from top level application:
-        PopUpManager.removePopUp(this);
-        
-        // add back to original parent
-        if (beforeFullScreenInfo.parent is IVisualElementContainer)
-            beforeFullScreenInfo.parent.addElementAt(this, beforeFullScreenInfo.childIndex);
-        else
-            beforeFullScreenInfo.parent.addChildAt(this, beforeFullScreenInfo.childIndex);
-        
+        if (!beforeFullScreenInfo.isPopUp)
+        {
+            // remove from top level application:
+            PopUpManager.removePopUp(this);
+            
+            // add back to original parent
+            if (beforeFullScreenInfo.parent is IVisualElementContainer)
+                beforeFullScreenInfo.parent.addElementAt(this, beforeFullScreenInfo.childIndex);
+            else
+                beforeFullScreenInfo.parent.addChildAt(this, beforeFullScreenInfo.childIndex);
+        }
+
         // want to update pauseWhenHidden, but can't do it here
         // b/c the AIR window thinks it's invisible at this point
         // if we're on a Mac (a bug), so let's just defer this check

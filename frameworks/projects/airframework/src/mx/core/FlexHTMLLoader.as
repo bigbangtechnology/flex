@@ -176,7 +176,7 @@ public class FlexHTMLLoader extends HTMLLoader implements IFocusManagerComplexCo
      *  
      *  @default false
      *  
-     *  @langversion 4.0
+     *  @langversion 3.0
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
@@ -210,6 +210,10 @@ public class FlexHTMLLoader extends HTMLLoader implements IFocusManagerComplexCo
      *  This is just a stub to support the interface.
      *  The parent mx.controls.HTML contains the conversionMode and
      *  applies it.
+     *  
+     *  @langversion 3.0
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     public function get imeMode():String
     {
@@ -297,7 +301,7 @@ public class FlexHTMLLoader extends HTMLLoader implements IFocusManagerComplexCo
      *
      *  @default true
      *  
-     *  @langversion 4.0
+     *  @langversion 3.0
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */

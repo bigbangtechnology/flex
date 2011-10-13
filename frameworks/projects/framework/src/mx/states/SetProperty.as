@@ -85,7 +85,9 @@ public class SetProperty extends OverrideBase
     private static const RELATED_PROPERTIES:Object =
     {
         explicitWidth: [ "percentWidth" ],
-        explicitHeight: [ "percentHeight" ]
+        explicitHeight: [ "percentHeight" ],
+        percentWidth: [ "explicitWidth" ],
+        percentHeight: [ "explicitHeight" ]
     };
 
     //--------------------------------------------------------------------------
@@ -370,6 +372,11 @@ public class SetProperty extends OverrideBase
 	
 	        // Set new value
 	        setPropertyValue(obj, propName, newValue, oldValue);
+            
+            // Disable bindings for the base property if appropriate. If the binding
+            // fires while our override is applied, the correct value will automatically
+            // be applied when the binding is later enabled.
+            enableBindings(obj, parent, propName, false);
         }
         else if (!applied)
         {
@@ -415,6 +422,11 @@ public class SetProperty extends OverrideBase
 	        // Restore the old value
 	        setPropertyValue(obj, propName, oldValue, oldValue);
 	
+            // Re-enable bindings for the base property if appropriate. If the binding
+            // fired while our override was applied, the current value will automatically
+            // be applied once enabled.
+            enableBindings(obj, parent, propName);
+            
 	        // Restore related value, if needed
 	        if (relatedProps)
 	        {
@@ -446,7 +458,11 @@ public class SetProperty extends OverrideBase
     private function setPropertyValue(obj:Object, name:String, value:*,
                                       valueForType:Object):void
     {
-        if (valueForType is Number)
+        // special-case undefined and null: we don't want to cast it 
+        // to some special type and lose that information
+        if (value === undefined || value === null)
+            obj[name] = value;
+        else if (valueForType is Number)
             obj[name] = Number(value);
         else if (valueForType is Boolean)
             obj[name] = toBoolean(value);

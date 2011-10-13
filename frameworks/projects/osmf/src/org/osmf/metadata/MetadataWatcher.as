@@ -19,108 +19,118 @@
 *  Incorporated. All Rights Reserved. 
 *  
 *****************************************************/
-
 package org.osmf.metadata
 {
 	import flash.errors.IllegalOperationError;
 	
-	import org.osmf.events.FacetValueChangeEvent;
-	import org.osmf.events.FacetValueEvent;
 	import org.osmf.events.MetadataEvent;
 	import org.osmf.utils.OSMFStrings;
-	import org.osmf.utils.URL;
+	
+	[ExcludeClass]
 	
 	/**
-	 * The MetadataWatcher class is a convenience class that helps monitoring Metadata
-	 * instances for change.
+	 * @private
+	 * 
+	 * The MetadataWatcher class is a convenience class for monitoring nested Metadata
+	 * for change.  It is capable of watching for value add, remove, or change
+	 * events.
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */	
 	public class MetadataWatcher
 	{
 		/**
-		 * Constructor 
-		 * @param metadata The Metadata to watch for change.
-		 * @param nameSpace The namespace that identifies the IFacet instance to watch
+		 * Constructor.
+		 * 
+		 * @param parentMetadata The parent Metadata to watch for change.
+		 * @param namespaceURL The namespace that identifies the Metadata instance to watch
 		 * for change.
-		 * @param identifier The identifier pointing to the value of interest to watch
-		 * for change. Note that this parameter is optional: not specifying an
-		 * identifier will result in the facet as a whole being watched for change.
-		 * @param callback The method to invoke on either the facet or facet value (see
-		 * identifier parameter description) changing. The callback function is expected
+		 * @param key The key pointing to the value of interest to watch
+		 * for change. Note that this parameter is optional: not specifying a key
+		 * will result in the Metadata as a whole being watched for change.
+		 * @param callback The method to invoke on either the Metadata or Metadata value (see
+		 * key parameter description) changing. The callback function is expected
 		 * to take one argument, which will be set to the new value.
 		 * 
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
-		public function MetadataWatcher(metadata:Metadata, nameSpace:URL, identifier:IIdentifier, callback:Function)
+		public function MetadataWatcher(parentMetadata:Metadata, namespaceURL:String, key:String, callback:Function)
 		{
-			if (metadata == null || nameSpace == null || callback == null)
+			if (parentMetadata == null || namespaceURL == null || callback == null)
 			{
 				throw new IllegalOperationError(OSMFStrings.getString(OSMFStrings.NULL_PARAM));
 			}
 
-			this.metadata = metadata;
-			this.nameSpace = nameSpace;
-			this.identifier = identifier;
+			this.parentMetadata = parentMetadata;
+			this.namespaceURL = namespaceURL;
+			this.key = key;
 			this.callback = callback;
 		}
 		
 		/**
-		 * Starts watching the target facet (value)
+		 * Starts watching the target metadata.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
-		public function watch():void
+		public function watch(dispatchInitialChangeEvent:Boolean=true):void
 		{
 			if (watching == false)
 			{
 				watching = true;
 				
-				// Make sure we are watching for facets being added. process-
-				// WatchedFacetChange that is invoked later, will remove the
+				// Make sure we are watching for metadatas being added. process-
+				// WatchedMetadataChange that is invoked later, will remove the
 				// listener should it already be present on our metadata:
-				metadata.addEventListener
-					( MetadataEvent.FACET_ADD, onFacetAdd
+				parentMetadata.addEventListener
+					( MetadataEvent.VALUE_ADD, onMetadataAdd
 					, false, 0, true
 					);
 				
-				processWatchedFacetChange(metadata.getFacet(nameSpace));
+				processWatchedMetadataChange(parentMetadata.getValue(namespaceURL) as Metadata);
 				
-				// For convience, always trigger a first change callback when
+				// For convenience, always trigger a first change callback when
 				// start watching:
-				if (identifier)
+				if (dispatchInitialChangeEvent == true)
 				{
-					callback(currentFacet ? currentFacet.getValue(identifier) : undefined);
-				}
-				else
-				{
-					callback(currentFacet ? currentFacet : undefined);
+					if (key != null)
+					{
+						callback(currentMetadata ? currentMetadata.getValue(key) : undefined);
+					}
+					else
+					{
+						callback(currentMetadata ? currentMetadata : undefined);
+					}
 				}
 			}
 		}
 		
 		/**
-		 * Stops watching the target facet (value)
+		 * Stops watching the target.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function unwatch():void
 		{
 			if (watching == true)
 			{
-				processWatchedFacetChange(null, false);
+				processWatchedMetadataChange(null, false);
 				
-				// If we weren't watching our facet yet, then processWatched-
-				// FacetChange will not have remove our facet addition listener:
-				metadata.removeEventListener(MetadataEvent.FACET_ADD, onFacetAdd);
+				// If we weren't watching our metadata yet, then processWatched-
+				// MetadataChange will not have remove our addition listener:
+				parentMetadata.removeEventListener(MetadataEvent.VALUE_ADD, onMetadataAdd);
 				
 				watching = false;
 			}
@@ -129,56 +139,56 @@ package org.osmf.metadata
 		// Internals
 		//
 			
-		private function processWatchedFacetChange(facet:IFacet, dispatchChange:Boolean = true):void
+		private function processWatchedMetadataChange(metadata:Metadata, dispatchChange:Boolean = true):void
 		{
-			// Don't change anything if the new facet matches the old one:
-			if (currentFacet != facet)
+			// Don't change anything if the new metadata matches the old one:
+			if (currentMetadata != metadata)
 			{
-				var oldFacet:IFacet = currentFacet;
+				var oldMetadata:Metadata = currentMetadata;
 				
-				if (currentFacet)
+				if (currentMetadata)
 				{
-					// Remove the event listeners for the currently set facet:
-					currentFacet.removeEventListener(FacetValueChangeEvent.VALUE_CHANGE,onFacetValueChange);
-					currentFacet.removeEventListener(FacetValueEvent.VALUE_ADD,onFacetValueAdd);
-					currentFacet.removeEventListener(FacetValueEvent.VALUE_REMOVE,onFacetValueRemove);
+					// Remove the event listeners for the currently set metadata:
+					currentMetadata.removeEventListener(MetadataEvent.VALUE_CHANGE, onValueChange);
+					currentMetadata.removeEventListener(MetadataEvent.VALUE_ADD, onValueAdd);
+					currentMetadata.removeEventListener(MetadataEvent.VALUE_REMOVE, onValueRemove);
 					
-					metadata.removeEventListener(MetadataEvent.FACET_REMOVE, onFacetRemove);
+					parentMetadata.removeEventListener(MetadataEvent.VALUE_REMOVE, onMetadataRemove);
 				}
 				else
 				{
-					// If there's currently no facet set, then remove the listener
-					// that's out to capture the addition of the facet:
-					metadata.removeEventListener(MetadataEvent.FACET_ADD, onFacetAdd);
+					// If there's currently no metadata set, then remove the listener
+					// that's out to capture the addition of the metadata:
+					parentMetadata.removeEventListener(MetadataEvent.VALUE_ADD, onMetadataAdd);
 				}
 				
-				// Now assign the new facet value:
-				currentFacet = facet;
+				// Now assign the new metadata value:
+				currentMetadata = metadata;
 				
-				if (facet)
+				if (metadata)
 				{
-					// Listen to the facet informing us about value changes:
-					facet.addEventListener
-						( FacetValueChangeEvent.VALUE_CHANGE,onFacetValueChange
+					// Listen to the metadata informing us about value changes:
+					metadata.addEventListener
+						( MetadataEvent.VALUE_CHANGE, onValueChange
 						, false, 0, true
 						);
-					facet.addEventListener
-						( FacetValueEvent.VALUE_ADD,onFacetValueAdd
+					metadata.addEventListener
+						( MetadataEvent.VALUE_ADD, onValueAdd
 						, false, 0, true
 						);
-					facet.addEventListener
-						( FacetValueEvent.VALUE_REMOVE,onFacetValueRemove
+					metadata.addEventListener
+						( MetadataEvent.VALUE_REMOVE, onValueRemove
 						, false, 0, true
 						);
 					
-					// Listen to the metadata informing us about the facet being removed:
-					metadata.addEventListener(MetadataEvent.FACET_REMOVE, onFacetRemove);
+					// Listen to the parent metadata informing us about the metadata being removed:
+					parentMetadata.addEventListener(MetadataEvent.VALUE_REMOVE, onMetadataRemove);
 				}
 				else
 				{
-					// If there's currently no facet set, then listen to the metadata
-					// instance informing us about new facets being added:
-					metadata.addEventListener(MetadataEvent.FACET_ADD, onFacetAdd);
+					// If there's currently no metadata set, then listen to the parent metadata
+					// instance informing us about new metadatas being added:
+					parentMetadata.addEventListener(MetadataEvent.VALUE_ADD, onMetadataAdd);
 				}
 			}
 		}
@@ -186,101 +196,102 @@ package org.osmf.metadata
 		// Metadata Handlers
 		//
 		
-		private function onFacetAdd(event:MetadataEvent):void
+		private function onMetadataAdd(event:MetadataEvent):void
 		{
-			// See if this is the facet that we're watching:
-			if (event.facet.namespaceURL.rawUrl == nameSpace.rawUrl)
+			// See if this is the metadata that we're watching:
+			var metadata:Metadata = event.value as Metadata;
+			if (metadata && event.key == namespaceURL)
 			{
-				processWatchedFacetChange(event.facet);
+				processWatchedMetadataChange(metadata);
 				
-				// In case we're watching at the facet level only, then
+				// In case we're watching at the metadata level only, then
 				// trigger the callback:
-				if (identifier == null)
+				if (key == null)
 				{
-					callback(event.facet);
+					callback(metadata);
 				}
 				else
 				{
-					callback(event.facet.getValue(identifier));
+					callback(metadata.getValue(key));
 				}
 			}
 		}
 		
-		private function onFacetRemove(event:MetadataEvent):void
+		private function onMetadataRemove(event:MetadataEvent):void
 		{
-			// See if this is the facet that we're watching:
-			if (event.facet && event.facet.namespaceURL.rawUrl == nameSpace.rawUrl)
+			// See if this is the metadata that we're watching:
+			var metadata:Metadata = event.value as Metadata;
+			if (metadata && event.key == namespaceURL)
 			{
-				processWatchedFacetChange(null);
+				processWatchedMetadataChange(null);
 				
 				callback(undefined);
 			}
 		}
 		
-		// Facet Handlers
+		// Value Handlers
 		//
 		
-		private function onFacetValueChange(event:FacetValueChangeEvent):void
+		private function onValueChange(event:MetadataEvent):void
 		{
-			if (identifier)
+			if (key)
 			{
 				// We're watching a specific value: only invoke the callback
 				// if this is 'our' value that is changing:
-				if (identifier.equals(event.identifier))
+				if (key == event.key)
 				{
 					callback(event.value);
 				}	
 			}
 			else
 			{
-				// We're watching the entire facet: invoke callback:
-				callback(event.target as IFacet);
+				// We're watching the entire metadata: invoke callback:
+				callback(event.target as Metadata);
 			}
 		}
 		
-		private function onFacetValueAdd(event:FacetValueEvent):void
+		private function onValueAdd(event:MetadataEvent):void
 		{
-			if (identifier)
+			if (key)
 			{
 				// We're watching a specific value: only invoke the callback
 				// if this is 'our' value that is being added:
-				if (identifier.equals(event.identifier))
+				if (key == event.key)
 				{
 					callback(event.value);
 				}	
 			}
 			else
 			{
-				// We're watching the entire facet: invoke callback:
-				callback(event.target as IFacet);
+				// We're watching the entire metadata: invoke callback:
+				callback(event.target as Metadata);
 			}
 		}
 		
-		private function onFacetValueRemove(event:FacetValueEvent):void
+		private function onValueRemove(event:MetadataEvent):void
 		{
-			if (identifier)
+			if (key)
 			{
 				// We're watching a specific value: only invoke the callback
 				// if this is 'our' value that is being removed:
-				if (identifier.equals(event.identifier))
+				if (key == event.key)
 				{
 					callback(undefined);
 				}	
 			}
 			else
 			{
-				// We're watching the entire facet: invoke callback:
-				callback(event.target as IFacet);
+				// We're watching the entire metadata: invoke callback:
+				callback(event.target as Metadata);
 			}
 		}
 		
-		private var metadata:Metadata;
-		private var nameSpace:URL;
-		private var identifier:IIdentifier;
+		private var parentMetadata:Metadata;
+		private var namespaceURL:String;
+		private var key:String;
 		private var callback:Function;
 		
-		private var currentFacet:IFacet;
+		private var currentMetadata:Metadata;
 		private var watching:Boolean;
-		
 	}
 }

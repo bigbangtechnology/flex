@@ -22,6 +22,7 @@ import flex.ant.config.RepeatableConfigString;
 import flex.ant.types.DefaultScriptLimits;
 import flex.ant.types.DefaultSize;
 import flex.ant.types.FlexFileSet;
+import flex.ant.types.FlexSwcFileSet;
 import flex.ant.types.Fonts;
 import flex.ant.types.Metadata;
 import flex.ant.types.RuntimeSharedLibraryPath;
@@ -34,7 +35,36 @@ import java.util.Iterator;
 import java.io.File;
 
 /**
- *
+ * Implements the &lt;compc&gt; Ant task.  For example:
+ * <p>
+ * <pre>
+ *     &lt;compc fork="true" 
+ *            output="${FLEX_HOME}/frameworks/libs/sparkskins.swc"
+ *            resource-bundle-list="${basedir}/bundles.properties"&gt;
+ *         &lt;target-player&gt;10&lt;/target-player&gt;
+ *         &lt;jvmarg line="${compc.jvm.args}"/&gt;
+ *         &lt;include-classes&gt;SparkSkinsClasses&lt;/include-classes&gt;
+ *         &lt;source-path path-element="${basedir}/src"/&gt;
+ *         &lt;library-path/&gt;
+ *         &lt;external-library-path dir="${FLEX_HOME}/frameworks/libs"&gt;
+ *             &lt;include name="player/${local.playerglobal.version}/playerglobal.swc"/&gt;
+ *             &lt;include name="framework.swc"/&gt;
+ *             &lt;include name="spark.swc" /&gt;
+ *             &lt;include name="textLayout.swc"/&gt;
+ *         &lt;/external-library-path&gt;
+ *         &lt;locale/&gt;
+ *         &lt;accessible&gt;true&lt;/accessible&gt;
+ *     &lt;/compc&gt;
+ * </pre>
+ * <p>
+ * All the simple compc configuration parameters are supported as tag
+ * attributes.  Complex configuration options, like
+ * -compiler.namespaces.namespace, are implemented as child tags.  For
+ * example:
+ * <p>
+ * </code>
+ *     &lt;namespace uri="http://www.adobe.com/2006/mxml" manifest="${basedir}/manifest.xml"/&gt;
+ * </code>
  */
 public final class CompcTask extends FlexTask implements DynamicConfigurator
 {
@@ -89,8 +119,10 @@ public final class CompcTask extends FlexTask implements DynamicConfigurator
             new ConfigBoolean(new OptionSpec("compiler", "accessible")),
             new ConfigBoolean(new OptionSpec("compiler", "debug")),
             new ConfigBoolean(new OptionSpec("compiler", "incremental")), 
+            new ConfigBoolean(new OptionSpec("compiler", "mobile")),
             new ConfigBoolean(new OptionSpec("compiler", "optimize")),
             new ConfigBoolean(new OptionSpec("compiler", "report-invalid-styles-as-warnings")),
+            new ConfigBoolean(new OptionSpec("compiler", "report-missing-required-skin-parts-as-warnings")),
             new ConfigBoolean(new OptionSpec("compiler", "show-actionscript-warnings")),
             new ConfigBoolean(new OptionSpec("compiler", "show-binding-warnings")),
             new ConfigBoolean(new OptionSpec("compiler", "show-deprecation-warnings")),
@@ -148,9 +180,13 @@ public final class CompcTask extends FlexTask implements DynamicConfigurator
             new ConfigBoolean(new OptionSpec("compiler", "warn-unlikely-function-value")),
             new ConfigBoolean(new OptionSpec("compiler", "warn-xml-class-has-changed")),
             new ConfigBoolean(new OptionSpec("compiler", "generate-abstract-syntax-tree")),
+            new ConfigBoolean(new OptionSpec("include-inheritance-dependencies-only")),
             new ConfigBoolean(new OptionSpec("include-lookup-only")),
             new ConfigBoolean(new OptionSpec("compute-digest")),
             new ConfigBoolean(new OptionSpec(null, "static-link-runtime-shared-libraries", "static-rsls")),
+            new ConfigBoolean(new OptionSpec("use-direct-blit")),
+            new ConfigBoolean(new OptionSpec("use-gpu")),
+            
             //String Variables
             new ConfigString(new OptionSpec("compiler", "actionscript-file-encoding")),
             new ConfigString(new OptionSpec("compiler", "context-root")),
@@ -163,6 +199,7 @@ public final class CompcTask extends FlexTask implements DynamicConfigurator
             new ConfigString(new OptionSpec("load-externs")),
             new ConfigString(new OptionSpec("raw-metadata")),
             new ConfigString(new OptionSpec("resource-bundle-list")),
+            new ConfigString(new OptionSpec("size-report")),
             new ConfigString(new OptionSpec("target-player")),
             new ConfigString(new OptionSpec("compiler", "minimum-supported-version", "msv")),
             new ConfigString(new OptionSpec("compiler", "enable-swc-version-filtering", "esvf")),
@@ -170,7 +207,8 @@ public final class CompcTask extends FlexTask implements DynamicConfigurator
 
             //Int Variables
             new ConfigInt(new OptionSpec("default-background-color")),
-            new ConfigInt(new OptionSpec("default-frame-rate"))
+            new ConfigInt(new OptionSpec("default-frame-rate")),
+            new ConfigInt(new OptionSpec("swf-version"))
         });
 
         nestedAttribs = new ArrayList<OptionSource>();
@@ -220,7 +258,7 @@ public final class CompcTask extends FlexTask implements DynamicConfigurator
     public Fonts createFonts()
     {
         if (fonts == null)
-            return fonts = new Fonts();
+            return fonts = new Fonts(this);
         else
             throw new BuildException("Only one nested <fonts> element is allowed in an <compc> task.");
     }
@@ -267,7 +305,7 @@ public final class CompcTask extends FlexTask implements DynamicConfigurator
             return createElem(new String[] { "name", "value" }, ccSpec);
         }
         else if (lcSpec.matches(name)) {
-            return createElem("filename", lcSpec);
+        	return createElemAllowAppend(new String[] {"filename"} , lcSpec);
         }
         else if (spSpec.matches(name)) {
             return createElem("path-element", spSpec);
@@ -285,17 +323,17 @@ public final class CompcTask extends FlexTask implements DynamicConfigurator
                 throw new BuildException("Only one nested <default-size> element is allowed in an <compc> task.");
         }
         else if (elSpec.matches(name)) {
-            FlexFileSet fs = new FlexFileSet(elSpec, true);
+            FlexFileSet fs = new FlexSwcFileSet(elSpec, true);
             nestedFileSets.add(fs);
             return fs;
         }
         else if (ilSpec.matches(name)) {
-            FlexFileSet fs = new FlexFileSet(ilSpec, true);
+            FlexFileSet fs = new FlexSwcFileSet(ilSpec, true);
             nestedFileSets.add(fs);
             return fs;
         }
         else if (lpSpec.matches(name)) {
-            FlexFileSet fs = new FlexFileSet(lpSpec, true);
+            FlexFileSet fs = new FlexSwcFileSet(lpSpec, true);
             nestedFileSets.add(fs);
             return fs;
         }
@@ -315,7 +353,7 @@ public final class CompcTask extends FlexTask implements DynamicConfigurator
             return createElem(new String[] { "name", "path" }, ifSpec);   
         }
         else if (insSpec.matches(name)) {
-            return createElem("uri", insSpec);
+            return createElemAllowAppend(new String[] { "uri" }, insSpec);
         }
         else if (isSpec.matches(name)) {
             FlexFileSet fs = new FlexFileSet(isSpec, true);

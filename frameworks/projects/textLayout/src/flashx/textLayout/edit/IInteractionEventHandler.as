@@ -1,3 +1,13 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
+//
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
+//
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit
 {
 	import flash.events.ContextMenuEvent;
@@ -73,6 +83,15 @@ package flashx.textLayout.edit
  		 * @langversion 3.0
 		 */
 		function imeStartCompositionHandler(event:IMEEvent):void;
+		
+		/** 
+		 * Processes an softKeyboardActivating event
+		 * 
+		 * @playerversion Flash 10.2
+		 * @playerversion AIR 1.5
+ 		 * @langversion 3.0
+		 */
+		function softKeyboardActivatingHandler(event:Event):void;
 		
 		/** 
 		 * Processes a mouseDown event.

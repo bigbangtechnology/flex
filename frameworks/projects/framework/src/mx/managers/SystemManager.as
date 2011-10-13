@@ -21,6 +21,7 @@ import flash.display.MovieClip;
 import flash.display.Sprite;
 import flash.display.Stage;
 import flash.display.StageAlign;
+import flash.display.StageQuality;
 import flash.display.StageScaleMode;
 import flash.events.Event;
 import flash.events.EventDispatcher;
@@ -50,6 +51,7 @@ import mx.core.IFlexModuleFactory;
 import mx.core.IInvalidating;
 import mx.core.IRawChildrenContainer;
 import mx.core.IUIComponent;
+import mx.core.RSLData;
 import mx.core.RSLItem;
 import mx.core.Singleton;
 import mx.core.mx_internal;
@@ -60,6 +62,7 @@ import mx.events.Request;
 import mx.events.ResizeEvent;
 import mx.events.SandboxMouseEvent;
 import mx.preloaders.Preloader;
+import mx.utils.DensityUtil;
 import mx.utils.LoaderUtil;
 
 // NOTE: Minimize the non-Flash classes you import here.
@@ -219,6 +222,13 @@ public class SystemManager extends MovieClip
      */
     public function SystemManager()
     {
+        CONFIG::performanceInstrumentation
+        {
+            var perfUtil:mx.utils.PerfUtil = mx.utils.PerfUtil.getInstance();
+            perfUtil.startSampling("Application Startup", true /*absoluteTime*/);
+            perfUtil.markTime("SystemManager c-tor");
+        }
+
         super();
 
         // Loaded SWFs don't get a stage right away
@@ -227,6 +237,7 @@ public class SystemManager extends MovieClip
         {
             stage.scaleMode = StageScaleMode.NO_SCALE;
             stage.align = StageAlign.TOP_LEFT;
+            stage.quality = StageQuality.HIGH;
         }
 
         // If we don't have a stage then we are not top-level,
@@ -264,7 +275,18 @@ public class SystemManager extends MovieClip
 
         if (currentFrame + 1 <= framesLoaded)
         {
+            CONFIG::performanceInstrumentation
+            {
+                var perfUtil:mx.utils.PerfUtil = mx.utils.PerfUtil.getInstance();
+                perfUtil.markTime("SystemManager.nextFrame().start");
+            }
+
             nextFrame();
+
+            CONFIG::performanceInstrumentation
+            {
+                perfUtil.markTime("SystemManager.nextFrame().end");
+            }
         }
         else
         {
@@ -417,6 +439,33 @@ public class SystemManager extends MovieClip
      */
     private var readyForKickOff:Boolean;
 
+    /**
+     *  @private
+     * 
+     *  This variable exists only to provide a reference to this 
+     *  app's resource bundles. This application is opting
+     *  into referencing its own resource bundles so the
+     *  ResourceManager does not need to do it. This 
+     *  arrangement keeps the ResourceManager from pinning
+     *  the application in memory. 
+     * 
+     *  If this is the main app, then this variable will be null.
+     *  If this is a sub-app then ResourceManagerImpl set 
+     *  this variable to the apps resource bundles. This variable 
+     *  is public so it is visible to ResourceManagerImpl but starts
+     *  with an underscore to hint that it is an implementation detail 
+     *  and should not be relied on. 
+     */
+    public var _resourceBundles:Array;
+
+    /**
+     *  @private
+     *  Array of RSLData objects that represent the list of RSLs this
+     *  module factory is loading. Each element of the Array is an 
+     *  Array of RSLData.
+     */ 
+    private var rslDataList:Array
+    
     //--------------------------------------------------------------------------
     //
     //  Overridden properties: DisplayObject
@@ -547,6 +596,66 @@ public class SystemManager extends MovieClip
     //--------------------------------------------------------------------------
 
     //----------------------------------
+    //  allowDomainsInNewRSLs
+    //----------------------------------
+    
+    /**
+     *  @private
+     */ 
+    private var _allowDomainsInNewRSLs:Boolean = true;
+    
+    /**
+     *  @inheritDoc
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10.2
+     *  @playerversion AIR 2.6
+     *  @productversion Flex 4.5
+     */   
+    public function get allowDomainsInNewRSLs():Boolean
+    {
+        return _allowDomainsInNewRSLs;
+    }
+    
+    /**
+     *  @private
+     */ 
+    public function set allowDomainsInNewRSLs(value:Boolean):void
+    {
+        _allowDomainsInNewRSLs = value;
+    }
+    
+    //----------------------------------
+    //  allowInsecureDomainsInNewRSLs
+    //----------------------------------
+    
+    /**
+     *  @private
+     */ 
+    private var _allowInsecureDomainsInNewRSLs:Boolean = true;
+    
+    /**
+     *  @inheritDoc
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10.2
+     *  @playerversion AIR 2.6
+     *  @productversion Flex 4.5
+     */   
+    public function get allowInsecureDomainsInNewRSLs():Boolean
+    {
+        return _allowInsecureDomainsInNewRSLs;
+    }
+    
+    /**
+     *  @private
+     */ 
+    public function set allowInsecureDomainsInNewRSLs(value:Boolean):void
+    {
+        _allowInsecureDomainsInNewRSLs = value;
+    }
+    
+    //----------------------------------
     //  application
     //----------------------------------
 
@@ -660,6 +769,44 @@ public class SystemManager extends MovieClip
         _cursorIndex = value;
     }
 
+    //----------------------------------
+    //  densityScale
+    //----------------------------------
+    
+    /**
+     *  @private
+     *  Storage for the densityScale property 
+     */
+    private var _densityScale:Number = NaN;
+    
+    /**
+     *  The density scale factor of the application.
+     * 
+     *  When density scaling is enabled, Flex applies a scale factor based on
+     *  the application author density and the density of the current device
+     *  that Flex is running on. 
+     * 
+     *  Returns 1.0 when there is no scaling.
+     * 
+     *  @see spark.components.Application#applicationDPI
+     *  @see mx.core.DensityUtil
+     * 
+     *  @private
+     */
+    mx_internal function get densityScale():Number
+    {
+        if (isNaN(_densityScale))
+        {    
+            var applicationDPI:Number = info()["applicationDPI"];
+            var runtimeDPI:Number = DensityUtil.getRuntimeDPI();
+            _densityScale = DensityUtil.getDPIScale(applicationDPI, runtimeDPI);
+            if (isNaN(_densityScale))
+                _densityScale = 1;
+        }
+
+        return _densityScale;
+    }
+    
     //----------------------------------
     //  document
     //----------------------------------
@@ -992,16 +1139,33 @@ public class SystemManager extends MovieClip
     //----------------------------------
     
     /**
-     *  The RSLs loaded by this SystemManager before the application 
-     *  starts. RSLs loaded by the application are not included in this list.
-     * 
-     *  Information about preloadedRSLs is stored in a Dictionary. The key is
-     *  the RSL's LoaderInfo. The value is the url the RSL was loaded from.
+     *  @inheritDoc 
+     *  
      */
     public function  get preloadedRSLs():Dictionary
     {
         // Overridden by compiler generate code.
         return null;                
+    }
+    
+    /**
+     *  @inheritDoc 
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 9
+     *  @playerversion AIR 1.1
+     *  @productversion Flex 4.5
+     */ 
+    public function addPreloadedRSL(loaderInfo:LoaderInfo, rsl:Vector.<RSLData>):void
+    {
+        preloadedRSLs[loaderInfo] = rsl;
+        if (hasEventListener(RSLEvent.RSL_ADD_PRELOADED))
+        {
+            var rslEvent:RSLEvent = new RSLEvent(RSLEvent.RSL_ADD_PRELOADED);
+            rslEvent.loaderInfo = loaderInfo;
+            dispatchEvent(rslEvent);
+        }
+        
     }
     
     //----------------------------------
@@ -1811,10 +1975,16 @@ public class SystemManager extends MovieClip
      */
     mx_internal function initialize():void
     {
+        var runtimeDPIProviderClass:Class = info()["runtimeDPIProvider"] as Class;
+        if (runtimeDPIProviderClass)
+            Singleton.registerClass("mx.core::RuntimeDPIProvider", runtimeDPIProviderClass);
+        
         if (isStageRoot)
         {
-            _width = stage.stageWidth;
-            _height = stage.stageHeight;
+            // TODO: Finalize scaling behavior
+            Stage_resizeHandler();
+            // _width = stage.stageWidth;
+            // _height = stage.stageHeight;
         }
         else
         {
@@ -1858,31 +2028,37 @@ public class SystemManager extends MovieClip
         var preloaderDisplayClass:Class = info()["preloader"] as Class;
 
         // Put cross-domain RSL information in the RSL list.
-        var rslList:Array = [];
+        var rslItemList:Array = [];
         var n:int;
         var i:int;
         if (cdRsls && cdRsls.length > 0)
         {
+            if (isTopLevel())
+                rslDataList = cdRsls;
+            else
+                rslDataList = LoaderUtil.processRequiredRSLs(this, cdRsls);
+            
             var normalizedURL:String = LoaderUtil.normalizeURL(this.loaderInfo);
             var crossDomainRSLItem:Class = Class(getDefinitionByName("mx.core::CrossDomainRSLItem"));
-            n = cdRsls.length;
+            n = rslDataList.length;
             for (i = 0; i < n; i++)
             {
+                var rslWithFailovers:Array = rslDataList[i];
+
                 // If crossDomainRSLItem is null, then this is a compiler error. It should not be null.
-                var cdNode:Object = new crossDomainRSLItem(cdRsls[i]["rsls"],
-                                                    cdRsls[i]["policyFiles"],
-                                                    cdRsls[i]["digests"],
-                                                    cdRsls[i]["types"],
-                                                    cdRsls[i]["isSigned"],
+                var cdNode:Object = new crossDomainRSLItem(rslWithFailovers,
                                                     normalizedURL,
                                                     this);
-                rslList.push(cdNode);               
+                rslItemList.push(cdNode);               
             }
         }
 
         // Append RSL information in the RSL list.
         if (rsls != null && rsls.length > 0)
         {
+            if (rslDataList == null)
+                rslDataList = [];
+            
             if (normalizedURL == null)
                 normalizedURL = LoaderUtil.normalizeURL(this.loaderInfo);
 
@@ -1892,7 +2068,9 @@ public class SystemManager extends MovieClip
                 var node:RSLItem = new RSLItem(rsls[i].url, 
                                                normalizedURL,
                                                this);
-                rslList.push(node);
+                rslItemList.push(node);
+                rslDataList.push([new RSLData(rsls[i].url, null, null, null, 
+                                  false, false, "current")]);
             }
         }
 
@@ -1920,12 +2098,10 @@ public class SystemManager extends MovieClip
             isStageRoot ? stage.stageHeight : loaderInfo.height,
             null,
             null,
-            rslList,
+            rslItemList,
             resourceModuleURLs,
             domain);
     }
-
-
 
     //--------------------------------------------------------------------------
     //
@@ -2363,6 +2539,12 @@ public class SystemManager extends MovieClip
      */
     private function initHandler(event:Event):void
     {
+        CONFIG::performanceInstrumentation
+        {
+            var perfUtil:mx.utils.PerfUtil = mx.utils.PerfUtil.getInstance();
+            perfUtil.markTime("SystemManager.initHandler().start");
+        }
+        
         // we can still be the top level root if we can access our
         // parent and get a positive response to the query or
         // or there is not a listener for the new application event
@@ -2392,19 +2574,6 @@ public class SystemManager extends MovieClip
         if (!SystemManagerGlobals.parameters)
             SystemManagerGlobals.parameters = loaderInfo.parameters;
 
-        // This listener is intended to run before any other KeyboardEvent listeners
-        // so that it can redispatch a cancelable=true copy of the event. 
-        if (getSandboxRoot() == this)
-        {
-            addEventListener(KeyboardEvent.KEY_DOWN, keyDownHandler, true, 1000);
-            addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler, true, 1000);
-        }
-        if (isTopLevelRoot() && stage)
-        {
-            stage.addEventListener(KeyboardEvent.KEY_DOWN, keyDownHandler, false, 1000);
-            stage.addEventListener(MouseEvent.MOUSE_WHEEL, mouseWheelHandler, false, 1000);
-        }
-
         var docFrame:int = (totalFrames == 1)? 0 : 1;
         addEventListener(Event.ENTER_FRAME, docFrameListener);
 
@@ -2417,7 +2586,11 @@ public class SystemManager extends MovieClip
         */
 
         initialize();
-        
+
+        CONFIG::performanceInstrumentation
+        {
+            perfUtil.markTime("SystemManager.initHandler().end");
+        }
     }
 
     private function docFrameListener(event:Event):void
@@ -2495,7 +2668,14 @@ public class SystemManager extends MovieClip
         // Add the application as child 1.
         noTopMostIndex++;
         super.addChildAt(DisplayObject(app), 1);
-        
+
+        CONFIG::performanceInstrumentation
+        {
+            var perfUtil:mx.utils.PerfUtil = mx.utils.PerfUtil.getInstance();
+            perfUtil.markTime("APPLICATION_COMPLETE");
+            perfUtil.finishSampling("Application Startup");
+        }
+
         // Dispatch the applicationComplete event from the Application
         // and then agaom from the SystemManager
         // (so that loading apps know we're done).
@@ -2509,8 +2689,18 @@ public class SystemManager extends MovieClip
      */
     private function preloader_rslCompleteHandler(event:RSLEvent):void
     {
-        if (event.loaderInfo)
-            preloadedRSLs[event.loaderInfo] = event.url.url;
+        if (!event.isResourceModule && event.loaderInfo)
+        {
+            var rsl:Vector.<RSLData> = Vector.<RSLData>(rslDataList[event.rslIndex]);
+            var moduleFactory:IFlexModuleFactory = this;
+            if (rsl && rsl[0].moduleFactory)
+                moduleFactory = rsl[0].moduleFactory; 
+
+            if (moduleFactory == this)
+                preloadedRSLs[event.loaderInfo] =  rsl;
+            else
+                moduleFactory.addPreloadedRSL(event.loaderInfo, rsl);
+        }
     }
     
     /**
@@ -2549,6 +2739,12 @@ public class SystemManager extends MovieClip
         if (document)
             return;
 
+        CONFIG::performanceInstrumentation
+        {
+            var perfUtil:mx.utils.PerfUtil = mx.utils.PerfUtil.getInstance();
+            perfUtil.markTime("SystemManager.kickOff().start");
+        }
+        
         if (!isTopLevel())
             SystemManagerGlobals.topLevelSystemManagers[0].
                 // dispatch a FocusEvent so we can pass ourselves along
@@ -2615,9 +2811,19 @@ public class SystemManager extends MovieClip
             var n:int = mixinList.length;
             for (var i:int = 0; i < n; ++i)
             {
+                CONFIG::performanceInstrumentation
+                {
+                    var token:int = perfUtil.markStart();
+                }
+                
                 // trace("initializing mixin " + mixinList[i]);
                 var c:Class = Class(getDefinitionByName(mixinList[i]));
                 c["init"](this);
+
+                CONFIG::performanceInstrumentation
+                {
+                    perfUtil.markEnd(mixinList[i], token);
+                }
             }
         }
         
@@ -2632,6 +2838,12 @@ public class SystemManager extends MovieClip
         if (c)
         {
             registerImplementation("mx.managers::IMarshalSystemManager", new c(this));
+        }
+
+        CONFIG::performanceInstrumentation
+        {
+            // Finish here, since initializeTopLevelWidnow is instrumented separately???
+            perfUtil.markTime("SystemManager.kickOff().end");
         }
 
         initializeTopLevelWindow(null);
@@ -2678,14 +2890,37 @@ public class SystemManager extends MovieClip
         }
     }
     
-    private function mouseWheelHandler(e:MouseEvent):void
+    /**
+     *  @private 
+     *  Similar to keyDownHandler above.  We want to re-dispatch 
+     *  mouse events that are cancellable.  Currently we are only doing 
+     *  this for a few mouse events and not all of them (MOUSE_WHEEL and 
+     *  MOUSE_DOWN).
+     */
+    private function mouseEventHandler(e:MouseEvent):void
     {
         if (!e.cancelable)
         {
             e.stopImmediatePropagation();
-            var cancelableEvent:MouseEvent = 
-                new MouseEvent(e.type, e.bubbles, true, e.localX, e.localY, e.relatedObject, 
-                               e.ctrlKey, e.altKey, e.shiftKey, e.buttonDown, e.delta);
+            var cancelableEvent:MouseEvent = null;
+            if ("clickCount" in e)
+            {
+                // AIR MouseEvent. We need to use a constructor so we can
+                // pass in clickCount because it is a read-only property.
+                var mouseEventClass:Class = MouseEvent;
+                
+                cancelableEvent = new mouseEventClass(e.type, e.bubbles, true, e.localX,
+                                e.localY, e.relatedObject, e.ctrlKey, e.altKey,
+                                e.shiftKey, e.buttonDown, e.delta, 
+                                e["commandKey"], e["controlKey"], e["clickCount"]);
+            }
+            else
+            {
+                cancelableEvent = new MouseEvent(e.type, e.bubbles, true, e.localX, 
+                                 e.localY, e.relatedObject, e.ctrlKey, e.altKey,
+                                 e.shiftKey, e.buttonDown, e.delta);
+            }
+            
             e.target.dispatchEvent(cancelableEvent);               
         }
     }
@@ -2730,6 +2965,21 @@ public class SystemManager extends MovieClip
      */
     private function initializeTopLevelWindow(event:Event):void
     {
+        // This listener is intended to run before any other KeyboardEvent listeners
+        // so that it can redispatch a cancelable=true copy of the event. 
+        if (getSandboxRoot() == this)
+        {
+            addEventListener(KeyboardEvent.KEY_DOWN, keyDownHandler, true, 1000);
+            addEventListener(MouseEvent.MOUSE_WHEEL, mouseEventHandler, true, 1000);
+            addEventListener(MouseEvent.MOUSE_DOWN, mouseEventHandler, true, 1000);
+        }
+        if (isTopLevelRoot() && stage)
+        {
+            stage.addEventListener(KeyboardEvent.KEY_DOWN, keyDownHandler, false, 1000);
+            stage.addEventListener(MouseEvent.MOUSE_WHEEL, mouseEventHandler, false, 1000);
+            stage.addEventListener(MouseEvent.MOUSE_DOWN, mouseEventHandler, false, 1000);
+        }
+        
         // Parent may be null if in another sandbox and don't have
         // access to our parent.  Add a check for this case.
         if (!parent && parentAllowsChild)
@@ -2785,8 +3035,11 @@ public class SystemManager extends MovieClip
         {
             // stageWidth/stageHeight may have changed between initialize() and now,
             // so refresh our _width and _height here. 
-            _width = stage.stageWidth;
-            _height = stage.stageHeight;
+
+            // TODO: finalize scaling behavior
+            Stage_resizeHandler();
+            //_width = stage.stageWidth;
+            //_height = stage.stageHeight;
             
             // Detect and account for special case where our stage in some 
             // contexts has not actually been initialized fully, as is the 
@@ -2960,8 +3213,17 @@ public class SystemManager extends MovieClip
 
         if (isStageRoot)
         {
-            _width = stage.stageWidth;
-            _height = stage.stageHeight;
+            var scale:Number = densityScale;
+            
+            root.scaleX = root.scaleY = scale;
+            _width = stage.stageWidth / scale;
+            _height = stage.stageHeight / scale;
+            
+            // Update the screen
+            _screen.x /= scale;
+            _screen.y /= scale;
+            _screen.width /= scale;
+            _screen.height /= scale;
         }
 
         if (event)
@@ -2972,7 +3234,7 @@ public class SystemManager extends MovieClip
             isDispatchingResizeEvent = false;
         }
     }
-
+    
     /**
      *  @private
      * 
@@ -3258,20 +3520,27 @@ public class SystemManager extends MovieClip
      *  @playerversion AIR 1.1
      *  @productversion Flex 3
      */
-    public function getVisibleApplicationRect(bounds:Rectangle = null):Rectangle
+    public function getVisibleApplicationRect(bounds:Rectangle = null, skipToSandboxRoot:Boolean = false):Rectangle
     {
         if (hasEventListener("getVisibleApplicationRect"))
         {
             var request:Request = new Request("getVisibleApplicationRect", false, true);
+			request.value = { bounds: bounds, skipToSandboxRoot: skipToSandboxRoot };
             if (!dispatchEvent(request)) 
                 return Rectangle(request.value);
         }
         
+		if (skipToSandboxRoot && !topLevel)
+			return topLevelSystemManager.getVisibleApplicationRect(bounds, skipToSandboxRoot);
+		
         if (!bounds)
         {
             bounds = getBounds(DisplayObject(this));
         
-            var s:Rectangle = screen;        
+            var sandboxRoot:DisplayObject = getSandboxRoot();
+            var s:Rectangle = screen.clone();
+            s.topLeft = sandboxRoot.localToGlobal(screen.topLeft);
+            s.bottomRight = sandboxRoot.localToGlobal(screen.bottomRight);
             var pt:Point = new Point(Math.max(0, bounds.x), Math.max(0, bounds.y));
             pt = localToGlobal(pt);
             bounds.x = pt.x;
@@ -3280,6 +3549,16 @@ public class SystemManager extends MovieClip
             bounds.height = s.height;
         }
         
+		if (!topLevel)
+		{
+			var obj:DisplayObjectContainer = parent.parent;
+			
+			if ("getVisibleApplicationRect" in obj)
+			{
+				var visibleRect:Rectangle = obj["getVisibleApplicationRect"](true);
+				bounds = bounds.intersection(visibleRect);
+			}
+		}
         return bounds;
     }
  
@@ -3308,9 +3587,23 @@ public class SystemManager extends MovieClip
     private function stageEventHandler(event:Event):void
     {
         if (event.target is Stage && mouseCatcher)
+        {
+            // need to fix up the coordinate space before re-dispatching the mouse event  
+            // to put it in the same coordinate space as the mouseCatcher since the 
+            // mouseCatcher may be scaled while outside of the stage, we are not
+            if (event is MouseEvent)
+            {
+                var mouseEvent:MouseEvent = MouseEvent(event);
+                var stagePoint:Point = new Point(mouseEvent.stageX, mouseEvent.stageY);
+                var mouesCatcherLocalPoint:Point = mouseCatcher.globalToLocal(stagePoint);
+                mouseEvent.localX = mouesCatcherLocalPoint.x;
+                mouseEvent.localY = mouesCatcherLocalPoint.y;
+            }
+            
             // dispatch them from mouseCatcher so capture phase listeners on 
             // systemManager will work
             mouseCatcher.dispatchEvent(event);
+        }
     }
 
     /**

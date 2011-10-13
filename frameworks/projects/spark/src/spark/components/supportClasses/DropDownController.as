@@ -310,7 +310,8 @@ public class DropDownController extends EventDispatcher
                 systemManager.getSandboxRoot().addEventListener(Event.RESIZE, systemManager_resizeHandler, false, 0, true);
             }
             
-            openButton.systemManager.getSandboxRoot().addEventListener(MouseEvent.MOUSE_WHEEL, systemManager_mouseWheelHandler);
+			if (openButton && openButton.systemManager)
+            	openButton.systemManager.getSandboxRoot().addEventListener(MouseEvent.MOUSE_WHEEL, systemManager_mouseWheelHandler);
         }
     }
     
@@ -340,7 +341,8 @@ public class DropDownController extends EventDispatcher
                 systemManager.getSandboxRoot().removeEventListener(Event.RESIZE, systemManager_resizeHandler);
             }
             
-            openButton.systemManager.getSandboxRoot().removeEventListener(MouseEvent.MOUSE_WHEEL, systemManager_mouseWheelHandler);
+			if (openButton && openButton.systemManager)
+            	openButton.systemManager.getSandboxRoot().removeEventListener(MouseEvent.MOUSE_WHEEL, systemManager_mouseWheelHandler);
         }
     } 
     
@@ -355,7 +357,7 @@ public class DropDownController extends EventDispatcher
         if (target)
         {
             // check if the target is the openButton or contained within the openButton
-            if (openButton.contains(target))
+            if (openButton && openButton.contains(target))
                 return true;
             if (hitAreaAdditions != null)
             {
@@ -628,7 +630,7 @@ public class DropDownController extends EventDispatcher
     private function systemManager_mouseWheelHandler(event:MouseEvent):void
     {
         // Close the dropDown unless we scrolled over the dropdown and the dropdown handled the event
-        if (!(DisplayObjectContainer(dropDown).contains(DisplayObject(event.target)) && event.isDefaultPrevented()))
+        if (dropDown && !(DisplayObjectContainer(dropDown).contains(DisplayObject(event.target)) && event.isDefaultPrevented()))
             closeDropDown(false);
     }
     

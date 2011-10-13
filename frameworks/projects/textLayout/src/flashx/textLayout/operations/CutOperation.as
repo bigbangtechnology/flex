@@ -1,15 +1,17 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
+	import flashx.textLayout.edit.IMemento;
+	import flashx.textLayout.edit.ModelEdit;
 	import flashx.textLayout.edit.SelectionState;
 	import flashx.textLayout.edit.TextFlowEdit;
 	import flashx.textLayout.edit.TextScrap;
@@ -37,6 +39,7 @@ package flashx.textLayout.operations
 	public class CutOperation extends FlowTextOperation
 	{
 		private var _tScrap:TextScrap;
+		private var _deleteTextOperation:DeleteTextOperation;
 		
 		/** 
 		 * Creates a CutOperation object.
@@ -51,43 +54,28 @@ package flashx.textLayout.operations
 		function CutOperation(operationState:SelectionState, scrapToCut:TextScrap)
 		{
 			super(operationState);
-			_tScrap = scrapToCut;
+			if (absoluteStart < absoluteEnd)
+				_tScrap = scrapToCut;
 		}
 		
 		
 		/** @private */
 		public override function doOperation():Boolean
 		{
-			var beforeOpLen:int = textFlow.textLength;
-			TextFlowEdit.replaceRange(textFlow, absoluteStart, absoluteEnd, null);			
-			if (textFlow.interactionManager)
-				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, -(absoluteEnd - absoluteStart));
-			if (textFlow.textLength == beforeOpLen)
-			{
-				_tScrap = null;
-			}			
-			return true;
+			_deleteTextOperation = new DeleteTextOperation(originalSelectionState);
+			return _deleteTextOperation.doOperation();
 		}
 		
 		/** @private */
 		public override function undo():SelectionState
 		{
-			if (_tScrap != null) 
-			{
-				TextFlowEdit.replaceRange(textFlow, absoluteStart, absoluteStart, _tScrap);
-				if (textFlow.interactionManager)
-					textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, absoluteEnd - absoluteStart);
-			}				
-			return originalSelectionState;	
+			return _deleteTextOperation.undo();
 		}
 	
 		/** @private */
 		public override function redo():SelectionState
 		{
-			TextFlowEdit.replaceRange(textFlow, absoluteStart,absoluteEnd, null);												
-			if (textFlow.interactionManager)
-				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, -(absoluteEnd - absoluteStart));
-			return new SelectionState(textFlow, absoluteStart, absoluteStart, null);
+			return _deleteTextOperation.redo();
 		}
 		
 		/** 

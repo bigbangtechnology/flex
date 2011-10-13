@@ -1,24 +1,27 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
+	import flashx.textLayout.edit.IMemento;
+	import flashx.textLayout.edit.ModelEdit;
+	import flashx.textLayout.edit.PointFormat;
 	import flashx.textLayout.edit.SelectionManager;
 	import flashx.textLayout.edit.SelectionState;
 	import flashx.textLayout.edit.TextFlowEdit;
 	import flashx.textLayout.edit.TextScrap;
 	import flashx.textLayout.elements.FlowLeafElement;
+	import flashx.textLayout.elements.LinkElement;
 	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
 	import flashx.textLayout.tlf_internal;
 	
 	use namespace tlf_internal;
@@ -35,12 +38,9 @@ package flashx.textLayout.operations
 	 */
 	public class DeleteTextOperation extends FlowTextOperation
 	{
-		private var _textScrap:TextScrap;
+		private var _memento:IMemento;
 		private var _allowMerge:Boolean;
-		private var _undoParaFormat:TextLayoutFormatValueHolder;
-		private var _undoCharacterFormat:TextLayoutFormatValueHolder;
-		private var _needsOldFormat:Boolean = false;
-		private var _pendingFormat:TextLayoutFormatValueHolder;
+		private var _pendingFormat:PointFormat;
 		
 		private var _deleteSelectionState:SelectionState = null;
 		/** 
@@ -107,42 +107,13 @@ package flashx.textLayout.operations
 			if (absoluteStart == absoluteEnd)
 				return false;
 				
-			_textScrap = TextFlowEdit.createTextScrap(textFlow, absoluteStart, absoluteEnd);
-			var leafEl:FlowLeafElement = textFlow.findLeaf(absoluteStart);
-			var paraEl:ParagraphElement = leafEl.getParagraph(); 
-			var paraElAbsStart:int = paraEl.getAbsoluteStart();
-			
-			_pendingFormat = new TextLayoutFormatValueHolder(leafEl.format);
+			_pendingFormat = PointFormat.createFromFlowElement(textFlow.findLeaf(absoluteStart));
+			if (_pendingFormat.linkElement)		// don't propagate links or tcy from deleted text
+				_pendingFormat.linkElement = null;
+			if (_pendingFormat.tcyElement)		// don't propagate links or tcy from deleted text
+				_pendingFormat.tcyElement = null;
 						
-			if (_textScrap)
-			{
-				if ((_textScrap.textFlow.textLength == 1) && 
-						((absoluteEnd == (textFlow.textLength - 1)) || (absoluteEnd == (paraElAbsStart + paraEl.textLength))))
-			 	{
-					//special case. Always insert the paragraph
-					_textScrap.beginMissingArray = new Array();
-					_textScrap.endMissingArray = new Array();
-			 	}
-			 	
-			 	if (_textScrap.textFlow.textLength >= 1)
-			 	{
-					//save off the paragraph format of the next paragraph since we will need to set it back
-					//on an undo operation					
-					leafEl = textFlow.findLeaf(absoluteEnd);
-					paraEl = leafEl.getParagraph();
-					if (absoluteEnd == paraEl.getAbsoluteStart())
-					{
-						_undoParaFormat = new TextLayoutFormatValueHolder(paraEl.format);
-						_undoCharacterFormat = new TextLayoutFormatValueHolder(leafEl.format);
-						_needsOldFormat = true;
-					}
-				}
-			} 
-			
-			var beforeOpLen:int = textFlow.textLength;
-			TextFlowEdit.replaceRange(textFlow, absoluteStart, absoluteEnd, null);
-			if (textFlow.interactionManager)
-				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, -(absoluteEnd - absoluteStart));
+			_memento = ModelEdit.deleteText(textFlow, absoluteStart, absoluteEnd, true);
 			
 			if (originalSelectionState.selectionManagerOperationState && textFlow.interactionManager)
 			{
@@ -150,46 +121,27 @@ package flashx.textLayout.operations
 				var state:SelectionState = textFlow.interactionManager.getSelectionState();
 				if (state.anchorPosition == state.activePosition)
 				{
-					state.pointFormat = new TextLayoutFormatValueHolder(_pendingFormat);
+					state.pointFormat = PointFormat.clone(_pendingFormat);
 					textFlow.interactionManager.setSelectionState(state);
 				}
 			}
 
-			// nothing deleted???
-			if (beforeOpLen == textFlow.textLength)
-				_textScrap = null;
 			return true;	
 		}
 		
 		/** @private */
 		public override function undo():SelectionState
 		{
-			if (_textScrap != null) {
-				TextFlowEdit.replaceRange(textFlow, absoluteStart, absoluteStart, _textScrap);
-				if (_needsOldFormat)
-				{
-					textFlow.normalize();
-					var leafEl:FlowLeafElement = textFlow.findLeaf(absoluteEnd);
-					if (leafEl)
-					{
-						var paraEl:ParagraphElement = leafEl.getParagraph();
-						paraEl.format = _undoParaFormat;
-						leafEl.format = _undoCharacterFormat; 
-					}
-					
-				}
-				if (textFlow.interactionManager)
-					textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, absoluteEnd - absoluteStart);
-			}
+			if (_memento)
+				_memento.undo();
 			return originalSelectionState;				
 		}
 	
 		/** @private */
 		public override function redo():SelectionState
 		{
-			TextFlowEdit.replaceRange(textFlow, absoluteStart, absoluteEnd, null);			
-			if (textFlow.interactionManager)
-				textFlow.interactionManager.notifyInsertOrDelete(absoluteStart, -(absoluteEnd - absoluteStart));
+			if (_memento)
+				_memento.redo();
 			return new SelectionState(textFlow,absoluteStart,absoluteStart,_pendingFormat);	
 		}
 

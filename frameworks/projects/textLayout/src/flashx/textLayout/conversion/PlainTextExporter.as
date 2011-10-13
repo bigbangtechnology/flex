@@ -1,38 +1,43 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.conversion
 {
-	import flashx.textLayout.elements.*;
-
+	import flashx.textLayout.elements.FlowLeafElement;
+	import flashx.textLayout.elements.ParagraphElement;
+	import flashx.textLayout.elements.TextFlow;
+	import flashx.textLayout.tlf_internal;
+	
+	use namespace tlf_internal;
+	
 	/** 
-	 * Export filter for plain text format. This class provides an alternative to
-	 * the <code>TextConverter.export()</code> static method for exporting plain text,
-	 * useful if you need to customize the export by changing the paragraphSeparator
-	 * or stripDiscretionaryHyphens options. The PlainTextExporter class's 
-	 * <code>export()</code> method results in the 
+	 * Export converter for plain text format. This class provides an alternative to
+	 * the <code>TextConverter.export()</code> static method for exporting plain text.
+	 *  The PlainTextExporter class's <code>export()</code> method results in the 
 	 * same output string as the <code>TextConverter.export()</code> static method 
-	 * if the two properties of the PlainTextExporter class, the <code>paragraphSeparator</code>
-	 * and the <code>stripDiscretionaryHyphens</code> properties, contain their
+	 * if the two properties of the PlainTextExporter class, the <code>PARAGRAPH_SEPARATOR_PROPERTY</code>
+	 * and the <code>STRIP_DISCRETIONARY_HYPHENS_PROPERTY</code> properties, contain their
 	 * default values of <code>"\n"</code> and <code>true</code>, respectively.
 	 * @includeExample examples\PlainTextExporter_example.as -noswf
 	 * @playerversion Flash 10
 	 * @playerversion AIR 1.5
 	 * @langversion 3.0
 	 */
-	public class PlainTextExporter implements ITextExporter	
+	public class PlainTextExporter extends ConverterBase implements IPlainTextExporter	
 	{
 		private var _stripDiscretionaryHyphens:Boolean;
 		private var _paragraphSeparator:String;
 		
 		static private var _discretionaryHyphen:String = String.fromCharCode(0x00AD);
+		
+
 		
 		/**
 		 * Constructor 
@@ -47,61 +52,31 @@ package flashx.textLayout.conversion
 			_paragraphSeparator = "\n";
 		}
 		 
-		/** This flag indicates whether discretionary hyphens in the text should be stripped during the export process.
-		 * Discretionary hyphens, also known as "soft hyphens", indicate where to break a word in case the word must be
-		 * split between two lines. The Unicode character for discretionary hyphens is <code>\u00AD</code>.
-		 * <p>If the <code>stripDiscretionaryHyphens</code> property is set to <code>true</code>, discretionary hyphens that are in the original text will not be in the exported text, 
-		 * even if they are part of the original text. If <code>false</code>, discretionary hyphens will be in the exported text, 
-		 * The default value is <code>true</code>.</p>
+		/** @copy IPlainTextExporter#stripDiscretionaryHyphens
   		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
-		 * @langversion 3.0
+		 * @langversion 3.0-
 		 */
 		public function get stripDiscretionaryHyphens():Boolean
-		{
-			return _stripDiscretionaryHyphens;
-			
-		}
+		{ return _stripDiscretionaryHyphens; }
 		public function set stripDiscretionaryHyphens(value:Boolean):void
-		{
-			_stripDiscretionaryHyphens = value;
-		}
+		{ _stripDiscretionaryHyphens = value; }
 
-		/** Specifies the character sequence used (in a text flow's plain-text equivalent) to separate paragraphs.
-	    	 * The paragraph separator is not added after the last paragraph. The default value is "\n". 
-  		 * @playerversion Flash 10
+		/** @copy IPlainTextExporter#paragraphSeparator
+ 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
 		 * @langversion 3.0
 		 */
 		public function get paragraphSeparator():String
 		{ return _paragraphSeparator; }
 		public function set paragraphSeparator(value:String):void
-		{
-			_paragraphSeparator = value;
-		}
+		{ _paragraphSeparator = value; }
 
-		/** 
-		 * Export the contents of a TextFlow object to plain text.
-		 * The values of the <code>paragraphSeparator</code>
-		 * and the <code>stripDiscretionaryHyphens</code> properties
-		 * affect the output produced by this method.
-		 * @param source	the text flow object to export
-		 * @param conversionType 	The type to return (STRING_TYPE). This 
-		 * parameter accepts only one value: <code>ConversionType.STRING_TYPE</code>,
-		 * but is necessary because this class implements the ITextExporter
-		 * interface. The interface method, <code>ITextExporter.export()</code>, requires 
-		 * this parameter.
-		 * @return Object	the exported content
-		 * 
-		 * @see #paragraphSeparator
-		 * @see #stripDiscretionaryHyphens
-		 * @see ConversionType#STRING_TYPE
-  		 * @playerversion Flash 10
-		 * @playerversion AIR 1.5
-		 * @langversion 3.0
+		/** @copy ITextExporter#export()
 		 */
 		public function export(source:TextFlow, conversionType:String):Object
 		{
+			clear();
 			if (conversionType == ConversionType.STRING_TYPE)
 				return exportToString(source);
 			return null;
@@ -144,7 +119,17 @@ package flashx.textLayout.conversion
             	if (leaf) // not the last para
                    	rslt += _paragraphSeparator; 
    			}
+			
+			if (useClipboardAnnotations)
+			{
+				// Append a final paragraph separator if the last paragraph is not marked as a partial element
+				var lastPara:ParagraphElement = source.getLastLeaf().getParagraph();
+				if (lastPara.getStyle(ConverterBase.MERGE_TO_NEXT_ON_PASTE) != "true")
+					rslt += _paragraphSeparator;
+				
+			}
    			return rslt;
 		}
- 	}
+	}
+		
 }

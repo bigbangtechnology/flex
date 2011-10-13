@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit {
 	import flash.geom.Point;
 	import flash.geom.Rectangle;
@@ -26,7 +26,10 @@ package flashx.textLayout.edit {
 	import flashx.textLayout.formats.BlockProgression;
 	import flashx.textLayout.formats.IMEStatus;
 	import flashx.textLayout.formats.ITextLayoutFormat;
-	import flashx.textLayout.operations.ApplyElementUserStyleOperation;
+	import flashx.textLayout.formats.TextLayoutFormat;
+	import flashx.textLayout.operations.ApplyFormatToElementOperation;
+	import flashx.textLayout.operations.DeleteTextOperation;
+	import flashx.textLayout.operations.FlowOperation;
 	import flashx.textLayout.operations.InsertTextOperation;
 	import flashx.textLayout.tlf_internal;
 	import flashx.textLayout.utils.GeometryUtil;
@@ -103,7 +106,9 @@ package flashx.textLayout.edit {
 		{
  		    var leaf:FlowLeafElement = _editManager.textFlow.findLeaf(selState.absoluteStart);;
 		    var leafAbsoluteStart:int = leaf.getAbsoluteStart();
-			_editManager.doOperation(new ApplyElementUserStyleOperation(selState, leaf, IMEStatus.IME_CLAUSE, clause.toString(), selState.absoluteStart - leafAbsoluteStart, selState.absoluteEnd - leafAbsoluteStart));
+			var format:TextLayoutFormat = new TextLayoutFormat();
+			format.setStyle(IMEStatus.IME_CLAUSE, clause.toString());
+			_editManager.doOperation(new ApplyFormatToElementOperation(selState, leaf, format, selState.absoluteStart - leafAbsoluteStart, selState.absoluteEnd - leafAbsoluteStart));
 		}
 		
 		private function doIMEStatusOperation(selState:SelectionState, attrRange:CompositionAttributeRange):void
@@ -133,8 +138,55 @@ package flashx.textLayout.edit {
     		var leaf:FlowLeafElement = _editManager.textFlow.findLeaf(selState.absoluteStart);
 			CONFIG::debug { assert(	leaf != null, "found null FlowLeafELement at" + (selState.absoluteStart).toString()); }						    		
     		var leafAbsoluteStart:int = leaf.getAbsoluteStart();
+			
+			var format:TextLayoutFormat = new TextLayoutFormat();
+			format.setStyle(IMEStatus.IME_STATUS, imeStatus);
 
-			_editManager.doOperation(new ApplyElementUserStyleOperation(selState, leaf, IMEStatus.IME_STATUS, imeStatus, selState.absoluteStart - leafAbsoluteStart, selState.absoluteEnd - leafAbsoluteStart));
+			_editManager.doOperation(new ApplyFormatToElementOperation(selState, leaf, format, selState.absoluteStart - leafAbsoluteStart, selState.absoluteEnd - leafAbsoluteStart));
+		}
+		
+		private function deleteIMEText(textFlow:TextFlow):void
+		{
+			// Delete any leaves that have IME attributes applied
+			var leaf:FlowLeafElement = textFlow.getFirstLeaf();
+			while (leaf)
+			{
+				if (leaf.getStyle(IMEStatus.IME_STATUS) !== undefined || leaf.getStyle(IMEStatus.IME_CLAUSE) !== undefined)
+				{
+					var leafFormat:TextLayoutFormat = new TextLayoutFormat(leaf.format);
+					leafFormat.setStyle(IMEStatus.IME_STATUS, undefined);
+					leafFormat.setStyle(IMEStatus.IME_CLAUSE, undefined);
+					leaf.format = leafFormat;
+					var absoluteStart:int = leaf.getAbsoluteStart();
+					ModelEdit.deleteText(textFlow, absoluteStart, absoluteStart + leaf.textLength, false);
+					leaf = textFlow.findLeaf(absoluteStart);
+				}
+				else
+					leaf = leaf.getNextLeaf();
+			}
+		}
+		
+		private function rollBackIMEChanges():void
+		{
+			// Undo the previous interim ime operation, if there is one. This deletes any text that came in a previous updateComposition call.
+			// Doing it via undo keeps the undo stack in sync. But if there's been an intervening direct model change, just delete the IME text
+			// directly. It won't restore what we selected at the beginning of the IME session, but it's the best we can do.
+			var previousIMEOperation:FlowOperation = _editManager.undoManager.peekUndo() as FlowOperation;
+			if (_imeLength > 0 && previousIMEOperation && previousIMEOperation.endGeneration == _editManager.textFlow.generation && previousIMEOperation.canUndo())
+			{
+				CONFIG::debug { assert(_editManager.undoManager.peekUndo() == _imeOperation, "Unexpected operation in undo stack at end of IME update"); }
+				if (_editManager.undoManager)
+					_editManager.undoManager.undo();
+				CONFIG::debug { assert(_editManager.undoManager.peekRedo() == _imeOperation, "Unexpected operation in redo stack at end of IME session"); }
+				_editManager.undoManager.popRedo();
+			}
+			else		// there's been a model change since the last IME change that blocks undo, just find IME text and delete it.
+			{
+				_editManager.undoManager.popUndo();		// remove the operation we can't undo
+				deleteIMEText(_editManager.textFlow);
+			}
+			_imeLength = 0; // prevent double deletion
+			CONFIG::debug {  _imeOperation = null; }
 		}
 		
 		// IME-related functions
@@ -145,14 +197,8 @@ package flashx.textLayout.edit {
 			
 			// Undo the previous interim ime operation, if there is one. This deletes any text that came in a previous updateComposition call.
 			// Doing it via undo keeps the undo stack in sync.
-			if (_imeLength > 0 && _editManager.undoManager.peekUndo() != null)
-			{
-				CONFIG::debug { assert(_editManager.undoManager.peekUndo() == _imeOperation, "Unexpected operation in undo stack at end of IME update"); }
-				if (_editManager.undoManager)
-					_editManager.undoManager.undo();
-				_imeLength = 0; // prevent double deletion
-				CONFIG::debug {  _imeOperation = null; }
-			}
+			if (_imeLength > 0)
+				rollBackIMEChanges();
 
 			if (text.length > 0)
 			{
@@ -224,22 +270,14 @@ package flashx.textLayout.edit {
 			if (!_editManager || _closing)
 				return;
 			
+		//	trace("end IME session");
+			
 			_closing = true;
 			
 			// Undo the IME operation. We're going to re-add the text, without all the special attributes, as part of handling
 			// the textInput event that comes next.
 			if (_imeLength > 0)
-			{
-				if (_editManager.undoManager.peekUndo() != null)
-				{
-					//trace("undoing imeOperation at end of IME session");
-					CONFIG::debug { assert(_editManager.undoManager.peekUndo() == _imeOperation, "Unexpected operation in undo stack at end of IME session"); }
-					if (_editManager.undoManager)
-						_editManager.undoManager.undo();
-					CONFIG::debug { assert(_editManager.undoManager.peekRedo() == _imeOperation, "Unexpected operation in redo stack at end of IME session"); }
-					_editManager.undoManager.popRedo();
-				}
-			}
+				rollBackIMEChanges();
 
 			if (_undoManager)
 				_editManager.setUndoManager(null);
@@ -247,6 +285,24 @@ package flashx.textLayout.edit {
 			// Clear IME state - tell EditManager to release IMEClient to finally close session
 			_editManager.endIMESession();
 			_editManager = null;
+		}
+		
+		CONFIG::debug
+		{		// debugging code for displaying IME bounds rectangle
+			import flash.display.Sprite;
+			import flash.display.Graphics;
+			
+			private function displayRectInContainer(container:Sprite, r:Rectangle):void
+			{
+				var g:Graphics = container.graphics;
+				g.beginFill(0xff0000);
+				g.moveTo(r.x, r.y);
+				g.lineTo(r.right, r.y);
+				g.lineTo(r.right, r.bottom);
+				g.lineTo(r.x, r.bottom);
+				g.lineTo(r.x, r.y);
+				g.endFill(); 
+			}
 		}
 		
 		public function getTextBounds(startIndex:int, endIndex:int):Rectangle
@@ -260,13 +316,14 @@ package flashx.textLayout.edit {
 					if (boundsResult.length > 0)
 					{
 						var bounds:Rectangle = boundsResult[0].rect; 
-					    var textLine:TextLine = boundsResult[0].textLine; 
-					    var resultTopLeft:Point = textLine.localToGlobal(bounds.topLeft);
-					    var resultBottomRight:Point = textLine.localToGlobal(bounds.bottomRight);
+					    	var textLine:TextLine = boundsResult[0].textLine; 
+					    	var resultTopLeft:Point = textLine.localToGlobal(bounds.topLeft);
+					    	var resultBottomRight:Point = textLine.localToGlobal(bounds.bottomRight);
 						if (textLine.parent)
 						{
 							var containerTopLeft:Point = textLine.parent.globalToLocal(resultTopLeft);
 							var containerBottomLeft:Point = textLine.parent.globalToLocal(resultBottomRight);
+						//	CONFIG::debug { displayRectInContainer(Sprite(textLine.parent), new Rectangle(containerTopLeft.x, containerTopLeft.y, containerBottomLeft.x - containerTopLeft.x, containerBottomLeft.y - containerTopLeft.y));}
 							return new Rectangle(containerTopLeft.x, containerTopLeft.y, containerBottomLeft.x - containerTopLeft.x, containerBottomLeft.y - containerTopLeft.y);
 						}
 					}
@@ -284,6 +341,7 @@ package flashx.textLayout.edit {
 						var line:TextFlowLine = flowComposer.getLineAt(lineIndex);
 						var previousLine:TextFlowLine = lineIndex != 0 ? flowComposer.getLineAt(lineIndex-1) : null;
 						var nextLine:TextFlowLine = lineIndex != flowComposer.numLines-1 ? flowComposer.getLineAt(lineIndex+1) : null;
+					//	CONFIG::debug { displayRectInContainer(_controller.container, line.computePointSelectionRectangle(startIndex, _controller.container, previousLine, nextLine, true));}
 						return line.computePointSelectionRectangle(startIndex, _controller.container, previousLine, nextLine, true);
 					}
 				}
@@ -306,7 +364,7 @@ package flashx.textLayout.edit {
 		
 		public function get verticalTextLayout():Boolean
 		{
-		//	trace("verticalTextLayout");
+		//	trace("verticalTextLayout ", _editManager.textFlow.computedFormat.blockProgression == BlockProgression.RL ? "true" : "false");
 			return _editManager.textFlow.computedFormat.blockProgression == BlockProgression.RL;
 		}
 

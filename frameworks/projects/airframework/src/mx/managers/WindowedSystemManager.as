@@ -44,6 +44,7 @@ import mx.core.IFlexDisplayObject;
 import mx.core.IFlexModule;
 import mx.core.IFlexModuleFactory;
 import mx.core.IUIComponent;
+import mx.core.RSLData;
 import mx.core.Singleton;
 import mx.core.IWindow;
 import mx.core.mx_internal;
@@ -212,6 +213,66 @@ public class WindowedSystemManager extends MovieClip implements ISystemManager
     //-----------------------------------
     //  ISystemManager implementations
     //-----------------------------------
+        
+    //----------------------------------
+    //  allowDomainsInNewRSLs
+    //----------------------------------
+    
+    /**
+     *  @private
+     */ 
+    private var _allowDomainsInNewRSLs:Boolean = true;
+    
+    /**
+     *  @inheritDoc
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10.2
+     *  @playerversion AIR 2.6
+     *  @productversion Flex 4.5
+     */   
+    public function get allowDomainsInNewRSLs():Boolean
+    {
+        return _allowDomainsInNewRSLs;
+    }
+    
+    /**
+     *  @private
+     */ 
+    public function set allowDomainsInNewRSLs(value:Boolean):void
+    {
+        _allowDomainsInNewRSLs = value;
+    }
+    
+    //----------------------------------
+    //  allowInsecureDomainsInNewRSLs
+    //----------------------------------
+    
+    /**
+     *  @private
+     */ 
+    private var _allowInsecureDomainsInNewRSLs:Boolean = true;
+    
+    /**
+     *  @inheritDoc
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10.2
+     *  @playerversion AIR 2.6
+     *  @productversion Flex 4.5
+     */   
+    public function get allowInsecureDomainsInNewRSLs():Boolean
+    {
+        return _allowInsecureDomainsInNewRSLs;
+    }
+    
+    /**
+     *  @private
+     */ 
+    public function set allowInsecureDomainsInNewRSLs(value:Boolean):void
+    {
+        _allowInsecureDomainsInNewRSLs = value;
+    }
         
     //----------------------------------
     //  cursorChildren
@@ -474,12 +535,6 @@ public class WindowedSystemManager extends MovieClip implements ISystemManager
      *  @private
      * 
      *  This is a stub to satisfy the IFlexModuleFactory interface.
-     * 
-     *  The RSLs loaded by this system manager before the application 
-     *  starts. RSLs loaded by the application are not included in this list.
-     * 
-     *  Information about preloadedRSLs is stored in a Dictionary. The key is
-     *  the RSL's LoaderInfo. The value is the url the RSL was loaded from.
      */
     public function  get preloadedRSLs():Dictionary
     {
@@ -1000,6 +1055,21 @@ public class WindowedSystemManager extends MovieClip implements ISystemManager
     {
         initialized = true;
 
+        // This listener is intended to run before any other KeyboardEvent listeners
+        // so that it can redispatch a cancelable=true copy of the event. 
+        if (getSandboxRoot() == this)
+        {
+            // keydown events on AIR are cancelable so we don't need to add a listener.
+            addEventListener(MouseEvent.MOUSE_WHEEL, mouseEventHandler, true, 1000);
+            addEventListener(MouseEvent.MOUSE_DOWN, mouseEventHandler, true, 1000);
+        }
+        if (isTopLevelRoot() && stage)
+        {
+            // keydown events on AIR are cancelable so we don't need to add a listener.
+            stage.addEventListener(MouseEvent.MOUSE_WHEEL, mouseEventHandler, false, 1000);
+            stage.addEventListener(MouseEvent.MOUSE_DOWN, mouseEventHandler, false, 1000);
+        }
+        
         if (!parent)
             return;
         
@@ -1034,7 +1104,7 @@ public class WindowedSystemManager extends MovieClip implements ISystemManager
         }
 
         //  if (topLevel && stage)
-            stage.addEventListener(Event.RESIZE, Stage_resizeHandler, false, 0, true);
+        stage.addEventListener(Event.RESIZE, Stage_resizeHandler, false, 0, true);
 
         var app:IUIComponent;
         // Create a new instance of the toplevel class
@@ -1306,12 +1376,15 @@ public class WindowedSystemManager extends MovieClip implements ISystemManager
      *  @playerversion AIR 1.1
      *  @productversion Flex 3
      */  
-    public function getVisibleApplicationRect(bounds:Rectangle = null):Rectangle
+    public function getVisibleApplicationRect(bounds:Rectangle = null, skipToSandboxRoot:Boolean = false):Rectangle
     {
 		var request:Request = new Request("getVisibleApplicationRect", false, true);
 		if (!dispatchEvent(request)) 
 			return Rectangle(request.value);
 
+		if (skipToSandboxRoot && !topLevel)
+			return topLevelSystemManager.getVisibleApplicationRect(bounds, skipToSandboxRoot);
+		
         if (!bounds)
         {
             bounds = getBounds(DisplayObject(this));
@@ -1324,8 +1397,19 @@ public class WindowedSystemManager extends MovieClip implements ISystemManager
             bounds.width = s.width;
             bounds.height = s.height;
         }
-        
-        return bounds;
+		
+		if (!topLevel)
+		{
+			var obj:DisplayObjectContainer = parent.parent;
+			
+			if ("getVisibleApplicationRect" in obj)
+			{
+				var visibleRect:Rectangle = obj["getVisibleApplicationRect"](true);
+				bounds = bounds.intersection(visibleRect);
+			}
+		}
+
+		return bounds;
     }
  
    /**
@@ -1342,6 +1426,15 @@ public class WindowedSystemManager extends MovieClip implements ISystemManager
 		dispatchEvent(dynamicEvent);
     }
     
+    /**
+     *  @private
+     * 
+     *  This is a stub to satisfy the IFlexModuleFactory interface.
+     */ 
+    public function addPreloadedRSL(loaderInfo:LoaderInfo, rsl:Vector.<RSLData>):void
+    {
+    }
+
     /**
      *  @private
      * 
@@ -2219,5 +2312,39 @@ public class WindowedSystemManager extends MovieClip implements ISystemManager
     {
     }
 
+    //--------------------------------------------------------------------------
+    //
+    //  Event Handlers
+    //
+    //--------------------------------------------------------------------------
+    
+    /**
+     *  NOTE: The keyDownHandler in SystemManager is not needed in AIR because
+     *  AIR keyDown events are cancelable.
+     */ 
+    
+    /**
+     *  @private 
+     *  We want to re-dispatch 
+     *  mouse events that are cancellable.  Currently we are only doing 
+     *  this for a few mouse events and not all of them (MOUSE_WHEEL and 
+     *  MOUSE_DOWN).
+     */
+    private function mouseEventHandler(e:MouseEvent):void
+    {
+        if (!e.cancelable)
+        {
+            e.stopImmediatePropagation();
+            var cancelableEvent:MouseEvent = new MouseEvent(e.type, e.bubbles, 
+                true, e.localX,
+                e.localY, e.relatedObject, e.ctrlKey, e.altKey,
+                e.shiftKey, e.buttonDown, e.delta, 
+                e.commandKey, e.controlKey, e.clickCount);
+            
+            e.target.dispatchEvent(cancelableEvent);               
+        }
+    }
+    
+    
 }
 }

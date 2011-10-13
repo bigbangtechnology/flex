@@ -15,11 +15,16 @@ package spark.components.supportClasses
 import flash.display.DisplayObject;
 import flash.display.Sprite;
 import flash.events.Event;
+import flash.events.GestureEvent;
 import flash.events.MouseEvent;
+import flash.events.PressAndTapGestureEvent;
+import flash.events.TouchEvent;
+import flash.events.TransformGestureEvent;
 import flash.filters.ShaderFilter;
 import flash.geom.Point;
 import flash.geom.Rectangle;
 
+import mx.core.ILayoutElement;
 import mx.core.IVisualElement;
 import mx.core.UIComponent;
 import mx.core.UIComponentGlobals;
@@ -57,21 +62,22 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="accentColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="accentColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  The colors to use for the backgrounds of the items in the list. 
- *  The value is an array of two or more colors. 
+ *  The value is an array of one or more colors. 
  *  The backgrounds of the list items alternate among the colors in the array. 
  * 
- *  @default undefined
+ *  <p>The default value for the Spark theme is <code>undefined</code>.
+ *  The default value for the Mobile theme is <code>0xFFFFFF</code>.</p>
  * 
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="alternatingItemColors", type="Array", arrayType="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="alternatingItemColors", type="Array", arrayType="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  The main color for a component. 
@@ -83,7 +89,7 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="chromeColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="chromeColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  The alpha of the content background for this component.
@@ -95,19 +101,28 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="contentBackgroundAlpha", type="Number", inherit="yes", theme="spark", minValue="0.0", maxValue="1.0")]
+[Style(name="contentBackgroundAlpha", type="Number", inherit="yes", theme="spark, mobile", minValue="0.0", maxValue="1.0")]
 
 /**
- *  Color of the fill of an item renderer.
- *   
- *  @default 0xFFFFFF
+ *  The color of the content background for this component.
+ * 
+ *  <p>For a List, changing <code>contentBackgroundColor</code> will 
+ *  change the content background color of the List; however, if the item renderer
+ *  is opaque, the user may not see any difference.  The item renderer's color is 
+ *  affected by <code>alternatingItemColors</code>.  In the Spark theme, by default, item 
+ *  renderers are transparent (<code>alternatingItemColors = undefined</code>); however, 
+ *  in the Mobile theme, item renderers are opaque by default 
+ *  (<code>alternatingItemColors = 0xFFFFFF</code>).</p>
+ *  
+ *  <p>The default value for the Spark theme is <code>0xFFFFFF</code>.
+ *  The default value for the Mobile theme is <code>0xF0F0F0</code>.</p> 
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="contentBackgroundColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="contentBackgroundColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  The alpha value when the container is disabled.
@@ -119,7 +134,23 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="disabledAlpha", type="Number", inherit="no", theme="spark", minValue="0.0", maxValue="1.0")]
+[Style(name="disabledAlpha", type="Number", inherit="no", theme="spark, mobile", minValue="0.0", maxValue="1.0")]
+
+/**
+ *  Color of the background of an item renderer when it is being pressed down
+ * 
+ *  <p>If <code>downColor</code> is set to <code>undefined</code>, 
+ *  <code>downColor</code> is not used.</p>
+ * 
+ *  <p>The default value for the Spark theme is <code>undefined</code>.
+ *  The default value for the Mobile theme is <code>0xE0E0E0</code>.</p>
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10.1
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="downColor", type="uint", format="Color", inherit="yes", theme="mobile")]
 
 /**
  *  Color of focus ring when the component is in focus.
@@ -131,11 +162,13 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  Color of the highlights when the mouse is over the component.
- *   
+ * 
+ *  <p>This style is only applicable in mouse <code>interactionMode</code>.</p>
+ * 
  *  @default 0xCEDBEF
  *  
  *  @langversion 3.0
@@ -156,7 +189,27 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
+
+/**
+ *  When in touch interaction mode, the number of milliseconds to wait after the user 
+ *  interaction has occured before showing the component in a visually down state.
+ * 
+ *  <p>The reason for this delay is because when a user initiates a scroll gesture, we don't want 
+ *  components to flicker as they touch the screen.  By having a reasonable delay, we make 
+ *  sure that the user still gets feedback when they press down on a component, but that the 
+ *  feedback doesn't come too quickly that it gets displayed during a scroll gesture 
+ *  operation.</p>
+ *  
+ *  <p>If the mobile theme is applied, the default value for this style is 100 ms for 
+ *  components inside of a Scroller and 0 ms for components outside of a Scroller.</p>
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10.1
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="touchDelay", type="Number", format="Time", inherit="yes", minValue="0.0")]
 
 //--------------------------------------
 //  Excluded APIs
@@ -202,6 +255,7 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *    color="0x000000"
  *    contentBackgroundAlpha="1.0"
  *    contentBackgroundColor="0xFFFFFF"
+ *    clearFloats="none"
  *    digitCase="default"
  *    digitWidth="default"
  *    direction="ltr"
@@ -223,6 +277,9 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *    ligatureLevel="common"
  *    lineHeight="120%"
  *    lineThrough="false"
+ *    listAutoPadding="40"
+ *    listStylePosition="outside"
+ *    listStyleType="disc"
  *    locale="en"
  *    paragraphEndIndent="0"
  *    paragraphSpaceAfter="0"
@@ -244,6 +301,7 @@ include "../../styles/metadata/SelectionFormatTextStyles.as"
  *    typographicCase="default"
  *    unfocusedTextSelectionColor="0xE8E8E8"
  *    whiteSpaceCollapse="collapse"
+ *    wordSpacing="100%,50%,150%"
  *  /&gt;
  *  </pre>
  *
@@ -308,9 +366,9 @@ public class GroupBase extends UIComponent implements IViewport
      *  @inheritDoc
      *  
      *  @langversion 3.0
-     *  @playerversion Flash 9
-     *  @playerversion AIR 1.1
-     *  @productversion Flex 3
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     override public function get baselinePosition():Number
     {
@@ -406,6 +464,8 @@ public class GroupBase extends UIComponent implements IViewport
     private var _layoutProperties:Object = null;
     private var layoutInvalidateSizeFlag:Boolean = false;
     private var layoutInvalidateDisplayListFlag:Boolean = false;
+    
+    [Inspectable(category="General")]
     
     /**
      *  The layout object for this container.  
@@ -655,7 +715,7 @@ public class GroupBase extends UIComponent implements IViewport
 
         // clipAndEnableScrolling affects measured minimum size
         invalidateSize();
-    }    
+    }
     
     //----------------------------------
     //  scrollRect
@@ -876,9 +936,14 @@ public class GroupBase extends UIComponent implements IViewport
      *  ensures that the entire bounds of the Group respond to 
      *  mouse events such as click and roll over.
      * 
+     *  This property only goes in to effect if mouse, touch, or
+     *  flash player gesture events are added to this instance.  In addition, 
+     *  it assumes that the calls to addEventListener()/removeEventListener()
+     *  are not superfluous.
+     * 
      *  @default true
      *  
-     *  @langversion 4.0
+     *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
@@ -905,7 +970,7 @@ public class GroupBase extends UIComponent implements IViewport
     /**
      *  @private
      *  Renders a background for the container, if necessary.  It is used to fill in
-     *  a transparent background fill as necessary to support the mouseOpaque flag.  It 
+     *  a transparent background fill as necessary to support the _mouseEnabledWhereTransparent flag.  It 
      *  is also used in ItemRenderers when handleBackgroundColor is set to true.
      *  We assume for now that we are the first layer to be rendered into the graphics
      *  context.
@@ -1036,11 +1101,16 @@ public class GroupBase extends UIComponent implements IViewport
     }
     
     /**
-     *  @inheritDoc
-     *  
      *  <p>If the layout object has not been set yet, 
      *  createChildren() assigns this container a 
      *  default layout object, BasicLayout.</p>
+     *  
+     *  @copy mx.core.UIComponent:createChildren()
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */ 
     override protected function createChildren():void
     {
@@ -1350,6 +1420,20 @@ public class GroupBase extends UIComponent implements IViewport
         return (layout) ? layout.getVerticalScrollPositionDelta(navigationUnit) : 0;     
     }
     
+    /**
+     *  @private
+     *  @copy spark.layouts.supportClasses.LayoutBase#isElementVisible()
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4 
+     */
+    mx_internal function isElementVisible(elt:ILayoutElement):Boolean
+    {
+        return layout && layout.isElementVisible(elt);
+    }
+    
     //--------------------------------------------------------------------------
     //
     //  IViewport properties
@@ -1466,19 +1550,48 @@ public class GroupBase extends UIComponent implements IViewport
         super.addEventListener(type, listener, useCapture, priority, 
             useWeakReference);
 
-        if (type == MouseEvent.CLICK ||
-            type == MouseEvent.DOUBLE_CLICK ||
-            type == MouseEvent.MOUSE_DOWN ||
-            type == MouseEvent.MOUSE_MOVE ||
-            type == MouseEvent.MOUSE_OVER ||
-            type == MouseEvent.MOUSE_OUT ||
-            type == MouseEvent.ROLL_OUT ||
-            type == MouseEvent.ROLL_OVER ||
-            type == MouseEvent.MOUSE_UP ||
-            type == MouseEvent.MOUSE_WHEEL)
+        // This code below is not really accurate for two reasons:
+        // 1) MouseEvents bubble so someone up the chain
+        //    may be listening for this event, and we woudln't 
+        //    detect it here.
+        // 2) addEventListener()/removeEventListener() may be called 
+        //    multiple times with the same handler and may have no 
+        //    real effect on the component, but we're still incrementing
+        //    and decrementing the mouseEventReferenceCount here
+        //  Neither of these issues seem worth fixing as there aren't 
+        //  really great fixes for them, so it's just something we will 
+        //  document and live with for now.
+        
+        // mouse events, then touch events, then gesture events
+        switch (type)
         {
-            if (mouseEventReferenceCount++ == 0)
-                hasMouseListeners = true;
+            
+            case MouseEvent.CLICK:
+            case MouseEvent.DOUBLE_CLICK:
+            case MouseEvent.MOUSE_DOWN:
+            case MouseEvent.MOUSE_MOVE:
+            case MouseEvent.MOUSE_OVER:
+            case MouseEvent.MOUSE_OUT:
+            case MouseEvent.ROLL_OUT:
+            case MouseEvent.ROLL_OVER:
+            case MouseEvent.MOUSE_UP:
+            case MouseEvent.MOUSE_WHEEL:
+            case TouchEvent.TOUCH_BEGIN:
+            case TouchEvent.TOUCH_END:
+            case TouchEvent.TOUCH_MOVE:
+            case TouchEvent.TOUCH_OUT:
+            case TouchEvent.TOUCH_OVER:
+            case TouchEvent.TOUCH_ROLL_OUT:
+            case TouchEvent.TOUCH_ROLL_OVER:
+            case TouchEvent.TOUCH_TAP:
+            case GestureEvent.GESTURE_TWO_FINGER_TAP:
+            case PressAndTapGestureEvent.GESTURE_PRESS_AND_TAP:
+            case TransformGestureEvent.GESTURE_PAN:
+            case TransformGestureEvent.GESTURE_ROTATE:
+            case TransformGestureEvent.GESTURE_SWIPE:
+            case TransformGestureEvent.GESTURE_ZOOM:
+                if (mouseEventReferenceCount++ == 0)
+                    hasMouseListeners = true;
         }
     }
 
@@ -1492,19 +1605,37 @@ public class GroupBase extends UIComponent implements IViewport
     {
         super.removeEventListener(type, listener, useCapture);
 
-        if (type == MouseEvent.CLICK ||
-            type == MouseEvent.DOUBLE_CLICK ||
-            type == MouseEvent.MOUSE_DOWN ||
-            type == MouseEvent.MOUSE_MOVE ||
-            type == MouseEvent.MOUSE_OVER ||
-            type == MouseEvent.MOUSE_OUT ||
-            type == MouseEvent.ROLL_OUT ||
-            type == MouseEvent.ROLL_OVER ||
-            type == MouseEvent.MOUSE_UP ||
-            type == MouseEvent.MOUSE_WHEEL)
+        // see comment above in addEventListener()
+        // mouse events, then touch events, then gesture events
+        switch (type)
         {
-            if (--mouseEventReferenceCount == 0)
-                hasMouseListeners = false;
+            
+            case MouseEvent.CLICK:
+            case MouseEvent.DOUBLE_CLICK:
+            case MouseEvent.MOUSE_DOWN:
+            case MouseEvent.MOUSE_MOVE:
+            case MouseEvent.MOUSE_OVER:
+            case MouseEvent.MOUSE_OUT:
+            case MouseEvent.ROLL_OUT:
+            case MouseEvent.ROLL_OVER:
+            case MouseEvent.MOUSE_UP:
+            case MouseEvent.MOUSE_WHEEL:
+            case TouchEvent.TOUCH_BEGIN:
+            case TouchEvent.TOUCH_END:
+            case TouchEvent.TOUCH_MOVE:
+            case TouchEvent.TOUCH_OUT:
+            case TouchEvent.TOUCH_OVER:
+            case TouchEvent.TOUCH_ROLL_OUT:
+            case TouchEvent.TOUCH_ROLL_OVER:
+            case TouchEvent.TOUCH_TAP:
+            case GestureEvent.GESTURE_TWO_FINGER_TAP:
+            case PressAndTapGestureEvent.GESTURE_PRESS_AND_TAP:
+            case TransformGestureEvent.GESTURE_PAN:
+            case TransformGestureEvent.GESTURE_ROTATE:
+            case TransformGestureEvent.GESTURE_SWIPE:
+            case TransformGestureEvent.GESTURE_ZOOM:
+                if (--mouseEventReferenceCount == 0)
+                    hasMouseListeners = false;
         }
     }
     
@@ -1671,13 +1802,47 @@ public class GroupBase extends UIComponent implements IViewport
         return -1;
     }
     
+    /**
+     *  Determines whether the specified IVisualElement is a 
+     *  child of the container instance or the instance
+     *  itself. The search is deep, i.e. if the element is
+     *  a child, grandchild, great-grandchild, etc., of this
+     *  container, this returns true.
+     *  
+     *  @param element the child object to test
+     *  @return true if the element is a descendant of the container
+     * 
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     * 
+     */    
+    public function containsElement(element:IVisualElement):Boolean
+    {
+        while (element)
+        {
+            if (element == this)
+                return true;
+            
+            if (element.parent is IVisualElement)
+                element = IVisualElement(element.parent);
+            else
+                return false;
+        }
+        
+        return false;
+    }
+    
     //----------------------------------
     //  mask
     //----------------------------------
+    
     private var _mask:DisplayObject;
     mx_internal var maskChanged:Boolean;
     
     [Inspectable(category="General")]
+    
     /**
      *  Sets the mask. The mask will be added to the display list. The mask must
      *  not already on a display list nor in the elements array.  

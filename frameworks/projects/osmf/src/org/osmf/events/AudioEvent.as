@@ -24,7 +24,12 @@ package org.osmf.events
 	import flash.events.Event;
 	
 	/**
-	 * An AudioEvent is dispatched when the properties of an IAudible trait change.
+	 * An AudioEvent is dispatched when the properties of an AudioTrait change.
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */	
 	public class AudioEvent extends Event
 	{
@@ -37,8 +42,8 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */	
 		public static const VOLUME_CHANGE:String = "volumeChange";
 		
@@ -51,8 +56,8 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public static const MUTED_CHANGE:String = "mutedChange";
 
@@ -65,13 +70,13 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */	
 		public static const PAN_CHANGE:String = "panChange";
 
 		/**
-		 * Constructor
+		 * Constructor.
 		 * 
 		 * @param type The type of the event.
 		 * @param bubbles Specifies whether the event can bubble up the display list hierarchy.
@@ -83,8 +88,8 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
 		public function AudioEvent(type:String, bubbles:Boolean, cancelable:Boolean, muted:Boolean=false, volume:Number=NaN, pan:Number=NaN)
 		{
@@ -100,8 +105,8 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
 		public function get muted():Boolean
 		{
@@ -113,8 +118,8 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
 		public function get volume():Number
 		{
@@ -126,8 +131,8 @@ package org.osmf.events
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
 		public function get pan():Number
 		{
@@ -136,7 +141,6 @@ package org.osmf.events
 		
 		/**
 		 * @private
-		 * @inheritDoc
 		 */
 		override public function clone():Event
 		{

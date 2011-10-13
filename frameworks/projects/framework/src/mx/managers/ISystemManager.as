@@ -13,7 +13,7 @@ package mx.managers
 {
 
 import flash.display.DisplayObject;
-import flash.display.InteractiveObject; 
+import flash.display.InteractiveObject;
 import flash.display.LoaderInfo;
 import flash.display.Sprite;
 import flash.display.Stage;
@@ -21,6 +21,7 @@ import flash.events.Event;
 import flash.events.IEventDispatcher;
 import flash.geom.Rectangle;
 import flash.text.TextFormat;
+
 import mx.core.IChildList;
 import mx.core.IFlexModuleFactory;
 import mx.managers.IFocusManagerContainer;
@@ -165,7 +166,7 @@ public interface ISystemManager extends IEventDispatcher, IChildList, IFlexModul
     //----------------------------------
 
 	/**
-	 *  The LoaderInfo object that represents information about the application.
+	 *  True if the ISystemManager is a proxy and not a root class.
 	 *  
 	 *  @langversion 3.0
 	 *  @playerversion Flash 9
@@ -271,6 +272,8 @@ public interface ISystemManager extends IEventDispatcher, IChildList, IFlexModul
 	 *
 	 *  The Rectangle object contains <code>x</code>, <code>y</code>,
 	 *  <code>width</code>, and <code>height</code> properties.
+     * 
+     *  The Rectangle is in sandbox root coordinates.
 	 *  
 	 *  @langversion 3.0
 	 *  @playerversion Flash 9
@@ -451,7 +454,7 @@ public interface ISystemManager extends IEventDispatcher, IChildList, IFlexModul
      *  @playerversion AIR 1.1
      *  @productversion Flex 3
      */  
-    function getVisibleApplicationRect(bounds:Rectangle = null):Rectangle;
+	function getVisibleApplicationRect(bounds:Rectangle = null, skipToSandboxRoot:Boolean = false):Rectangle;
     
     /**
      *  Deploy or remove mouse shields. Mouse shields block mouse input to untrusted

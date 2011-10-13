@@ -1,4 +1,4 @@
-/*****************************************************
+﻿/*****************************************************
 *  
 *  Copyright 2009 Adobe Systems Incorporated.  All Rights Reserved.
 *  
@@ -21,51 +21,65 @@
 *****************************************************/
 package org.osmf.net
 {
-    /**
-     * Enumeration of stream types.
-     *  
-     *  @langversion 3.0
-     *  @playerversion Flash 10
-     *  @playerversion AIR 1.0
-     *  @productversion OSMF 4.0
-	 **/
-    public final class StreamType
-    {
-        /**
-         * The LIVE stream type represents a live stream.
-         *  
-         *  @langversion 3.0
-         *  @playerversion Flash 10
-         *  @playerversion AIR 1.0
-         *  @productversion OSMF 4.0         
-         **/
-        public static const LIVE:String = "live";
+	/**
+	 * The StreamType class is an enumeration of constant values that you can
+	 * use to set the streamType property of the StreamingURLResource class.
+	 * This property allows the player to specify over which connection type
+	 * the resource should be streamed.
+	 *
+	 * @see StreamingURLResource
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+     *  @productversion FLEXOSMF 4.0 
+	 */
+	public final class StreamType
+	{
+		/**
+		 * The LIVE stream type represents a live stream.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
+		public static const LIVE:String = "live";
 
-        /**
-         * The RECORDED stream type represents a recorded stream.
-         *  
-         *  @langversion 3.0
-         *  @playerversion Flash 10
-         *  @playerversion AIR 1.0
-         *  @productversion OSMF 4.0         
-         **/
-        public static const RECORDED:String = "recorded";
+		/**
+		 * The RECORDED stream type represents a recorded stream.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
+		public static const RECORDED:String = "recorded";
 
-        /**
-         * The ANY stream type represents any possible stream type.
-         *  
-         *  @langversion 3.0
-         *  @playerversion Flash 10
-         *  @playerversion AIR 1.0
-         *  @productversion OSMF 4.0         
-         **/
-        public static const ANY:String = "any";
-        
-        /**
-         * @private
-         */     
-        public function StreamType()
-        {
-        }
-    }
+		/**
+		 * The LIVE_OR_RECORDED stream type represents a live or a recorded stream.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
+		public static const LIVE_OR_RECORDED:String = "liveOrRecorded";
+		
+		/**
+		 * The DVR stream type represents a possibly server side
+		 * recording live stream.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 *  @productversion FLEXOSMF 4.0
+		 */
+		public static const DVR:String = "dvr";
+	}
 }

@@ -31,20 +31,33 @@ package org.osmf.utils
 	import org.osmf.events.MediaError;
 	import org.osmf.events.MediaErrorCodes;
 	import org.osmf.events.MediaErrorEvent;
-	import org.osmf.media.IMediaResource;
-	import org.osmf.media.IURLResource;
+	import org.osmf.media.MediaResourceBase;
 	import org.osmf.media.URLResource;
-	import org.osmf.traits.ILoadable;
 	import org.osmf.traits.LoadState;
+	import org.osmf.traits.LoadTrait;
 	import org.osmf.traits.LoaderBase;
 
+	[ExcludeClass]
+	
 	/**
-	 * Implementation of ILoader that can retrieve an URLResource using HTTP.
-	 **/
+	 * @private
+	 * 
+	 * Implementation of LoaderBase that can retrieve an URLResource using HTTP.
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
+	 */
 	public class HTTPLoader extends LoaderBase
 	{
 		/**
 		 * Constructor.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		public function HTTPLoader()
 		{
@@ -53,24 +66,31 @@ package org.osmf.utils
 				
 		/**
 		 * Returns true for any resource using the HTTP(S) protocol.
-		 **/
-		override public function canHandleResource(resource:IMediaResource):Boolean
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		override public function canHandleResource(resource:MediaResourceBase):Boolean
 		{
 			// Rule out protocols other than http(s).
 			//
 			
-			var urlResource:IURLResource = resource as IURLResource;
+			var urlResource:URLResource = resource as URLResource;
 			
 			if (	urlResource == null
 				|| 	urlResource.url == null
-				||  urlResource.url.rawUrl == null
-				||  urlResource.url.rawUrl.length <= 0
+				||  urlResource.url.length <= 0
 			   )
 			{
 				return false;
 			}
-						
-			if (urlResource.url.protocol.search(/http$|https$/i) == -1)
+			
+			var url:URL = new URL(urlResource.url);		
+			if (	url.protocol.search(/http$|https$/i) == -1
+				&&  url.protocol != ""
+			   )
 			{
 				return false;
 			}
@@ -81,26 +101,24 @@ package org.osmf.utils
 		/**
 		 * Loads an URL over HTTP.
 		 * 
-		 * <p>Updates the ILoadable's <code>loadState</code> property to LOADING
+		 * <p>Updates the LoadTrait's <code>loadState</code> property to LOADING
 		 * while loading and to READY upon completing a successful load of the 
 		 * URL.</p> 
 		 * 
 		 * @see org.osmf.traits.LoadState
 		 * @see flash.display.Loader#load()
-		 * @param ILoadable ILoadable to be loaded.
+		 * @param loadTrait LoadTrait to be loaded.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */ 
-		override public function load(loadable:ILoadable):void
+		override protected function executeLoad(loadTrait:LoadTrait):void
 		{
-			super.load(loadable);
+			updateLoadTrait(loadTrait, LoadState.LOADING);
 			
-			updateLoadable(loadable, LoadState.LOADING);
-			
-			var urlResource:URLResource = loadable.resource as URLResource;
+			var urlResource:URLResource = loadTrait.resource as URLResource;
 
 			var urlReq:URLRequest = new URLRequest(urlResource.url.toString());
 			var loader:URLLoader = createURLLoader();
@@ -140,21 +158,23 @@ package org.osmf.utils
 			{
 				toggleLoaderListeners(loader, false);
 				
-				updateLoadable(loadable, LoadState.READY, new HTTPLoadedContext(loader));
+				var httpLoadTrait:HTTPLoadTrait = loadTrait as HTTPLoadTrait;
+				httpLoadTrait.urlLoader = loader;
+				updateLoadTrait(loadTrait, LoadState.READY);
 			}
 
 			function onIOError(ioEvent:IOErrorEvent, ioEventDetail:String=null):void
 			{	
 				toggleLoaderListeners(loader, false);
 				
-				updateLoadable(loadable, LoadState.LOAD_ERROR);
-				loadable.dispatchEvent
+				updateLoadTrait(loadTrait, LoadState.LOAD_ERROR);
+				loadTrait.dispatchEvent
 					( new MediaErrorEvent
 						( MediaErrorEvent.MEDIA_ERROR
 						, false
 						, false
 						, new MediaError
-							( MediaErrorCodes.HTTP_IO_LOAD_ERROR
+							( MediaErrorCodes.IO_ERROR
 							, ioEvent ? ioEvent.text : ioEventDetail
 							)
 						)
@@ -165,14 +185,14 @@ package org.osmf.utils
 			{	
 				toggleLoaderListeners(loader, false);
 				
-				updateLoadable(loadable, LoadState.LOAD_ERROR);
-				loadable.dispatchEvent
+				updateLoadTrait(loadTrait, LoadState.LOAD_ERROR);
+				loadTrait.dispatchEvent
 					( new MediaErrorEvent
 						( MediaErrorEvent.MEDIA_ERROR
 						, false
 						, false
 						, new MediaError
-							( MediaErrorCodes.HTTP_SECURITY_LOAD_ERROR
+							( MediaErrorCodes.SECURITY_ERROR
 							, securityEvent ? securityEvent.text : securityEventDetail
 							)
 						)
@@ -183,24 +203,22 @@ package org.osmf.utils
 		/**
 		 * Unloads the resource.  
 		 * 
-		 * <p>Updates the ILoadable's <code>loadState</code> property to UNLOADING
+		 * <p>Updates the LoadTrait's <code>loadState</code> property to UNLOADING
 		 * while unloading and to UNINITIALIZED upon completing a successful unload.</p>
 		 *
-		 * @param ILoadable ILoadable to be unloaded.
+		 * @param loadTrait LoadTrait to be unloaded.
 		 * @see org.osmf.traits.LoadState
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */ 
-		override public function unload(loadable:ILoadable):void
+		override protected function executeUnload(loadTrait:LoadTrait):void
 		{
-			super.unload(loadable);
-
 			// Nothing to do.
-			updateLoadable(loadable, LoadState.UNLOADING, loadable.loadedContext);			
-			updateLoadable(loadable, LoadState.UNINITIALIZED);
+			updateLoadTrait(loadTrait, LoadState.UNLOADING);			
+			updateLoadTrait(loadTrait, LoadState.UNINITIALIZED);
 		}
 		
 		/**
@@ -208,7 +226,12 @@ package org.osmf.utils
 		 * 
 		 * Subclasses can override this method to set specific properties on
 		 * the URLLoader.
-		 **/
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
 		protected function createURLLoader():URLLoader
 		{
 			return new URLLoader();

@@ -21,21 +21,38 @@
 *****************************************************/
 package org.osmf.display
 {
+	[ExcludeClass]
+	
 	/**
-	 * <code>ScaleMode</code> controls the layout of out a single piece of content within a container.
+	 * @private
+	 * 
+	 * NOTE: THIS CLASS HAS BEEN DEPRECATED, DO NOT USE!
+	 * 
+	 * Instead, use org.osmf.layout.ScaleMode.  We are keeping this class around
+	 * in order to be backwards compatible with Flex, which publicly exposes
+	 * org.osmf.display.ScaleMode (the previous home of org.osmf.layout.ScaleMode).
+	 * 
+	 * As such, OSMF engineers should *not* delete this class until and unless
+	 * Flex deprecates it.
+	 *
+	 * The ScaleMode class controls the layout of out a single piece of content within a container.
 	 * There are four enumeration values, <code>NONE</code>, <code>STRETCH</code>, <code>LETTERBOX</code>, and <code>ZOOM</code>.
-	 * <code>ScalableSprite</code> uses <code>ScaleMode</code> to calculate the layout.
-	 *  
+	 *  	 
 	 *  @langversion 3.0
 	 *  @playerversion Flash 10
-	 *  @playerversion AIR 1.0
-	 *  @productversion OSMF 4.0			 
+	 *  @playerversion AIR 1.5
+	 *  @productversion FLEXOSMF 4.0	 
 	 */ 
 	public final class ScaleMode
 	{				
 		/**
 		 * <code>NONE</code> implies that the media size is set to match its intrinsic size.
-		 **/
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion FLEXOSMF 4.0
+		 */
 		public static const NONE:String 		= "none";
 		
 		/**
@@ -44,8 +61,8 @@ package org.osmf.display
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion FLEXOSMF 4.0
 		 */ 
 		public static const STRETCH:String		= "stretch";
 		
@@ -56,8 +73,8 @@ package org.osmf.display
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion FLEXOSMF 4.0
 		 */ 
 		public static const LETTERBOX:String 	= "letterbox";
 		
@@ -68,16 +85,9 @@ package org.osmf.display
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion FLEXOSMF 4.0
 		 */
 		public static const ZOOM:String			= "zoom";
-		
-		/**
-		 * @private
-		 **/
-		public function ScaleMode()
-		{
-		}
 	}
 }

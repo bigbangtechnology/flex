@@ -51,8 +51,6 @@ package air.net
  * <listing platform="javascript">&lt;script src="aircore.swf" type="application/x-shockwave-flash"&gt;</listing>
  * 
  * @playerversion AIR 1.0
- * 
- * @playerversion AIR 1.0
 */
 public class SocketMonitor extends ServiceMonitor
 {

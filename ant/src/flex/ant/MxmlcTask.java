@@ -22,6 +22,7 @@ import flex.ant.config.OptionSpec;
 import flex.ant.types.DefaultScriptLimits;
 import flex.ant.types.DefaultSize;
 import flex.ant.types.FlexFileSet;
+import flex.ant.types.FlexSwcFileSet;
 import flex.ant.types.Fonts;
 import flex.ant.types.Metadata;
 import flex.ant.types.RuntimeSharedLibraryPath;
@@ -34,7 +35,31 @@ import java.util.Iterator;
 import java.io.File;
 
 /**
+ * Implements the &lt;mxmlc&gt; Ant task.  For example:
+ * <pre>
+ *       &lt;mxmlc file="${bug}.mxml"
+ *              debug="false"
+ *              keep="true"
+ *              verbose-stacktraces="false"
+ *              incremental="false"
+ *              strict="true"
+ *              benchmark="true"
+ *              report-invalid-styles-as-warnings="true"
+ *              show-invalid-css-property-warnings="false"
+ *              tools-locale="de_DE"
+ *              fork="false"&gt;
+ *           &lt;source-path path-element="${FLEX_HOME}/frameworks/projects/framework/src"/&gt;
+ *       &lt;/mxmlc&gt;
+ * </pre>
  *
+ * All the simple mxmlc configuration parameters are supported as tag
+ * attributes.  Complex configuration options, like
+ * -compiler.namespaces.namespace, are implemented as child tags.  For
+ * example:
+ * <p>
+ * <code>
+ * &lt;namespace uri="http://www.adobe.com/2006/mxml" manifest="${basedir}/manifest.xml"/&gt;
+ * </code>
  */
 public final class MxmlcTask extends FlexTask implements DynamicConfigurator
 {
@@ -58,6 +83,10 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
     private static OptionSpec thSpec = new OptionSpec("compiler", "theme");
     private static OptionSpec lcSpec = new OptionSpec("load-config");
     private static OptionSpec kmSpec = new OptionSpec("compiler", "keep-as3-metadata");
+    private static OptionSpec forceRslsSpec = new OptionSpec("runtime-shared-library-settings", 
+                                                             "force-rsls");
+    private static OptionSpec applicationDomainsSpec = new OptionSpec("runtime-shared-library-settings", 
+                                                             "application-domain", "rsl-domain");
 
     /*=======================================================================*
      *
@@ -88,8 +117,10 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
             new ConfigBoolean(new OptionSpec("compiler", "accessible")),
             new ConfigBoolean(new OptionSpec("compiler", "debug")),
             new ConfigBoolean(new OptionSpec("compiler", "incremental")),
+            new ConfigBoolean(new OptionSpec("compiler", "mobile")),
             new ConfigBoolean(new OptionSpec("compiler", "optimize")),
             new ConfigBoolean(new OptionSpec("compiler", "report-invalid-styles-as-warnings")),
+            new ConfigBoolean(new OptionSpec("compiler", "report-missing-required-skin-parts-as-warnings")),
             new ConfigBoolean(new OptionSpec("compiler", "show-actionscript-warnings")),
             new ConfigBoolean(new OptionSpec("compiler", "show-binding-warnings")),
             new ConfigBoolean(new OptionSpec("compiler", "show-deprecation-warnings")),
@@ -99,6 +130,7 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
             new ConfigBoolean(new OptionSpec("compiler", "use-resource-bundle-metadata")),
             new ConfigBoolean(new OptionSpec("use-network")),
             new ConfigBoolean(new OptionSpec("warnings")),
+            new ConfigBoolean(new OptionSpec("remove-unused-rsls")),
             //Advanced Booleans
             new ConfigBoolean(new OptionSpec("compiler", "allow-source-path-overlap")),
             new ConfigBoolean(new OptionSpec("compiler", "as3")),
@@ -149,6 +181,9 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
             new ConfigBoolean(new OptionSpec("compiler", "generate-abstract-syntax-tree")),
             new ConfigBoolean(new OptionSpec(null, "static-link-runtime-shared-libraries", "static-rsls")),
             new ConfigBoolean(new OptionSpec(null, "verify-digests")),
+            new ConfigBoolean(new OptionSpec("use-direct-blit")),
+            new ConfigBoolean(new OptionSpec("use-gpu")),
+            
             //String Variables
             new ConfigString(new OptionSpec("compiler", "actionscript-file-encoding")),
             new ConfigString(new OptionSpec("compiler", "mxml.compatibility-version", "compatibility-version")),
@@ -163,12 +198,14 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
             new ConfigString(new OptionSpec(null, "output", "o")),
             new ConfigString(new OptionSpec("raw-metadata")),
             new ConfigString(new OptionSpec("resource-bundle-list")),
+            new ConfigString(new OptionSpec("size-report")),
             new ConfigString(new OptionSpec("target-player")),
             new ConfigString(new OptionSpec("tools-locale")),
             new ConfigAppendString(new OptionSpec("configname")),
             //Int Variables
             new ConfigInt(new OptionSpec("default-background-color")),
-            new ConfigInt(new OptionSpec("default-frame-rate"))
+            new ConfigInt(new OptionSpec("default-frame-rate")),
+            new ConfigInt(new OptionSpec("swf-version"))
         });
         
         nestedAttribs = new ArrayList();
@@ -215,7 +252,7 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
     public Fonts createFonts()
     {
         if (fonts == null)
-            return fonts = new Fonts();
+            return fonts = new Fonts(this);
         else
             throw new BuildException("Only one nested <fonts> element is allowed in an <mxmlc> task.");
     }
@@ -262,7 +299,7 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
             return runtimeSharedLibraryPath;
         }
         else if (lcSpec.matches(name)) {
-            return createElem("filename", lcSpec);
+        	return createElemAllowAppend(new String[] {"filename"} , lcSpec);
         }
         else if (spSpec.matches(name)) {
             return createElem("path-element", spSpec);
@@ -280,17 +317,17 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
                 throw new BuildException("Only one nested <default-size> element is allowed in an <mxmlc> task.");
         }
         else if (elSpec.matches(name)) {
-            FlexFileSet fs = new FlexFileSet(elSpec, true);
+            FlexFileSet fs = new FlexSwcFileSet(elSpec, true);
             nestedFileSets.add(fs);
             return fs;
         }
         else if (ilSpec.matches(name)) {
-            FlexFileSet fs = new FlexFileSet(ilSpec, true);
+            FlexFileSet fs = new FlexSwcFileSet(ilSpec, true);
             nestedFileSets.add(fs);
             return fs;
         }
         else if (lpSpec.matches(name)) {
-            FlexFileSet fs = new FlexFileSet(lpSpec, true);
+            FlexFileSet fs = new FlexSwcFileSet(lpSpec, true);
             nestedFileSets.add(fs);
             return fs;
         }
@@ -301,6 +338,15 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
         }
         else if (irSpec.matches(name)) {
             return createElem("bundle", irSpec);
+        }
+        else if (forceRslsSpec.matches(name)) {
+            FlexFileSet fs = new FlexFileSet(forceRslsSpec);
+            nestedFileSets.add(fs);
+            return fs;
+        }
+        else if (applicationDomainsSpec.matches(name))
+        {
+            return createElem(new String[] { "path-element", "application-domain-target" }, applicationDomainsSpec);            
         }
 
         return super.createDynamicElement(name);
@@ -331,7 +377,9 @@ public final class MxmlcTask extends FlexTask implements DynamicConfigurator
         Iterator it = nestedAttribs.iterator();
 
         while (it.hasNext())
+        {
             ((OptionSource) it.next()).addToCommandline(cmdl);
+        }
 
         it = nestedFileSets.iterator();
 

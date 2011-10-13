@@ -77,6 +77,53 @@ public class ConstraintRow extends EventDispatcher implements IMXMLObject
 	//
 	//--------------------------------------------------------------------------
 	
+    //----------------------------------
+    //  baseline
+    //----------------------------------
+        
+    /**
+     *  @private
+     *  Storage for the baseline property.
+     */
+    private var _baseline:Object = "maxAscent:0";
+    [Bindable("baselineChanged")]
+    [Inspectable(category="General")]
+    
+    /**
+     *  Number that specifies the baseline of the ConstraintRow instance, in pixels,
+     *  either relative to the top edge of the row or to the max ascent of the 
+     *  elements contained in this row.
+     * 
+     *  @default "maxAscent:0"
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 9
+     *  @playerversion AIR 1.1
+     *  @productversion Flex 3
+     */
+    public function get baseline():Object
+    {
+        return _baseline;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set baseline(value:Object):void
+    {
+        if (_baseline != value)
+        {
+            _baseline = value;
+            
+            if (container)
+            {
+                container.invalidateSize();
+                container.invalidateDisplayList();
+            }
+            dispatchEvent(new Event("baselineChanged"));
+        }
+    }
+    
 	//----------------------------------
     //  container
     //----------------------------------
@@ -264,7 +311,9 @@ public class ConstraintRow extends EventDispatcher implements IMXMLObject
      */
     public function get maxHeight():Number
     {
-        return _explicitMaxHeight;
+        // Since ConstraintRow doesn't have a measuredMaxHeight, we explictly return
+        // the default value of 10000 when no maxHeight is set.
+        return (!isNaN(_explicitMaxHeight)) ? _explicitMaxHeight : 10000;
     }
 
     /**
@@ -307,7 +356,9 @@ public class ConstraintRow extends EventDispatcher implements IMXMLObject
      */
     public function get minHeight():Number
     {
-        return _explicitMinHeight;
+        // Since ConstraintRow doesn't have a measuredMinHeight, we explictly return
+        // the default value of 0 when no minHeight is set.
+        return (!isNaN(_explicitMinHeight)) ? _explicitMinHeight : 0;
     }
 
     /**

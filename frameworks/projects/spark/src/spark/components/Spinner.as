@@ -128,6 +128,14 @@ use namespace mx_internal;
 [IconFile("Spinner.png")]
 
 /**
+ * Because this component does not define a skin for the mobile theme, Adobe
+ * recommends that you not use it in a mobile application. Alternatively, you
+ * can define your own mobile skin for the component. For more information,
+ * see <a href="http://help.adobe.com/en_US/Flex/4.0/UsingSDK/WS53116913-F952-4b21-831F-9DE85B647C8A.html">Spark Skinning</a>.
+ */
+[DiscouragedForProfile("mobileDevice")]
+
+/**
  *  A Spinner component selects a value from an
  *  ordered set. It uses two buttons that increase or
  *  decrease the current value based on the current
@@ -156,6 +164,12 @@ use namespace mx_internal;
  *  </ul>
  *  
  *  Therefore the scale is {-1,2,5,8,10}.
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  <p>The Spinner control has the following default characteristics:</p>
  *     <table class="innertable">
@@ -305,6 +319,8 @@ public class Spinner extends Range implements IFocusManagerComponent
      */
     private var _allowValueWrap:Boolean = false;
     
+    [Inspectable(category="General", defaultValue="false")]
+    
     /**
      *  Determines the behavior of the control for a step when the current 
      *  <code>value</code> is either the <code>maximum</code> 
@@ -351,7 +367,7 @@ public class Spinner extends Range implements IFocusManagerComponent
      */
     override protected function partAdded(partName:String, instance:Object):void
     {
-		super.partAdded(partName, instance);
+        super.partAdded(partName, instance);
 
         if (instance == incrementButton)
         {
@@ -374,7 +390,7 @@ public class Spinner extends Range implements IFocusManagerComponent
      */
     override protected function partRemoved(partName:String, instance:Object):void
     {
-		super.partRemoved(partName, instance);
+        super.partRemoved(partName, instance);
 
         if (instance == incrementButton)
         {

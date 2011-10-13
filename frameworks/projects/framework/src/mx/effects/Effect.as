@@ -233,6 +233,22 @@ public class Effect extends EventDispatcher implements IEffect
     // applyTransitionEndProperties flag, which is set on a per-Effect basis.
     mx_internal var applyEndValuesWhenDone:Boolean = false;
 
+    // This property tracks whether the effect is playing in interruption mode.
+    // Normally, effects pick up starting values (when not provided explicitly)
+    // from the current values of the target objects. But when playing in interruption
+    // mode, the effect should get its starting values from the propertyChanges
+    // array instead.
+    private var _transitionInterruption:Boolean = false;
+    
+    mx_internal function get transitionInterruption():Boolean
+    {
+        return _transitionInterruption;
+    }
+    mx_internal function set transitionInterruption(value:Boolean):void
+    {
+        _transitionInterruption = value;
+    }
+    
     // This is new behavior for the Flex4 effects; previously, we would not
     // set the end-state values automatically. Because of this switch, the
     // default value is hinged on a compatibility check, so that applications
@@ -284,6 +300,12 @@ public class Effect extends EventDispatcher implements IEffect
      *  Holds the init object passed in by the Transition.
      */
     mx_internal var propertyChangesArray:Array; 
+    
+    /**
+     *  @private
+     *  Track the property set in the play() function
+     */
+    mx_internal var playReversed:Boolean;
     
     private var effectStopped:Boolean;
         
@@ -1176,6 +1198,7 @@ public class Effect extends EventDispatcher implements IEffect
     {
         effectStopped = false;
         isPaused = false;
+        playReversed = playReversedFromEnd;
         
         // If we have a propertyChangesArray, capture the current values
         // if they haven't been captured already, strip out any unchanged 
@@ -1195,6 +1218,15 @@ public class Effect extends EventDispatcher implements IEffect
             applyStartValues(propertyChangesArray,
                              this.targets);
 
+            if (playReversedFromEnd)
+            {
+                for (var j:int = 0; j < propertyChangesArray.length; ++j)
+                {
+                    var tmpStart:Object = propertyChangesArray[j].start;
+                    propertyChangesArray[j].start = propertyChangesArray[j].end;
+                    propertyChangesArray[j].end = tmpStart;
+                }
+            }
             // Revalidate after applying the start values, to get everything
             // back the way it should be before starting the animation
             LayoutManager.getInstance().validateNow();
@@ -1249,7 +1281,7 @@ public class Effect extends EventDispatcher implements IEffect
      */
     public function stop():void
     {   
-        var n:int = _instances.length;
+        var n:int = _instances.length - 1;
         for (var i:int = n; i >= 0; i--)
         {
             var instance:IEffectInstance = IEffectInstance(_instances[i]);
@@ -1647,7 +1679,6 @@ public class Effect extends EventDispatcher implements IEffect
                     var startVal:* = propChanges[i].start[propName];
                     var endVal:* = propChanges[i].end[propName];
                     if (propName in propChanges[i].end &&
-                        endVal != startVal &&
                         (!(endVal is Number) ||
                          !(isNaN(endVal) && isNaN(startVal))))
                     {
@@ -1665,7 +1696,6 @@ public class Effect extends EventDispatcher implements IEffect
                     var startStyle:* = propChanges[i].start[styleName];
                     var endStyle:* = propChanges[i].end[styleName];
                     if (styleName in propChanges[i].end &&
-                        endStyle != startStyle &&
                         (!(endStyle is Number) ||
                          !(isNaN(endStyle) && isNaN(startStyle))) &&
                         target is IStyleClient)
@@ -1804,6 +1834,15 @@ public class Effect extends EventDispatcher implements IEffect
      */
     protected function effectEndHandler(event:EffectEvent):void 
     {
+        if (playReversed && propertyChangesArray != null)
+        {
+            for (var j:int = 0; j < propertyChangesArray.length; ++j)
+            {
+                var tmpStart:Object = propertyChangesArray[j].start;
+                propertyChangesArray[j].start = propertyChangesArray[j].end;
+                propertyChangesArray[j].end = tmpStart;
+            }
+        }
         var lastTime:Boolean = !_instances || _instances.length == 1;
 
         // Transitions should set the end values when done

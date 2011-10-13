@@ -19,11 +19,12 @@ import flash.events.Event;
 import flash.geom.Point;
 import flash.utils.*;
 
+import mx.core.FlexVersion;
 import mx.core.IFactory;
 import mx.core.ILayoutElement;
 import mx.core.IVisualElement;
-import mx.core.mx_internal;
 import mx.core.UIComponent;
+import mx.core.mx_internal;
 import mx.events.PropertyChangeEvent;
 
 import spark.events.SkinPartEvent;
@@ -43,7 +44,7 @@ use namespace mx_internal;
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="chromeColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="chromeColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  Name of the skin class to use for this component when a validation error occurs. 
@@ -72,7 +73,6 @@ use namespace mx_internal;
 //  Excluded APIs
 //--------------------------------------
 
-[Exclude(name="errorColor", kind="style")]
 [Exclude(name="themeColor", kind="style")]
 [Exclude(name="addChild", kind="method")]
 [Exclude(name="addChildAt", kind="method")]
@@ -146,6 +146,37 @@ public class SkinnableComponent extends UIComponent
     //  Properties
     //
     //--------------------------------------------------------------------------
+    
+    private var _skinDestructionPolicy:String = "never";
+    private var skinDestructionPolicyChanged:Boolean = false;
+    
+    /**
+     *  @private
+     * 
+     *  If set to "auto", then the component will call detachSkin when it has been
+     *  removed from the Stage. If it is then added back to the Stage, the component
+     *  will call attachSkin. Set this to "auto" if you want to reduce the memory 
+     *  usage of this component while it is not attached to the Stage. 
+     * 
+     *  Possible values are "auto" and "never".    
+     * 
+     *  @default "never"
+     */ 
+    mx_internal function get skinDestructionPolicy():String
+    {
+        return _skinDestructionPolicy;
+    }
+    
+    mx_internal function set skinDestructionPolicy(value:String):void
+    {
+        if (value == _skinDestructionPolicy)
+            return;
+     
+        _skinDestructionPolicy = value;
+        
+        skinDestructionPolicyChanged = true;
+        invalidateProperties();
+    }
     
     /**
      * @private 
@@ -237,9 +268,9 @@ public class SkinnableComponent extends UIComponent
      *  @inheritDoc
      *  
      *  @langversion 3.0
-     *  @playerversion Flash 9
-     *  @playerversion AIR 1.1
-     *  @productversion Flex 3
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     override public function get baselinePosition():Number
     {
@@ -266,6 +297,11 @@ public class SkinnableComponent extends UIComponent
     /**
      *  The state to be used when matching CSS pseudo-selectors. This override
      *  returns the current skin state instead of the component state.
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */ 
     override protected function get currentCSSState():String
     {
@@ -275,6 +311,8 @@ public class SkinnableComponent extends UIComponent
     //----------------------------------
     //  enabled
     //----------------------------------
+
+    [Inspectable(category="General", enumeration="true,false", defaultValue="true")]
 
     /**
      *  @private
@@ -434,6 +472,22 @@ public class SkinnableComponent extends UIComponent
             updateErrorSkin();
             errorStringChanged = false;
         }
+        
+        if (skinDestructionPolicyChanged)
+        {
+            if (skinDestructionPolicy == "auto")
+            {
+                addEventListener(Event.ADDED_TO_STAGE, adddedToStageHandler);
+                addEventListener(Event.REMOVED_FROM_STAGE, removedFromStageHandler);
+            }
+            else
+            {
+                removeEventListener(Event.ADDED_TO_STAGE, adddedToStageHandler);
+                removeEventListener(Event.REMOVED_FROM_STAGE, removedFromStageHandler);
+            }
+            
+            skinDestructionPolicyChanged = false;
+        }
     }
 
     /**
@@ -443,10 +497,22 @@ public class SkinnableComponent extends UIComponent
     {
         if (skin)
         {
-            measuredWidth = skin.getExplicitOrMeasuredWidth();
-            measuredHeight = skin.getExplicitOrMeasuredHeight();
-            measuredMinWidth = isNaN( skin.explicitWidth ) ? skin.minWidth : skin.explicitWidth;
-            measuredMinHeight = isNaN( skin.explicitHeight ) ? skin.minHeight : skin.explicitHeight;
+            if (FlexVersion.compatibilityVersion < FlexVersion.VERSION_4_5)
+            {
+                measuredWidth = skin.getExplicitOrMeasuredWidth();
+                measuredHeight = skin.getExplicitOrMeasuredHeight();
+
+                measuredMinWidth = isNaN( skin.explicitWidth ) ? skin.minWidth : skin.explicitWidth;
+                measuredMinHeight = isNaN( skin.explicitHeight ) ? skin.minHeight : skin.explicitHeight;
+            }
+            else
+            {
+                measuredWidth = skin.getExplicitOrMeasuredWidth(); 
+                measuredHeight = skin.getExplicitOrMeasuredHeight();
+
+                measuredMinWidth = skin.minWidth;
+                measuredMinHeight = skin.minHeight;
+            }
         }
     }
     
@@ -621,8 +687,8 @@ public class SkinnableComponent extends UIComponent
             // the skin's styles should be the same as the components
             skin.styleName = this;
              
-			// Note: The Spark PanelAccImpl adds a child Sprite at index 0.
-			// The skin should be in front of that.
+            // Note: The Spark PanelAccImpl adds a child Sprite at index 0.
+            // The skin should be in front of that.
             super.addChild(skin);
             
             skin.addEventListener(PropertyChangeEvent.PROPERTY_CHANGE, skin_propertyChangeHandler);
@@ -700,7 +766,7 @@ public class SkinnableComponent extends UIComponent
                     else
                     {
                         var len:int = numDynamicParts(id);
-                        for (var j:int = 0; j < len; j++)
+                        for (var j:int = len - 1; j >= 0; j--)
                             removeDynamicPartInstance(id, getDynamicPartAt(id, j));
                     }
                 }
@@ -740,7 +806,7 @@ public class SkinnableComponent extends UIComponent
      */
     mx_internal function updateErrorSkin():void
     {
-        if (errorString != null && errorString != "")
+        if (errorString != null && errorString != "" && getStyle("showErrorSkin"))
         {
             if (!errorObj)
             {
@@ -794,14 +860,14 @@ public class SkinnableComponent extends UIComponent
      */
     protected function partAdded(partName:String, instance:Object):void
     {
-		// Dispatch a partAdded event.
-		// This event is an internal implementation detail subject to change.
-		// The accessibility implementation classes listen for this to know
-		// when to add their event listeners to skin parts being added.
-		var event:SkinPartEvent = new SkinPartEvent(SkinPartEvent.PART_ADDED);
-		event.partName = partName;
-		event.instance = instance;
-		dispatchEvent(event);
+        // Dispatch a partAdded event.
+        // This event is an internal implementation detail subject to change.
+        // The accessibility implementation classes listen for this to know
+        // when to add their event listeners to skin parts being added.
+        var event:SkinPartEvent = new SkinPartEvent(SkinPartEvent.PART_ADDED);
+        event.partName = partName;
+        event.instance = instance;
+        dispatchEvent(event);
     }
 
     /**
@@ -824,14 +890,14 @@ public class SkinnableComponent extends UIComponent
      */
     protected function partRemoved(partName:String, instance:Object):void
     {       
-		// Dispatch a partRemoved event.
-		// This event is an internal implementation detail subject to change.
-		// The accessibility implementation classes listen for this to know
-		// when to remove their event listeners from skin parts being removed
-		var event:SkinPartEvent = new SkinPartEvent(SkinPartEvent.PART_REMOVED);
-		event.partName = partName;
-		event.instance = instance;
-		dispatchEvent(event);
+        // Dispatch a partRemoved event.
+        // This event is an internal implementation detail subject to change.
+        // The accessibility implementation classes listen for this to know
+        // when to remove their event listeners from skin parts being removed
+        var event:SkinPartEvent = new SkinPartEvent(SkinPartEvent.PART_REMOVED);
+        event.partName = partName;
+        event.instance = instance;
+        dispatchEvent(event);
     }
     
     //--------------------------------------------------------------------------
@@ -1022,6 +1088,25 @@ public class SkinnableComponent extends UIComponent
                 }
             }
         }
+    }
+    
+    /**
+     *  @private
+     */
+    private function adddedToStageHandler(event:Event):void
+    {
+        if (skin == null)
+        {
+            attachSkin();
+        }
+    }
+    
+    /**
+     *  @private
+     */
+    private function removedFromStageHandler(event:Event):void
+    {
+        detachSkin();
     }
     
     //--------------------------------------------------------------------------

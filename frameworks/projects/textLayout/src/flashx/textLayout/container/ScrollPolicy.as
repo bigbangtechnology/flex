@@ -1,16 +1,16 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.container
 {
-	import flashx.textLayout.property.EnumStringProperty;
+	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 
 	use namespace tlf_internal;
@@ -69,7 +69,7 @@ package flashx.textLayout.container
 		public static const ON:String = "on";		
 		
 		/** Shared definition of the scrollPolicy property. @private */
-		static tlf_internal const scrollPolicyPropertyDefinition:EnumStringProperty = new EnumStringProperty("scrollPolicy", ScrollPolicy.AUTO, false, null, 
+		static tlf_internal const scrollPolicyPropertyDefinition:Property = Property.NewEnumStringProperty("scrollPolicy", ScrollPolicy.AUTO, false, null, 
 			ScrollPolicy.AUTO, ScrollPolicy.OFF, ScrollPolicy.ON);	
 	}
 }

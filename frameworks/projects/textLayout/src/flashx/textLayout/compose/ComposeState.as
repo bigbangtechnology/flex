@@ -1,19 +1,22 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.compose
 {
+	import flash.display.DisplayObject;
 	import flash.events.Event;
 	import flash.geom.Rectangle;
 	import flash.text.engine.TextBlock;
+	import flash.text.engine.TextElement;
 	import flash.text.engine.TextLine;
+	import flash.text.engine.TextLineCreationResult;
 	import flash.text.engine.TextLineValidity;
 	
 	import flashx.textLayout.container.ContainerController;
@@ -23,17 +26,20 @@ package flashx.textLayout.compose
 	import flashx.textLayout.elements.FlowElement;
 	import flashx.textLayout.elements.FlowGroupElement;
 	import flashx.textLayout.elements.FlowLeafElement;
+	import flashx.textLayout.elements.InlineGraphicElement;
 	import flashx.textLayout.elements.OverflowPolicy;
 	import flashx.textLayout.elements.ParagraphElement;
-	import flashx.textLayout.elements.SubParagraphGroupElement;
 	import flashx.textLayout.elements.TextFlow;
 	import flashx.textLayout.formats.BaselineOffset;
 	import flashx.textLayout.formats.BlockProgression;
 	import flashx.textLayout.formats.Direction;
+	import flashx.textLayout.formats.Float;
 	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.ListStylePosition;
 	import flashx.textLayout.formats.TextAlign;
 	import flashx.textLayout.formats.VerticalAlign;
 	import flashx.textLayout.tlf_internal;
+	import flashx.textLayout.utils.Twips;
 	
 	use namespace tlf_internal;
 
@@ -52,41 +58,37 @@ package flashx.textLayout.compose
 		protected var vjBeginLineIndex:int;
 		protected var vjDisableThisParcel:Boolean;
 		
+		protected var _useExistingLine:Boolean;
+		
 		// a single ComposeState that is checked out and checked in
 		static private var _sharedComposeState:ComposeState;
 
 		/** @private */
 		static tlf_internal function getComposeState():ComposeState
 		{
-			var rslt:ComposeState = _sharedComposeState ? _sharedComposeState : new ComposeState();
-			_sharedComposeState = null;
-			return rslt;
+			var rslt:ComposeState = _sharedComposeState;
+			if (rslt)
+			{
+				_sharedComposeState = null;
+				return rslt;
+			}
+			return new ComposeState();
 		}
 		
 		/** @private */
 		static tlf_internal function releaseComposeState(state:ComposeState):void
 		{
-			if (_sharedComposeState == null)
-			{
-				_sharedComposeState = state;
-				if (_sharedComposeState)
-					_sharedComposeState.releaseAnyReferences();
-			}
-		}
-
-		/** Constructor. */
-		public function  ComposeState()
-		{	
-			super();	
+			state.releaseAnyReferences();
+			_sharedComposeState = state;
 		}				
 
 		/** @private */
-		protected override function createParcelList():IParcelList
+		protected override function createParcelList():ParcelList
 		{
 			return ParcelList.getParcelList();
 		}
 		/** @private */
-		protected override function releaseParcelList(list:IParcelList):void
+		protected override function releaseParcelList(list:ParcelList):void
 		{
 			ParcelList.releaseParcelList(list);
 		}
@@ -94,7 +96,9 @@ package flashx.textLayout.compose
 		/** @private */
 		public override function composeTextFlow(textFlow:TextFlow, composeToPosition:int, controllerEndIndex:int):int
 		{
-			_curLineIndex    = 0;
+			CONFIG::debug { assert(textFlow.flowComposer is StandardFlowComposer,"ComposeState.composeTextFlow requires textFlow with a StandardFlowComposer"); }
+			_curLineIndex    = -1;		// unitialized: this will get set in composeParagraphElement
+			_curLine = null;
 					
 			vjBeginLineIndex = 0;
 			vjDisableThisParcel = false;
@@ -102,20 +106,23 @@ package flashx.textLayout.compose
 			return super.composeTextFlow(textFlow, composeToPosition, controllerEndIndex);
 		}
 		
-		protected override function initializeForComposer(composer:IFlowComposer,composeToPosition:int,controllerEndIndex:int):void
+		protected override function initializeForComposer(composer:IFlowComposer,composeToPosition:int,controllerStartIndex:int, controllerEndIndex:int):void
 		{
-			super.initializeForComposer(composer,composeToPosition,controllerEndIndex);
 			           
 			// start composing from the first damaged position. Update internal composition state as if we'd composed to here already.
-			_startComposePosition = composer.damageAbsoluteStart; // _startController.absoluteStart;
-			var controllerIndex:int = composer.findControllerIndexAtPosition(_startComposePosition);
-			if (controllerIndex == -1)
+			_startComposePosition = composer.damageAbsoluteStart;
+			if (controllerStartIndex == -1)
 			{
-				controllerIndex = composer.numControllers-1;
-				// if off the end in the overflow - find the last non-zero controller
-				while (controllerIndex != 0 && composer.getControllerAt(controllerIndex).textLength == 0)
-					controllerIndex--;
+				var controllerIndex:int = composer.findControllerIndexAtPosition(_startComposePosition);
+				if (controllerIndex == -1)
+				{
+					controllerIndex = composer.numControllers-1;
+					// if off the end in the overflow - find the last non-zero controller
+					while (controllerIndex != 0 && composer.getControllerAt(controllerIndex).textLength == 0)
+						controllerIndex--;
+				}
 			}
+			
 			// if damage is in overflow after last controller we could get smart about that
 			_startController = composer.getControllerAt(controllerIndex);
 			CONFIG::debug { assert(_startController != null,"Bad start start controller"); }
@@ -126,6 +133,8 @@ package flashx.textLayout.compose
 
 			// Comment this line in to disable composing from the middle of a container.
 		//	_startComposePosition = _startController.absoluteStart; 
+
+			super.initializeForComposer(composer,composeToPosition, controllerIndex, controllerEndIndex);
 		}
 		
 		/** @private */
@@ -136,28 +145,46 @@ package flashx.textLayout.compose
 			// mark all overflow lines as not being in any container or column
 			if (_curElement)
 			{
+				var lineIndex:int = _curLineIndex;
 				CONFIG::debug { assert(_curLineIndex == _flowComposer.findLineIndexAtPosition(_curElementStart + _curElementOffset),"bad _curLineIndex"); }
-				while (_curLineIndex < _flowComposer.numLines)
-					_flowComposer.getLineAt(_curLineIndex++).setController(null,-1);
+				while (lineIndex < _flowComposer.numLines)
+					_flowComposer.getLineAt(lineIndex++).setController(null,-1);
 			}
 		}
 
- 		override protected function doVerticalAlignment(canVerticalAlign:Boolean,nextParcel:Parcel):Boolean
+ 		override protected function doVerticalAlignment(canVerticalAlign:Boolean,nextParcel:Parcel):void
 		{
-			var result:Boolean = false;
-			if (canVerticalAlign && _curParcel && vjBeginLineIndex != _curLineIndex &&  !vjDisableThisParcel && _curParcel.columnCoverage == Parcel.FULL_COLUMN)
+			if (canVerticalAlign && _curParcel && vjBeginLineIndex != _curLineIndex &&  !vjDisableThisParcel)
 			{
 				var controller:ContainerController = _curParcel.controller;
 				var vjtype:String = controller.computedFormat.verticalAlign;
-				if (vjtype != VerticalAlign.TOP)
+				// Don't allow vertical justification if the line contains floats, since we don't support recomposing when lines are moved.
+				if (vjtype == VerticalAlign.JUSTIFY)
+				{
+					for  (var i:int = controller.numFloats - 1; i >= 0 && canVerticalAlign; --i)
+					{
+						var floatInfo:FloatCompositionData = controller.getFloatAt(i);
+						if (floatInfo.floatType != Float.NONE)
+							canVerticalAlign = false;
+							
+					}
+				}
+				if (canVerticalAlign && vjtype != VerticalAlign.TOP)
 				{	
 					// Exclude overset lines
 					var end:int = _flowComposer.findLineIndexAtPosition(_curElementStart + _curElementOffset)
 
 					if (vjBeginLineIndex < end)
 					{
-						applyVerticalAlignmentToColumn(controller,vjtype,_flowComposer.lines,vjBeginLineIndex,end-vjBeginLineIndex);
-						result = true;	// lines were moved
+						var beginFloatIndex:int = 0;
+						var endFloatIndex:int = 0;
+						var lines:Array = (_flowComposer as StandardFlowComposer).lines;
+						if (controller.numFloats > 0)
+						{
+							beginFloatIndex = controller.findFloatIndexAtOrAfter(lines[vjBeginLineIndex].absoluteStart);
+							endFloatIndex = controller.findFloatIndexAfter(_curElementStart + _curElementOffset);
+						}
+						applyVerticalAlignmentToColumn(controller,vjtype,lines,vjBeginLineIndex,end-vjBeginLineIndex, beginFloatIndex, endFloatIndex);
 					}
 				}
 			}
@@ -165,65 +192,100 @@ package flashx.textLayout.compose
 			// always reset these variables
 			vjDisableThisParcel = false;
 			vjBeginLineIndex = _curLineIndex;	
+		}
+		
+		
+		/** apply vj and adjust the parcel bounds */
+		override protected function applyVerticalAlignmentToColumn(controller:ContainerController,vjType:String,lines:Array,beginIndex:int,numLines:int,beginFloatIndex:int,endFloatIndex:int):void
+		{
+			super.applyVerticalAlignmentToColumn(controller, vjType, lines, beginIndex, numLines, beginFloatIndex, endFloatIndex);
 			
-			return result;
+			// Reposition lines in case they got aligned after being added to _linesInView
+			for each (var textLine:TextLine in controller.composedLines)
+			{
+				var line:TextFlowLine = textLine.userData as TextFlowLine;
+				CONFIG::debug
+				{
+					for (var i:int = 0; i < _textFlow.flowComposer.numLines; ++i)
+					{
+						var tfl:TextFlowLine = _textFlow.flowComposer.getLineAt(i);
+						if (tfl == line)
+							break;
+					}
+					assert(i < _textFlow.flowComposer.numLines, "Creating shape for unknown (old) line");
+				}
+				line.createShape(_blockProgression, textLine);
+			}
 		}
 		
 		/** Final adjustment on the content bounds. */
  		override protected function finalParcelAdjustment(controller:ContainerController):void
  		{
+			CONFIG::debug { assert(_flowComposer.getLineAt(_flowComposer.findLineIndexAtPosition(_curParcelStart)).absoluteStart == _curParcelStart,"finalParcelAdjustment: bad _curParcelStart"); }
+
  			var minX:Number = TextLine.MAX_LINE_WIDTH;
  			var minY:Number = TextLine.MAX_LINE_WIDTH;
  			var maxX:Number = -TextLine.MAX_LINE_WIDTH;
- 			var maxY:Number = -TextLine.MAX_LINE_WIDTH;
  			
  			var verticalText:Boolean = _blockProgression == BlockProgression.RL;
-
-            var lineIndex:int = _flowComposer.findLineIndexAtPosition(controller.absoluteStart); 
-            while (lineIndex < _curLineIndex)
-            {
-            	var line:TextFlowLine = _flowComposer.getLineAt(lineIndex);
-
-            	// Check the logical vertical dimension first
-            	// If the lines have children, they may be inlines. The origin of the TextFlowLine is the baseline - ascent, 
-            	// which does not include the ascent of the inlines. So we have to factor that in.
+			
+			if (!isNaN(_parcelLogicalTop))
+			{
 				if (verticalText)
-				{
-	      	 		maxX = Math.max(line.x + line.ascent, maxX);
-	      	 		minX = Math.min(line.x, minX);
-	   			}	
-	      	 	else
-	      	 		minY = Math.min(line.y, minY);
-	       		
-				// CONFIG::debug { assert(line.hasGraphicElement == line.getTextLine().hasGraphicElement,"Bad hasGraphicElement"); }
-				// this is a test for an inline graphic
-	       		if (line.hasGraphicElement)
-	       		{
-	       			var leafElement:FlowLeafElement = _textFlow.findLeaf(line.absoluteStart);
-	       			var adjustedAscent:Number = line.getLineTypographicAscent(leafElement, leafElement.getAbsoluteStart());
-					if (!verticalText)
-	       				minY = Math.min(line.y + line.ascent - adjustedAscent, minY);
-	       			else
-	       				maxX = Math.max(line.x + adjustedAscent, maxX);
-	       		}
-
-
-				// Now check the logical horizontal dimension
-				var edgeAdjust:Number;
-				var curParaFormat:ITextLayoutFormat = line.paragraph.computedFormat;
-				if (curParaFormat.direction == Direction.LTR)
-					edgeAdjust = Math.max(line.lineOffset, 0);
+					maxX = _parcelLogicalTop;
 				else
-					edgeAdjust = curParaFormat.paragraphEndIndent;
-             	if (verticalText)
-           			minY = Math.min(line.y - edgeAdjust, minY);
-             	else 
-           			minX = Math.min(line.x - edgeAdjust, minX);
-            	++lineIndex;
-            }
-            
-            if (_blockProgression == BlockProgression.RL)
-            	minX -= _lastLineDescent;
+					minY = _parcelLogicalTop;
+			}
+			
+			if (!_measuring)
+			{
+				if (verticalText)
+					minY = _accumulatedMinimumStart;
+				else
+					minX = _accumulatedMinimumStart;			
+			}
+			else
+			{
+				var edgeAdjust:Number;
+				var curPara:ParagraphElement;
+				var curParaFormat:ITextLayoutFormat;
+				var curParaDirection:String;
+				
+				for (var lineIndex:int = _flowComposer.findLineIndexAtPosition(_curParcelStart); lineIndex < _curLineIndex; lineIndex++)
+	            {
+					var line:TextFlowLine = _flowComposer.getLineAt(lineIndex);
+					
+					// Now check the logical horizontal dimension
+					CONFIG::debug { assert(line != null && line.paragraph != null, "found it");}
+					
+					if (line.paragraph != curPara)
+					{
+						curPara = line.paragraph;
+						curParaFormat = curPara.computedFormat;
+						curParaDirection = curParaFormat.direction;
+						if (curParaDirection != Direction.LTR)
+							edgeAdjust = curParaFormat.paragraphEndIndent;
+					}
+					
+					if (curParaDirection == Direction.LTR)
+						edgeAdjust = Math.max(line.lineOffset, 0);
+					
+					edgeAdjust = verticalText ? line.y - edgeAdjust : line.x - edgeAdjust;
+					
+					var numberLine:TextLine = TextFlowLine.findNumberLine(line.getTextLine(true));
+					
+					if (numberLine)
+					{
+						var numberLineStart:Number = verticalText ? numberLine.y+line.y : numberLine.x+line.x;
+						edgeAdjust = Math.min(edgeAdjust,numberLineStart);
+					}
+					
+	             	if (verticalText)
+	           			minY = Math.min(edgeAdjust, minY);
+	             	else 
+	           			minX = Math.min(edgeAdjust, minX);
+	            }
+			}
             
             // Don't make adjustments for tiny fractional values.
             if (minX != TextLine.MAX_LINE_WIDTH && Math.abs(minX-_parcelLeft) >= 1)
@@ -232,178 +294,168 @@ package flashx.textLayout.compose
          		_parcelRight = maxX;
          	if (minY != TextLine.MAX_LINE_WIDTH && Math.abs(minY-_parcelTop) >= 1)
            		_parcelTop = minY;
-         	if (maxY != -TextLine.MAX_LINE_WIDTH && Math.abs(maxY-_parcelBottom) >= 1)
-           		_parcelBottom = maxY;
  		}
  				
-		private function finalizeLine(useExistingLine:Boolean,curLine:TextFlowLine):void
+		/** Called when we are finished composing a line. Handler for derived classes to override default behavior.  */
+		override protected function endLine(textLine:TextLine):void
 		{
-			if ( !useExistingLine ) 		
-			{	
-				_flowComposer.addLine(curLine,_curLineIndex);
-			}
-			_curLineIndex++;
+			super.endLine(textLine);
+
+			if ( !_useExistingLine ) 		
+				(_flowComposer as StandardFlowComposer).addLine(_curLine,_curLineIndex);
 			
-			commitLastLineState (curLine);
-		}
+			commitLastLineState (_curLine);
+			_curLineIndex++;
+		}		
 		
 		protected override function composeParagraphElement(elem:ParagraphElement, absStart:int):Boolean
-		{
-			_curParaElement  = elem;
-			_curParaStart    = absStart;
-			_curParaFormat = elem.computedFormat;
-			CONFIG::debug { assert(_curParaStart == elem.getAbsoluteStart(),"composeParagraphElement: bad start"); }
-			if (_startComposePosition == 0)
-			{
-				_curElement 	 = elem.getFirstLeaf();
-				_curElementStart = _curParaStart;
-			}
-			else 
-			{
-				CONFIG::debug { assert(absStart <= _startComposePosition && absStart+elem.textLength > _startComposePosition,"bad call to composeParagraphElement"); }
-				_curElement = elem.findLeaf(_startComposePosition-absStart);
-				_curElementStart = _curElement.getAbsoluteStart();
-				_curElementOffset = _startComposePosition-_curElementStart;
+		{				
+			if (_curLineIndex < 0)
 				_curLineIndex = _flowComposer.findLineIndexAtPosition(_curElementStart + _curElementOffset);
-				// next time we are all postioned
-				_startComposePosition = 0;
-			}
 
-			return composeParagraphElementIntoLines();
+			return super.composeParagraphElement(elem, absStart);
 		}
 		
 		/** @private */
-		protected override function composeNextLine():TextFlowLine
+		protected override function composeNextLine():TextLine
 		{
 			CONFIG::debug { assert(_curLineIndex == _flowComposer.findLineIndexAtPosition(_curElementStart + _curElementOffset),"bad _curLineIndex"); }
 
-			// Check to see if there's an existing line that is composed up-to-date
-			var line:TextFlowLine = _curLineIndex < _flowComposer.numLines ? _flowComposer.lines[_curLineIndex] : null;
-			var useExistingLine:Boolean = line && (!line.isDamaged() || line.validity == FlowDamageType.GEOMETRY);
-			var curLine:TextFlowLine = useExistingLine ? line : null;
+			// Find out how long a zero-logical height line can be in the parcel at the current position (depth). 
+			// See if there is an existing line that is composed up-to-date matching the parcel width. If there is,
+			// we try to reuse it, otherwise we create a new line. Once we have placed a line, we will recheck the
+			// width in fitLineToParcel to make sure it fits at the (possibly changed) line height.
 			var startCompose:int = _curElementStart + _curElementOffset - _curParaStart;
-			var prevLine:TextFlowLine;
-			if (startCompose != 0)
+			var line:TextFlowLine = _curLineIndex < _flowComposer.numLines ? (_flowComposer as StandardFlowComposer).lines[_curLineIndex] : null;
+			
+			var useExistingLine:Boolean = line && (!line.isDamaged() || line.validity == FlowDamageType.GEOMETRY);
+			var numberLine:TextLine;
+			
+			// create numberLine if in a listElement
+			if (_listItemElement && _listItemElement.getAbsoluteStart() == _curElementStart+_curElementOffset)
 			{
-				prevLine = _flowComposer.lines[_curLineIndex - 1];
-				if (prevLine.absoluteStart < _curParaStart)		// is the previous line in the previous paragraph?
-					prevLine = null;
+				var peekLine:TextLine;
+				if (useExistingLine && (peekLine = line.peekTextLine()) != null)
+				{
+					// may be null
+					numberLine = TextFlowLine.findNumberLine(peekLine);
+				}
+				else
+				{
+					var isRTL:Boolean = _curParaElement.computedFormat.direction == Direction.RTL;
+					numberLine = TextFlowLine.createNumberLine(_listItemElement, _curParaElement, _flowComposer.swfContext, isRTL ? _parcelList.rightMargin : _parcelList.leftMargin);
+				}
+				
+				pushInsideListItemMargins(numberLine);
 			}
-			var finishLineSlug:Rectangle = _parcelList.currentParcel;
+			
+			_parcelList.getLineSlug(_lineSlug, 0, 1, _textIndent, _curParaFormat.direction == Direction.LTR);
+			
+			if (useExistingLine && Twips.to(_lineSlug.width) != line.outerTargetWidthTW)
+				useExistingLine = false;
+
+			_curLine = useExistingLine ? line : null;
+			var textLine:TextLine;
 			
 			for (;;) 
 			{
-				while (!curLine)
+				while (!_curLine)
 				{	
 					useExistingLine = false;
 					// generate new line
 					CONFIG::debug { assert(!_parcelList.atEnd(), "failing to stop"); }
-					CONFIG::debug { assert(_curElement is FlowLeafElement, "element must be leaf before calling composeLine"); }
+					CONFIG::debug { assert(_curElement is FlowLeafElement, "element must be leaf before calling composeLine"); }					
+					CONFIG::debug { validateLineStart(_previousLine, startCompose, _curParaElement); }
 					
-					curLine = createTextLine(prevLine,	startCompose, _parcelList.getComposeXCoord(finishLineSlug), _parcelList.getComposeYCoord(finishLineSlug),	_parcelList.getComposeWidth(finishLineSlug));
-					if (curLine != null)
+					textLine = createTextLine(_lineSlug.width, !_lineSlug.wrapsKnockOut /* don't allow emergency breaks next to floats or padded elements */);
+					if (textLine)
 						break;
-					// force advance to the next parcel
-					if (!_parcelList.next())
+
+					// force advance within the parcel to the next wider slug, or (if there are no more) to the next parcel
+					var newDepth:Number = _curParcel.findNextTransition(_lineSlug.depth);
+					if (newDepth < Number.MAX_VALUE)
+					{
+						_parcelList.addTotalDepth(newDepth - _lineSlug.depth);
+						if (!_parcelList.getLineSlug(_lineSlug, 0, 1, _textIndent, _curParaFormat.direction == Direction.LTR))
+							return null;
+					}
+					else 
+					{
+						advanceToNextParcel();
+						if (!_parcelList.atEnd())
+						{
+							if (_parcelList.getLineSlug(_lineSlug, 0, 1, _textIndent, _curParaFormat.direction == Direction.LTR))
+								continue;
+						}
+						popInsideListItemMargins(numberLine);
 						return null;
+					}						
 				}
 				
 				// updates _lineSlug
-				curLine = fitLineToParcel(curLine, !useExistingLine);
-				if (curLine)
-					break;
+				CONFIG::debug { assert(textLine || useExistingLine, "expected non-null textLine because we had to regenerate the line"); }
+				if (!textLine)
+					textLine = _curLine.getTextLine(true);
+				if (fitLineToParcel(textLine, !useExistingLine, numberLine))
+					break;	// we have a good line
+				_curLine = null;	// keep looking
 				if (_parcelList.atEnd())
+				{
+					popInsideListItemMargins(numberLine);
 					return null;
-				finishLineSlug = _lineSlug;
+				}
 			}
 			
 			// Clear up user_invalid
-			if (curLine.validity == FlowDamageType.GEOMETRY)
-				curLine.clearDamage(); 
+			if (_curLine.validity == FlowDamageType.GEOMETRY)
+				_curLine.clearDamage(); 
 								
-			finalizeLine(useExistingLine,curLine);
+			_useExistingLine = useExistingLine;
+			
+			popInsideListItemMargins(numberLine);
 
-			CONFIG::debug { assert(curLine != null, "curLine != null"); }			
-			return curLine;
+			CONFIG::debug { assert(textLine != null, "textLine != null"); }			
+			return textLine;
 		}
 		
 		/** @private */
-		protected function createTextLine(prevLine:TextFlowLine,	// previous line
-			lineStart:int, 		// text index of position to start from, relative to start of paragraph
-			x:Number,			// left edge of the line
-			y:Number, 			// top of the line
-			targetWidth:Number	// target width we're composing into
-			):TextFlowLine
-        {
-        //	trace("lineBreak: start", prevLine ? (prevLine.start+prevLine.textLength) : 0, "paraEnd", paraEnd, "(", x, y, ")", "targetWidth", targetWidth);
-         	
-        	CONFIG::debug { validateLineStart(prevLine, lineStart, _curParaElement); }
-        	
- 			var lineOffset:Number = Number(_curParaFormat.paragraphStartIndent);  	// indent to "beginning" of the line.  Direction dependent (as is paragraphStartIndent)    		
-     		if (prevLine == null) 	// first line indent
-     			lineOffset += Number(_curParaFormat.textIndent);
-     		
-     		var outerTargetWidth:Number = targetWidth;
-     		targetWidth -= (Number(_curParaFormat.paragraphEndIndent) + lineOffset);		// make room for offset and end indent
-     		
-     		// TargetWidth must be between 0 and TextLine.MAX_LINE_WIDTH
-     		if (targetWidth < 0)
-     			targetWidth = 0;
-     		else if (targetWidth > TextLine.MAX_LINE_WIDTH)
-     			targetWidth = TextLine.MAX_LINE_WIDTH;
-	   		
-	   		var textLine:TextLine = TextLineRecycler.getLineForReuse();
-	   		var textBlock:TextBlock = _curParaElement.getTextBlock();
-	   		if (textLine)
-	   		{
-				CONFIG::debug { assert(_textFlow.backgroundManager == null || _textFlow.backgroundManager.lineDict[textLine] === undefined,"Bad TextLine in recycler cache"); }
-	        	textLine = swfContext.callInContext(textBlock["recreateTextLine"],textBlock,[textLine, prevLine?prevLine.getTextLine(true):null, targetWidth, lineOffset, true]);
-      		}
-	   		else
-	   		{
-	        	textLine = swfContext.callInContext(textBlock.createTextLine,textBlock,[prevLine?prevLine.getTextLine(true):null, targetWidth, lineOffset, true]);
-      		}
-        	// Unable to fit a new line
-        	if (textLine == null)
-        		return null;
-        	//trace("LineBreak prevLineLength:",prevLine?prevLine.textLine.rawTextLength:0,"nextLineLength:",line?line.textLine.rawTextLength:0);
- 			// outerTargetWidth, targetWidth, textIndent, start, textLength, textLine
- 			CONFIG::debug { assert(_curParaStart == _curParaElement.getAbsoluteStart(),"bad _curParaStart"); }
- 			var line:TextFlowLine = new TextFlowLine(textLine, _curParaElement, outerTargetWidth, lineOffset, lineStart + _curParaStart, textLine.rawTextLength);
- 			CONFIG::debug { assert(line.targetWidth == targetWidth,"Bad targetWidth"); }
- 			textLine.doubleClickEnabled = true;		// allow line to be the target oif a double click event
+		override protected function createTextLine(
+			targetWidth:Number,	// target width we're composing into
+			allowEmergencyBreaks:Boolean	// true to allow words to break in the middle of narrow columns, false to force overset
+			):TextLine
+        {		
+			_curLine = new TextFlowLine(null, null);		// it will be initialized in BaseCompose.createTextLine
+			var textLine:TextLine = super.createTextLine(targetWidth, allowEmergencyBreaks);
+			
+			if (textLine)
+	 			textLine.doubleClickEnabled = true;		// allow line to be the target oif a double click event
+			else
+				_curLine = null;
  			
-			// update spaceBefore & spaceAfter		
-			CONFIG::debug
-			{
-				var linePos:uint = line.location;
-				if (linePos & TextFlowLineLocation.FIRST)
-					line.setSpaceBefore(Number(_curParaFormat.paragraphSpaceBefore));
-				if (linePos & TextFlowLineLocation.LAST)
-		     		line.setSpaceAfter(Number(_curParaFormat.paragraphSpaceAfter)); 		
-			}
- 			
- 			return line;
+ 			return textLine;
         }
         
         /** @private */
-		CONFIG::debug private static function validateLineStart(prevLine:TextFlowLine, lineStart:int, paraNode:ParagraphElement):void
+		CONFIG::debug private static function validateLineStart(previousLine:TextLine, lineStart:int, paraNode:ParagraphElement):void
 		{
 			// If the lines have been released, don't validate
 			if (lineStart != 0 && paraNode.getTextBlock().firstLine == null)
 				return;
 				
 	       	var testStart:int = 0;
-	    	var testLine:TextLine = prevLine ? prevLine.getTextLine(true) : null;
+	    	var testLine:TextLine = previousLine;
 	    	while (testLine)
 	    	{
+				CONFIG::debug { assert(testLine.validity == TextLineValidity.VALID, "previous line in paragraph is not valid!"); }
 	    		testStart += testLine.rawTextLength;
 	    		testLine = testLine.previousLine;
 	    	}
 	    	assert(testStart == lineStart, "Bad lines");
 			
       		assert(paraNode is ParagraphElement,"composeLine: paraNode must be a para"); 
-      		assert(!prevLine || !(prevLine.location & TextFlowLineLocation.LAST),"prevLine may not be from a different para"); 
+			var prevLine:TextFlowLine = previousLine ? previousLine.userData as TextFlowLine : null;
+			assert(!previousLine || prevLine != null, "prevLine null");
+      		assert(!previousLine || !(prevLine.location & TextFlowLineLocation.LAST),"prevLine may not be from a different para"); 
 		} 
 	}
 }

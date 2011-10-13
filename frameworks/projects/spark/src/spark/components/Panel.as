@@ -12,10 +12,11 @@
 package spark.components
 {
 
+import mx.core.IVisualElement;
 import mx.core.mx_internal;
 import mx.utils.BitFlagUtil;
 
-import spark.components.supportClasses.TextBase;
+import spark.core.IDisplayText;
 import spark.layouts.supportClasses.LayoutBase;
 
 use namespace mx_internal;
@@ -85,12 +86,64 @@ use namespace mx_internal;
 [Style(name="dropShadowVisible", type="Boolean", inherit="no", theme="spark")]
 
 //--------------------------------------
+//  Skin states
+//--------------------------------------
+
+/**
+ *  Normal State of the Panel
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[SkinState("normal")]
+
+/**
+ *  Disabled State of the Panel
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[SkinState("disabled")]
+
+/**
+ *  Normal State with ControlBar of the Panel
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[SkinState("normalWithControlBar")]
+
+/**
+ *  Disabled State with ControlBar of the Panel
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[SkinState("disabledWithControlBar")]
+
+//--------------------------------------
 //  Other metadata
 //--------------------------------------
 
 [AccessibilityClass(implementation="spark.accessibility.PanelAccImpl")]
 
 [IconFile("Panel.png")]
+
+/**
+ * Because this component does not define a skin for the mobile theme, Adobe
+ * recommends that you not use it in a mobile application. Alternatively, you
+ * can define your own mobile skin for the component. For more information,
+ * see <a href="http://help.adobe.com/en_US/Flex/4.0/UsingSDK/WS53116913-F952-4b21-831F-9DE85B647C8A.html">Spark Skinning</a>.
+ */
+[DiscouragedForProfile("mobileDevice")]
 
 /**
  *  The Panel class defines a container that includes a title bar, 
@@ -143,7 +196,7 @@ use namespace mx_internal;
 public class Panel extends SkinnableContainer
 {
     include "../core/Version.as";
-
+    
     //--------------------------------------------------------------------------
     //
     //  Class constants
@@ -154,17 +207,17 @@ public class Panel extends SkinnableContainer
      *  @private
      */
     mx_internal static const CONTROLBAR_PROPERTY_FLAG:uint = 1 << 0;
-
+    
     /**
      *  @private
      */
     mx_internal static const LAYOUT_PROPERTY_FLAG:uint = 1 << 1;
-
+    
     /**
      *  @private
      */
     mx_internal static const VISIBLE_PROPERTY_FLAG:uint = 1 << 2;
-
+    
     //--------------------------------------------------------------------------
     //
     //  Class mixins
@@ -176,13 +229,13 @@ public class Panel extends SkinnableContainer
      *  Placeholder for mixin by PanelAccImpl.
      */
     mx_internal static var createAccessibilityImplementation:Function;
-
+    
     //--------------------------------------------------------------------------
     //
     //  Constructor
     //
     //--------------------------------------------------------------------------
-
+    
     /**
      *  Constructor. 
      *  
@@ -194,7 +247,7 @@ public class Panel extends SkinnableContainer
     public function Panel()
     {
         super();
-
+        
         // default skin uses graphical dropshadow which 
         // we don't want to be hittable
         mouseEnabled = false;
@@ -205,7 +258,7 @@ public class Panel extends SkinnableContainer
     //  Variables 
     //
     //--------------------------------------------------------------------------
-
+    
     /**
      *  @private
      *  Several properties are proxied to controlBarGroup.  However, when controlBarGroup
@@ -224,19 +277,19 @@ public class Panel extends SkinnableContainer
      *  have been explicitely set or not.
      */
     mx_internal var controlBarGroupProperties:Object = { visible: true };
-	
+    
     //--------------------------------------------------------------------------
     //
     //  Skin parts 
     //
     //--------------------------------------------------------------------------
-
+    
     //----------------------------------
     //  controlBarGroup
     //---------------------------------- 
     
     [SkinPart(required="false")]
-
+    
     /**
      *  The skin part that defines the appearance of the 
      *  control bar area of the container.
@@ -251,13 +304,13 @@ public class Panel extends SkinnableContainer
      *  @productversion Flex 4
      */
     public var controlBarGroup:Group;
-
+    
     //----------------------------------
     //  titleField
     //---------------------------------- 
     
     [SkinPart(required="false")]
-
+    
     /**
      *  The skin part that defines the appearance of the 
      *  title text in the container.
@@ -269,24 +322,24 @@ public class Panel extends SkinnableContainer
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-    public var titleDisplay:TextBase;
-
+    public var titleDisplay:IDisplayText;
+    
     //--------------------------------------------------------------------------
     //
     //  Overridden properties: UIComponent
     //
     //--------------------------------------------------------------------------
-
+    
     //----------------------------------
     //  baselinePosition
     //----------------------------------
-
+    
     /**
      *  @private
      */
     override public function get baselinePosition():Number
     {
-        return getBaselinePositionForPart(titleDisplay);
+        return getBaselinePositionForPart(titleDisplay as IVisualElement);
     } 
     
     //--------------------------------------------------------------------------
@@ -294,7 +347,7 @@ public class Panel extends SkinnableContainer
     //  Properties
     //
     //--------------------------------------------------------------------------
-
+    
     //----------------------------------
     //  controlBarContent
     //---------------------------------- 
@@ -326,7 +379,7 @@ public class Panel extends SkinnableContainer
         else
             return controlBarGroupProperties.controlBarContent;
     }
-
+    
     /**
      *  @private
      */
@@ -336,14 +389,14 @@ public class Panel extends SkinnableContainer
         {
             controlBarGroup.mxmlContent = value;
             controlBarGroupProperties = BitFlagUtil.update(controlBarGroupProperties as uint, 
-                                                        CONTROLBAR_PROPERTY_FLAG, value != null);
+                CONTROLBAR_PROPERTY_FLAG, value != null);
         }
         else
             controlBarGroupProperties.controlBarContent = value;
-
+        
         invalidateSkinState();
     }
-
+    
     //----------------------------------
     //  controlBarLayout
     //---------------------------------- 
@@ -361,10 +414,10 @@ public class Panel extends SkinnableContainer
     public function get controlBarLayout():LayoutBase
     {
         return (controlBarGroup) 
-            ? controlBarGroup.layout 
+        ? controlBarGroup.layout 
             : controlBarGroupProperties.layout;
     }
-
+    
     /**
      *  @private
      */
@@ -374,12 +427,12 @@ public class Panel extends SkinnableContainer
         {
             controlBarGroup.layout = value;
             controlBarGroupProperties = BitFlagUtil.update(controlBarGroupProperties as uint, 
-                                                        LAYOUT_PROPERTY_FLAG, true);
+                LAYOUT_PROPERTY_FLAG, true);
         }
         else
             controlBarGroupProperties.layout = value;
     }
-
+    
     //----------------------------------
     //  controlBarVisible
     //---------------------------------- 
@@ -404,10 +457,10 @@ public class Panel extends SkinnableContainer
     public function get controlBarVisible():Boolean
     {
         return (controlBarGroup) 
-            ? controlBarGroup.visible 
+        ? controlBarGroup.visible 
             : controlBarGroupProperties.visible;
     }
-
+    
     /**
      *  @private
      */
@@ -417,20 +470,20 @@ public class Panel extends SkinnableContainer
         {
             controlBarGroup.visible = value;
             controlBarGroupProperties = BitFlagUtil.update(controlBarGroupProperties as uint, 
-                                                        VISIBLE_PROPERTY_FLAG, value);
+                VISIBLE_PROPERTY_FLAG, value);
         }
         else
             controlBarGroupProperties.visible = value;
-
+        
         invalidateSkinState();
         if (skin)
             skin.invalidateSize();
     }
-
+    
     //----------------------------------
     //  title
     //----------------------------------
-
+    
     /**
      *  @private
      */
@@ -440,9 +493,10 @@ public class Panel extends SkinnableContainer
      *  @private
      */
     private var titleChanged:Boolean;
-
+    
     [Bindable]
-
+    [Inspectable(category="General", defaultValue="")]
+    
     /**
      *  Title or caption displayed in the title bar. 
      *
@@ -457,33 +511,33 @@ public class Panel extends SkinnableContainer
     {
         return _title;
     }
-
+    
     /**
      *  @private
      */
     public function set title(value:String):void 
     {
         _title = value;
-
+        
         if (titleDisplay)
             titleDisplay.text = title;
     }
-
+    
     //--------------------------------------------------------------------------
     //
     //  Overridden methods
     //
     //--------------------------------------------------------------------------
-	
+    
     /**
      *  @private
      */
     override protected function initializeAccessibility():void
     {
-		if (Panel.createAccessibilityImplementation != null)
-			Panel.createAccessibilityImplementation(this);
+        if (Panel.createAccessibilityImplementation != null)
+            Panel.createAccessibilityImplementation(this);
     }
-	
+    
     /**
      *  @private
      */
@@ -504,27 +558,27 @@ public class Panel extends SkinnableContainer
             {
                 controlBarGroup.mxmlContent = controlBarGroupProperties.controlBarContent;
                 newControlBarGroupProperties = BitFlagUtil.update(newControlBarGroupProperties, 
-                                                               CONTROLBAR_PROPERTY_FLAG, true);
+                    CONTROLBAR_PROPERTY_FLAG, true);
             }
-
+            
             if (controlBarGroupProperties.layout !== undefined)
             {
                 controlBarGroup.layout = controlBarGroupProperties.layout;
                 newControlBarGroupProperties = BitFlagUtil.update(newControlBarGroupProperties, 
-                                                               LAYOUT_PROPERTY_FLAG, true);
+                    LAYOUT_PROPERTY_FLAG, true);
             }
-
+            
             if (controlBarGroupProperties.visible !== undefined)
             {
                 controlBarGroup.visible = controlBarGroupProperties.visible;
                 newControlBarGroupProperties = BitFlagUtil.update(newControlBarGroupProperties, 
-                                                               VISIBLE_PROPERTY_FLAG, true);
+                    VISIBLE_PROPERTY_FLAG, true);
             }
-
+            
             controlBarGroupProperties = newControlBarGroupProperties;
         }
     }
-
+    
     /**
      *  @private
      *  
@@ -536,8 +590,8 @@ public class Panel extends SkinnableContainer
     override protected function partRemoved(partName:String, instance:Object):void
     {
         super.partRemoved(partName, instance);
-
-		if (instance == controlBarGroup)
+        
+        if (instance == controlBarGroup)
         {
             // copy proxied values from contentGroup (if explicitely set) to contentGroupProperties
             
@@ -553,12 +607,12 @@ public class Panel extends SkinnableContainer
                 newControlBarGroupProperties.visible = controlBarGroup.visible;
             
             controlBarGroupProperties = newControlBarGroupProperties;
-
+            
             controlBarGroup.mxmlContent = null;
             controlBarGroup.layout = null;
         }
     }
-
+    
     /**
      *  @private
      *  
@@ -582,9 +636,8 @@ public class Panel extends SkinnableContainer
                 controlBarGroupProperties.visible)
                 state += "WithControlBar";
         }
-
+        
         return state;
     }
 }
-
 }

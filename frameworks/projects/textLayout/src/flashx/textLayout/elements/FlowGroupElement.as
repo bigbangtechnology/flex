@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements 
 {
 	import flash.display.DisplayObjectContainer;
@@ -18,9 +18,10 @@ package flashx.textLayout.elements
 	import flashx.textLayout.compose.FlowDamageType;
 	import flashx.textLayout.container.ContainerController;
 	import flashx.textLayout.debug.assert;
-	import flashx.textLayout.formats.FormatValue;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
 	import flashx.textLayout.events.ModelChange;
+	import flashx.textLayout.formats.FormatValue;
+	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.tlf_internal;
 	
 	use namespace tlf_internal;
@@ -125,6 +126,16 @@ package flashx.textLayout.elements
 				child.formatChanged(false);
 			}			
 		}
+		
+		/** This gets called when an element has changed its style selection related attributes. This may happen because an
+		 * ancestor element changed it attributes.
+		 * @private 
+		 */		
+		tlf_internal override function styleSelectorChanged():void
+		{
+			super.styleSelectorChanged();
+			formatChanged(false);
+		}
 		// **************************************** 
 		// End TLFFormat Related code
 		// ****************************************
@@ -177,17 +188,17 @@ package flashx.textLayout.elements
 					else if (effectiveParent is ContainerFormattedElement)
 					{
 						// See note 1. above
-						effectiveParent = new ParagraphElement();
+						effectiveParent = new ParagraphElement();	// NO PMD
 						effectiveParent.impliedElement = true;
 						replaceChildren(_numChildren, _numChildren, effectiveParent);
 					}
-					if ( (child is SpanElement) || (child is SubParagraphGroupElement))
+					if ( (child is SpanElement) || (child is SubParagraphGroupElementBase))
 						child.bindableElement = true;
 					effectiveParent.replaceChildren(effectiveParent.numChildren, effectiveParent.numChildren, FlowElement(child) );
 				}
 				else if (child is String)
 				{
-					var s:SpanElement = new SpanElement();
+					var s:SpanElement = new SpanElement();	// NO PMD
 					s.text = String(child);
 					s.bindableElement = true;
 					s.impliedElement = true;
@@ -195,27 +206,17 @@ package flashx.textLayout.elements
 					if (effectiveParent is ContainerFormattedElement)
 					{
 						// See note 1. above
-	 					effectiveParent = new ParagraphElement();
+	 					effectiveParent = new ParagraphElement();	// No PMD
 						replaceChildren(_numChildren, _numChildren, effectiveParent);
 						effectiveParent.impliedElement = true;
 					}
 					effectiveParent.replaceChildren(effectiveParent.numChildren, effectiveParent.numChildren, s);
 				}
 				else if (child != null)
-					throw new TypeError(GlobalSettings.resourceStringFunction("badMXMLChildrenArgument",[ getQualifiedClassName(child) ]));
+					throw new TypeError(GlobalSettings.resourceStringFunction("badMXMLChildrenArgument",[ getQualifiedClassName(child) ]));	// NO PMD
 			}
 		}
 
-		/** @private */
-		override tlf_internal function createGeometry(parentToBe:DisplayObjectContainer):void
-		{
-			for (var idx:int = 0; idx < _numChildren; idx++)
-			{
-				var child:FlowElement = getChildAt(idx);
-				child.createGeometry(parentToBe);
-			}
-		}
-				
 		// **************************************** 
 		// End import helper code
 		// ****************************************	
@@ -526,34 +527,19 @@ package flashx.textLayout.elements
 			return leaf ? leaf.getCharAtPosition(relativePosition-leaf.getElementRelativeStart(this)) : "";
 		} 
 		
-		/** @private return an element or matching idName. */
-		tlf_internal override function getElementByIDHelper(idName:String):FlowElement
+		/** @private apply func to all elements until func says stop */
+		tlf_internal override function applyFunctionToElements(func:Function):Boolean
 		{
-			var rslt:FlowElement = super.getElementByIDHelper(idName);
-			if (rslt == null)
-			{
-				for (var idx:int = 0; idx < _numChildren; idx++)
-				{
-					var child:FlowElement = getChildAt(idx);
-					rslt = child.getElementByIDHelper(idName);
-					if (rslt != null)
-						break;
-				}
-			}
-			return rslt;
-		}
-		
-		/** @private return adding elements with matching styleName to an array. */
-		tlf_internal override function getElementsByStyleNameHelper(a:Array,styleName:String):void
-		{
-			super.getElementsByStyleNameHelper(a,styleName);
+			if (func(this))
+				return true;
 			for (var idx:int = 0; idx < _numChildren; idx++)
 			{
-				var child:FlowElement = getChildAt(idx);
-				child.getElementsByStyleNameHelper(a,styleName);
+				if (getChildAt(idx).applyFunctionToElements(func))
+					return true;
 			}
-
+			return false;
 		}
+
 		// **************************************** 
 		// End tree navigation code
 		// ****************************************			
@@ -629,7 +615,7 @@ package flashx.textLayout.elements
 		 */
 		tlf_internal function canOwnFlowElement(elem:FlowElement):Boolean
 		{
-			return !(elem is TextFlow) && !(elem is FlowLeafElement) && !(elem is SubParagraphGroupElement);
+			return !(elem is TextFlow) && !(elem is FlowLeafElement) && !(elem is SubParagraphGroupElementBase) && !(elem is ListItemElement);
 		}
 		
 		/** @private */	
@@ -641,7 +627,7 @@ package flashx.textLayout.elements
 		/** @private */	
 		private static function getNestedArg(obj:Object, index:uint):FlowElement
 		{
-			CONFIG::debug { assert(index < getNestedArgCount(obj),"bad index to getNestedArg"); }; 
+			CONFIG::debug { assert(index < getNestedArgCount(obj),"bad index to getNestedArg"); } 
 			return ((obj is Array) ? obj[index] : obj) as FlowElement;
 		}
 				
@@ -689,7 +675,7 @@ package flashx.textLayout.elements
 				while (beginChildIndex < endChildIndex)
 				{
 					child = this.getChildAt(beginChildIndex);
-					child.modelChanged(ModelChange.ELEMENT_REMOVAL, 0, child.textLength);
+					this.modelChanged(ModelChange.ELEMENT_REMOVAL, child, child.parentRelativeStart, child.textLength);
 					len += child.textLength;
 					
 					child.setParentAndRelativeStart(null,0);
@@ -749,13 +735,14 @@ package flashx.textLayout.elements
 					newChild = getNestedArg(obj, idx);
 					if (newChild)
 					{
-						if (newChild.parent)
+						var newChildParent:FlowGroupElement = newChild.parent;
+						if (newChildParent)
 						{
-							if (newChild.parent == this)
+							if (newChildParent == this)
 							{
 								// special handling in this case
 								var childIndex:int = getChildIndex(newChild);
-								newChild.parent.removeChild(newChild);
+								newChildParent.removeChild(newChild);
 								thisAbsStart = getAbsoluteStart();	// is it in the same flow?
 								if (childIndex <= beginChildIndex)
 								{
@@ -766,8 +753,10 @@ package flashx.textLayout.elements
 							}
 							else
 							{
+								newChildParent.removeChild(newChild);
 								thisAbsStart = getAbsoluteStart();	// is it in the same flow?
-								newChild.parent.removeChild(newChild);
+								absStartIdx =  thisAbsStart + (beginChildIndex == _numChildren ? textLength : getChildAt(beginChildIndex).parentRelativeStart);
+								relStartIdx = beginChildIndex == _numChildren ? textLength : getChildAt(beginChildIndex).parentRelativeStart;
 							}
 						}
 						if (!canOwnFlowElement(newChild))
@@ -828,7 +817,7 @@ package flashx.textLayout.elements
 				for (idx = 0; idx < childrenToAdd; idx++)
 				{
 					newChild = childrenToAdd == 1 ? newChildToAdd : flatNewChildList[idx];
-					newChild.modelChanged(ModelChange.ELEMENT_ADDED, 0, newChild.textLength);
+					this.modelChanged(ModelChange.ELEMENT_ADDED, newChild, newChild.parentRelativeStart, newChild.textLength);
 				}
 			}
 			else 
@@ -856,7 +845,7 @@ package flashx.textLayout.elements
 						if (idx >= tFlow.textLength)
 							idx--;
      				}
-     				tFlow.damage(idx, 1, FlowDamageType.GEOMETRY, false);
+     				tFlow.damage(idx, 1, FlowDamageType.INVALID, false);
    				}   				
 			}
 		}
@@ -1080,8 +1069,6 @@ package flashx.textLayout.elements
 					normalizeStart = 0;		// for the next child	
 				}
 			}
-
-
 		}
 		
 		/** @private */
@@ -1091,7 +1078,7 @@ package flashx.textLayout.elements
 				collapse = this.computedFormat.whiteSpaceCollapse;	// top of the cascade?
 			else
 			{
-				var ffc:TextLayoutFormatValueHolder = this.formatForCascade;
+				var ffc:ITextLayoutFormat = this.formatForCascade;
 				var wsc:* = ffc ? ffc.whiteSpaceCollapse : undefined;
 				if (wsc !== undefined && wsc != FormatValue.INHERIT)
 					collapse = wsc;
@@ -1113,17 +1100,15 @@ package flashx.textLayout.elements
 		}
 		
 		/** @private */
-		tlf_internal override function appendElementsForDelayedUpdate(tf:TextFlow):void
+		tlf_internal override function appendElementsForDelayedUpdate(tf:TextFlow,changeType:String):void
 		{ 
 			for (var idx:int = 0; idx < _numChildren; idx++)
 			{
 				var child:FlowElement = getChildAt(idx);
-				child.appendElementsForDelayedUpdate(tf);
+				child.appendElementsForDelayedUpdate(tf,changeType);
 			}
 		}
-		
 
-		
 			
 		// **************************************** 
 		// End tree modification support code

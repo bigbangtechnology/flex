@@ -144,6 +144,11 @@ public class ToggleButtonBase extends ButtonBase
     public function ToggleButtonBase()
     {
         super();
+		
+		// ToggleButtons don't use minimumDownStateTime.  If they are quick-tapped
+		// with a touchDelay, they don't fake it and go in to the down state for a bit.
+		// They go immediately to the selected state.
+		disableMinimumDownStateTime = true;
     }
     
     //--------------------------------------------------------------------------
@@ -163,6 +168,7 @@ public class ToggleButtonBase extends ButtonBase
     private var _selected:Boolean;
 
     [Bindable]
+    [Inspectable(category="General", defaultValue="false")]
     
     /**
      *  Contains <code>true</code> if the button is in the down state, 

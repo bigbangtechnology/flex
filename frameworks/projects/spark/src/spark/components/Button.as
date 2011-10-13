@@ -27,7 +27,31 @@ import mx.core.IButton;
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="accentColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="accentColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
+
+/**
+ *  Color of text shadows.
+ * 
+ *  @default #FFFFFF
+ * 
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Style(name="textShadowColor", type="uint", format="Color", inherit="yes", theme="mobile")]
+
+/**
+ *  Alpha of text shadows.
+ * 
+ *  @default 0.55
+ * 
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Style(name="textShadowAlpha", type="Number",inherit="yes", minValue="0.0", maxValue="1.0", theme="mobile")]
 
 [Exclude(name="textAlign", kind="style")]
 
@@ -51,6 +75,12 @@ import mx.core.IButton;
  *  <code>mouseOver</code>, <code>mouseOut</code>, <code>rollOver</code>, 
  *  <code>rollOut</code>, <code>mouseDown</code>, and 
  *  <code>mouseUp</code> events whether enabled or disabled.</p>
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  <p>The Button control has the following default characteristics:</p>
  *     <table class="innertable">
@@ -175,6 +205,8 @@ public class Button extends ButtonBase implements IButton
     //  Overridden methods
     //
     //--------------------------------------------------------------------------
+    
+    [Inspectable(category="General")]
     
     /**
      *  @private

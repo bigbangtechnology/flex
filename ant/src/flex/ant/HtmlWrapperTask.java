@@ -25,6 +25,23 @@ import org.apache.tools.ant.BuildException;
 import org.apache.tools.ant.DynamicAttribute;
 import org.apache.tools.ant.Task;
 
+/**
+ * Implements the &lt;html-wrapper&gt; Ant task.  For example:
+ * <pre>
+ * &lt;html-wrapper title="foo"
+ *             height="100"
+ *             width="100"
+ *             bgcolor="red"
+ *             application="bar"
+ *             swf="bar"
+ *             version-major="9"
+ *             version-minor="0"
+ *             version-revision="0"
+ *             history="true"
+ *             template="client-side-detection"
+ *             output="client-side-detection-with-history"/&gt;
+ * </pre>
+ */
 public final class HtmlWrapperTask extends Task implements DynamicAttribute
 {
     private static final String TEMPLATE_DIR = "/templates/swfobject/";

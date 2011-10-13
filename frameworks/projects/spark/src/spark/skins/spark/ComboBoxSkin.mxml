@@ -176,7 +176,7 @@ is defined by the ComboBoxTextInputSkin class.
             This includes borders, background colors, scrollers, and filters. 
             @copy spark.components.supportClasses.DropDownListBase#dropDown
         -->
-        <s:Group id="dropDown" maxHeight="134" minHeight="22" >
+        <s:Group id="dropDown">
             
             <!-- drop shadow -->
             <!--- @private -->
@@ -210,7 +210,7 @@ is defined by the ComboBoxTextInputSkin class.
                 <!--- @copy spark.components.SkinnableDataContainer#dataGroup-->
                 <s:DataGroup id="dataGroup" itemRenderer="spark.skins.spark.DefaultItemRenderer">
                     <s:layout>
-                        <s:VerticalLayout gap="0" horizontalAlign="contentJustify"/>
+                        <s:VerticalLayout gap="0" horizontalAlign="contentJustify" requestedMinRowCount="1" requestedMaxRowCount="6"/>
                     </s:layout>
                 </s:DataGroup> 
             </s:Scroller>
@@ -221,9 +221,9 @@ is defined by the ComboBoxTextInputSkin class.
             @copy spark.components.supportClasses.DropDownListBase#openButton
             @see spark.skins.spark.ComboBoxButtonSkin -->
     <s:Button id="openButton" width="19" right="0" top="0" bottom="0" focusEnabled="false"
-              skinClass="spark.skins.spark.ComboBoxButtonSkin" />  
+              skinClass="spark.skins.spark.ComboBoxButtonSkin" tabEnabled="false" />  
     <!--- @copy spark.components.ComboBox#textInput -->
-    <s:TextInput id="textInput"
+    <s:TextInput id="textInput" enabled.disabled="false"
                  left="0" right="18" top="0" bottom="0" 
                  skinClass="spark.skins.spark.ComboBoxTextInputSkin"/> 
     

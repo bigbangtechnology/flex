@@ -1,19 +1,20 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements
 {
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
 	import flash.events.IEventDispatcher;
 	import flash.text.engine.TextLineValidity;
+	import flash.utils.Dictionary;
 	
 	import flashx.textLayout.compose.FlowComposerBase;
 	import flashx.textLayout.compose.IFlowComposer;
@@ -29,7 +30,7 @@ package flashx.textLayout.elements
 	import flashx.textLayout.events.ModelChange;
 	import flashx.textLayout.events.StatusChangeEvent;
 	import flashx.textLayout.formats.ITextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
+	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.tlf_internal;
 		
 	use namespace tlf_internal;
@@ -268,6 +269,12 @@ package flashx.textLayout.elements
 		
 		// styling support
 		private var _formatResolver:IFormatResolver;
+		
+		// interactive object count - now LinkElements later add in elements with eventMirrors
+		private var _interactiveObjectCount:int;
+		
+		// ILG count
+		private var _graphicObjectCount:int;
 				
 		/** 
 		 * Constructor - creates a new TextFlow instance.
@@ -315,6 +322,8 @@ package flashx.textLayout.elements
 				flowComposer = new _configuration.flowComposerClass();
 			
 			_generation = _nextGeneration++;
+			_interactiveObjectCount = 0;
+			_graphicObjectCount = 0;
 		}
 		
 		/** @private */
@@ -331,6 +340,30 @@ package flashx.textLayout.elements
 				retFlow.flowComposer.swfContext = flowComposer.swfContext;
 			return retFlow;						
 		}
+		
+		/** @private - count of interactive objects */
+		tlf_internal function get interactiveObjectCount():int
+		{ return _interactiveObjectCount; }
+		
+		/** @private - increment the count */
+		tlf_internal function incInteractiveObjectCount():void
+		{ _interactiveObjectCount++; } 
+		
+		/** @private - decrement the count */
+		tlf_internal function decInteractiveObjectCount():void
+		{ _interactiveObjectCount--; }
+		
+		/** @private - count of interactive objects */
+		tlf_internal function get graphicObjectCount():int
+		{ return _graphicObjectCount; }
+		
+		/** @private - increment the count */
+		tlf_internal function incGraphicObjectCount():void
+		{ _graphicObjectCount++; } 
+		
+		/** @private - decrement the count */
+		tlf_internal function decGraphicObjectCount():void
+		{ _graphicObjectCount--; }
 		
 		/** 
 		* The Configuration object for this TextFlow object. The Configuration object specifies the initial character 
@@ -377,7 +410,10 @@ package flashx.textLayout.elements
 					_interactionManager.textFlow = null;
 				_interactionManager = newInteractionManager;
 				if (_interactionManager)
+				{
 					_interactionManager.textFlow = this;
+					normalize();
+				}
 				if (flowComposer)
 					flowComposer.interactionManagerChanged(newInteractionManager);
 			}
@@ -410,17 +446,14 @@ package flashx.textLayout.elements
 			changeFlowComposer(composer,true);
 		}
 		
-		/** @private */
+		/** @private use this function directly if you want to clear the flowcomposer but not unload the graphics.  */
 		tlf_internal function changeFlowComposer(newComposer:IFlowComposer,okToUnloadGraphics:Boolean):void
 		{
+			var origComposer:IFlowComposer = _flowComposer;
 			if (_flowComposer != newComposer)
 			{
 				var oldSWFContext:ISWFContext = FlowComposerBase.computeBaseSWFContext(_flowComposer ? _flowComposer.swfContext : null);
 				var newSWFContext:ISWFContext = FlowComposerBase.computeBaseSWFContext(newComposer ? newComposer.swfContext : null);					
-				
-				// no flowComposer on the clipboard - we should really delay this until the flowComposer gets its first container and 
-				if (!flowComposer && newComposer || flowComposer && !newComposer)
-					appendElementsForDelayedUpdate(this);
 				
 				// Clear out old settings
 				if (_flowComposer)
@@ -428,9 +461,7 @@ package flashx.textLayout.elements
 					//hideSelection is no longer on IFlowComposer, so do it manually
 					var containerIter:int = 0;
 					while(containerIter < _flowComposer.numControllers)
-					{
 						_flowComposer.getControllerAt(containerIter++).clearSelectionShapes();
-					}
 					
 					_flowComposer.setRootElement(null); 	// clear event listeners
 				}
@@ -452,10 +483,32 @@ package flashx.textLayout.elements
 				// this call is really expensive for long flows and needs to be optimized for cases when nothing changes
 				// containerFormatChanged(false);
 
-				// no longer visible shut down all the FEs
-				if (flowComposer == null)
-					applyUpdateElements(okToUnloadGraphics);
+				// no longer visible shut down all the InlineGraphicElements
+				if (_flowComposer == null)
+				{
+					if (okToUnloadGraphics)
+						unloadGraphics();
+				}
+				else if (origComposer == null)
+					prepareGraphicsForLoad();
 			}
+		}
+		
+		/** @private - use to unload ILGs.  Generally TLF manage this for you but TLF errs on the side of letting the graphics run once they are started.  There may
+		 * be cases where the client will want to unload the graphics. */
+		tlf_internal function unloadGraphics():void
+		{
+			if (_graphicObjectCount)
+				applyFunctionToElements(function (elem:FlowElement):Boolean{ if (elem is InlineGraphicElement) (elem as InlineGraphicElement).stop(true); return false; });			
+		}
+		
+		/** @private - use to queue ILGs for loading.  Generally TLF manage this for you.  However, this function exists so that clients may initiate a load in edge cases. 
+		 * Graphics aren't loaded until the next updateAllControllers call.  */
+		tlf_internal function prepareGraphicsForLoad():void
+		{
+			// queue for start/restart any graphics that are not loaded but have a URL or CLASS source
+			if (_graphicObjectCount)
+				appendElementsForDelayedUpdate(this,null);			
 		}
 		
 		/** Returns an element whose <code>id</code> property matches the <code>idName</code> parameter. Provides
@@ -495,9 +548,11 @@ package flashx.textLayout.elements
 		
 		public function getElementByID(idName:String):FlowElement
 		{
-			return getElementByIDHelper(idName);
+			var rslt:FlowElement;
+			applyFunctionToElements(function (elem:FlowElement):Boolean{ if (elem.id == idName) { rslt = elem; return true; } return false; });
+			return rslt;
 		}
-		
+
 		/** Returns all elements that have <code>styleName</code> set to <code>styleNameValue</code>.
 		 *
 		 * @param styleNameValue The name of the style for which to find elements that have it set.
@@ -514,15 +569,37 @@ package flashx.textLayout.elements
 		public function getElementsByStyleName(styleNameValue:String):Array
 		{
 			var a:Array = new Array;
-			getElementsByStyleNameHelper(a,styleNameValue);
+			applyFunctionToElements(function (elem:FlowElement):Boolean{ if (elem.styleName == styleNameValue) a.push(elem); return false; });
+			return a;
+		}
+		
+		/** Returns all elements that have <code>typeName</code> set to <code>typeNameValue</code>.
+		 *
+		 * @param styleNameValue The name of the style for which to find elements that have it set.
+		 *
+		 * @return An array of the elements whose <code>typeName</code> value matches <code>typeNameValue</code>. For example,
+		 * all elements that have the type name "foo".
+		 *
+		 * @playerversion Flash 10
+		 * @playerversion AIR 1.5
+		 * @langversion 3.0
+		 *
+		 * @see FlowElement#styleName 
+		 */
+		public function getElementsByTypeName(typeNameValue:String):Array
+		{
+			var a:Array = new Array;
+			applyFunctionToElements(function (elem:FlowElement):Boolean{ if (elem.typeName == typeNameValue) a.push(elem); return false; });
 			return a;
 		}
 
 		/** @private */
 		override protected function get abstract():Boolean
-		{
-			return false;
-		}		
+		{ return false; }
+		
+		/** @private */
+		tlf_internal override function get defaultTypeName():String
+		{ return "TextFlow"; }
 		
 		/** @private */
 		tlf_internal override function updateLengths(startIdx:int,len:int,updateLines:Boolean):void
@@ -564,7 +641,7 @@ package flashx.textLayout.elements
 			applyWhiteSpaceCollapse(null);
 		} 
 		
-		/** @private Update any elements that have a delayed updated.  Normally used to stop and stop foreignelements when they 
+		/** @private Update any elements that have a delayed updated.  Normally used to stop foreignelements when they 
 		 * are either displayed the first time or removed from the stage
 		 */
 		tlf_internal function applyUpdateElements(okToUnloadGraphics:Boolean):Boolean
@@ -572,10 +649,16 @@ package flashx.textLayout.elements
 			if (_elemsToUpdate)
 			{
 				var hasController:Boolean = flowComposer && flowComposer.numControllers != 0;
-				for each (var child:FlowElement in _elemsToUpdate)
-					child.applyDelayedElementUpdate(this,okToUnloadGraphics,hasController);
-				_elemsToUpdate = null;	// expect this array is transient
-				return true;
+				for (var child:Object in _elemsToUpdate)
+					(child as FlowElement).applyDelayedElementUpdate(this,okToUnloadGraphics,hasController);
+				// if there is a controller then done with this list.  
+				// if no controller have to keep the list around because they may be in the list waiting for load on a future compose 
+				// the scenario that preserving the list fixes is a compose with no controllers followed by a compose with controllers
+				if (hasController)
+				{
+					_elemsToUpdate = null;
+					return true;
+				}
 			}
 			return false;
 		}
@@ -606,7 +689,7 @@ package flashx.textLayout.elements
 		 */
 		tlf_internal function damage(damageStart:int, damageLen:int, damageType:String, needNormalize:Boolean = true):void
 		{
-			CONFIG::debug { assert(damageLen > 0,"must have at least 1 char in damageLen"); }
+			// CONFIG::debug { assert(damageLen > 0,"must have at least 1 char in damageLen"); }
 				
 			if (needNormalize)
 			{
@@ -707,6 +790,9 @@ package flashx.textLayout.elements
 		 */
 		CONFIG::debug public function debugCheckTextFlow(validateControllers:Boolean=true):int
 		{
+			if (!Debugging.debugCheckTextFlow)
+				return 0;
+			
 			var rslt:int = debugCheckFlowElement();
 			
 			if (_flowComposer && validateControllers)
@@ -818,30 +904,32 @@ package flashx.textLayout.elements
 		}
 		
 		// elements which are images or blocks that *may* have children requiring activation or deactivation
-		private var _elemsToUpdate:Array;
+		private var _elemsToUpdate:Dictionary;
 		
 		/** @private */
 		tlf_internal function appendOneElementForUpdate(elem:FlowElement):void
 		{
 			if (_elemsToUpdate == null)
-				_elemsToUpdate = [ elem ];
-			else
-				_elemsToUpdate.push(elem);
+				_elemsToUpdate = new Dictionary();
+			_elemsToUpdate[elem] = null;
 		}
 		
 		/** @private */
 		tlf_internal function mustUseComposer():Boolean
 		{ 
+			if (_interactiveObjectCount != 0)
+				return true;
+
 			if (_elemsToUpdate == null || _elemsToUpdate.length == 0)
 				return false; 
-				
+
 			normalize();
 			
 			// anything that doesn't normalize completely forces use of the compser
 			var rslt:Boolean = false;
-			for each (var elem:FlowElement in _elemsToUpdate)
+			for (var elem:Object in _elemsToUpdate)
 			{
-				if (elem.updateForMustUseComposer(this))
+				if ((elem as FlowElement).updateForMustUseComposer(this))
 					rslt = true;
 			}
 			
@@ -849,17 +937,17 @@ package flashx.textLayout.elements
 		}
 		
 		/** @private */
-		tlf_internal function processModelChanged(changeType:String, elem:FlowElement, changeStart:int, changeLen:int, needNormalize:Boolean, bumpGeneration:Boolean):void
+		tlf_internal function processModelChanged(changeType:String, elem:Object, changeStart:int, changeLen:int, needNormalize:Boolean, bumpGeneration:Boolean):void
 		{
-			// track added and removed elements while the flow is visible
-			if (flowComposer)
-				elem.appendElementsForDelayedUpdate(this);
+			// track elements that may need an update before the next compose
+			if (elem is FlowElement)
+				(elem as FlowElement).appendElementsForDelayedUpdate(this,changeType);
 			
 			if (bumpGeneration)
 				_generation = _nextGeneration++;
 			
-			if (changeLen > 0)
-				damage(changeStart+elem.getAbsoluteStart(), changeLen, TextLineValidity.INVALID, needNormalize);
+			if (changeLen > 0 || changeType == ModelChange.ELEMENT_ADDED)
+				damage(changeStart, changeLen, TextLineValidity.INVALID, needNormalize);
 			
 			if (formatResolver)
 			{
@@ -902,7 +990,7 @@ package flashx.textLayout.elements
 		tlf_internal function processAutoSizeImageLoaded(elem:InlineGraphicElement):void
 		{
 			if (flowComposer)
-				elem.appendElementsForDelayedUpdate(this);
+				elem.appendElementsForDelayedUpdate(this,null);
 		}
 		
 		/**
@@ -917,7 +1005,7 @@ package flashx.textLayout.elements
 			if (normalizeStart != -1)
 			{
 				var normalizeEnd:int = normalizeStart + (normalizeLen==0?1:normalizeLen);
-				normalizeRange(normalizeStart,normalizeEnd);
+				normalizeRange(normalizeStart==0?normalizeStart:normalizeStart-1,normalizeEnd);
 
 				normalizeStart = -1;
 				normalizeLen = 0;				
@@ -967,9 +1055,9 @@ package flashx.textLayout.elements
 		}
 		
 		/** @private */
-		tlf_internal override function doComputeTextLayoutFormat():TextLayoutFormatValueHolder
+		tlf_internal override function doComputeTextLayoutFormat():TextLayoutFormat
 		{
-			var parentPrototype:TextLayoutFormatValueHolder = _hostFormatHelper ? _hostFormatHelper.getComputedPrototypeFormat() : null;
+			var parentPrototype:TextLayoutFormat = _hostFormatHelper ? _hostFormatHelper.getComputedPrototypeFormat() : null;
 			return FlowElement.createTextLayoutFormatPrototype(formatForCascade,parentPrototype);
 		}
 		
@@ -979,7 +1067,7 @@ package flashx.textLayout.elements
 		 * @return any styled CharacterFormat for that element
 		 * @private
 		 */
-		tlf_internal function getTextLayoutFormatStyle(elem:Object):TextLayoutFormatValueHolder
+		tlf_internal function getTextLayoutFormatStyle(elem:Object):TextLayoutFormat
 		{
 			if (_formatResolver == null)
 				return null;
@@ -987,26 +1075,26 @@ package flashx.textLayout.elements
 			if (rslt == null)
 				return null;
 			// optimization!
-			var tlfvh:TextLayoutFormatValueHolder = rslt as TextLayoutFormatValueHolder;
-			return tlfvh ? tlfvh : new TextLayoutFormatValueHolder(rslt);
+			var tlfvh:TextLayoutFormat = rslt as TextLayoutFormat;
+			return tlfvh ? tlfvh : new TextLayoutFormat(rslt);
 		}
 		
-		/** @private */
-		tlf_internal function set backgroundManager(bgm:BackgroundManager):void
-		{
-			if(_backgroundManager)
-				_backgroundManager.textFlow = null;
-			_backgroundManager = bgm;
-			if(_backgroundManager)
-				_backgroundManager.textFlow = this;
-		}
-		
-		/** @private */
+		/** @private This API peeks at the background manager.  Use when removing data as things go out of view or are recomposed.  */
 		tlf_internal function get backgroundManager():BackgroundManager
+		{ return _backgroundManager; }
+		
+		/** @private */
+		tlf_internal function clearBackgroundManager():void
+		{ _backgroundManager = null; }
+		
+		/** @private.  Returns the existing backgroundManager - creating it if it doesn't exist.  Use when adding backgrounds to draw.  */
+		tlf_internal function getBackgroundManager():BackgroundManager
 		{
+			if (!_backgroundManager && (flowComposer is StandardFlowComposer))
+				_backgroundManager = (flowComposer as StandardFlowComposer).createBackgroundManager()
 			return _backgroundManager;
 		}
-		
+				
 		/** A callback function for resolving element styles. You can use this to provide styling using CSS or 
 		 * named styles, for example. 
 		 *
@@ -1042,7 +1130,7 @@ package flashx.textLayout.elements
 		 * @playerversion AIR 1.5
 		 * @langversion 3.0
 		 *
-	 	 * @see IFormatResolver#invalidateAll
+	 	 * @see IFormatResolver#invalidateAll()
 		 */
 		 
 		public function invalidateAllFormats():void
@@ -1059,7 +1147,7 @@ import flashx.textLayout.debug.assert;
 import flashx.textLayout.elements.FlowElement;
 import flashx.textLayout.formats.ITextLayoutFormat;
 import flashx.textLayout.formats.TextLayoutFormat;
-import flashx.textLayout.formats.TextLayoutFormatValueHolder;
+import flashx.textLayout.formats.TextLayoutFormat;
 import flashx.textLayout.tlf_internal;
 
 use namespace tlf_internal;
@@ -1068,22 +1156,22 @@ use namespace tlf_internal;
 class HostFormatHelper
 {
 	private var _format:ITextLayoutFormat;
-	private var _computedPrototypeFormat:TextLayoutFormatValueHolder;
+	private var _computedPrototypeFormat:TextLayoutFormat;
 	
 	public function get format():ITextLayoutFormat
 	{ return _format; }
 	public function set format(value:ITextLayoutFormat):void
 	{ _format = value;  _computedPrototypeFormat = null; }
 
-	public function getComputedPrototypeFormat():TextLayoutFormatValueHolder
+	public function getComputedPrototypeFormat():TextLayoutFormat
 	{
 		if (_computedPrototypeFormat == null)
 		{
 			var useFormat:ITextLayoutFormat;
-			if (_format is TextLayoutFormat || _format is TextLayoutFormatValueHolder)
+			if (_format is TextLayoutFormat || _format is TextLayoutFormat)
 				useFormat = _format;
 			else
-				useFormat = new TextLayoutFormatValueHolder(_format);
+				useFormat = new TextLayoutFormat(_format);
 			_computedPrototypeFormat = FlowElement.createTextLayoutFormatPrototype(useFormat,null);
 		}
 		return _computedPrototypeFormat;

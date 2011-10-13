@@ -94,8 +94,6 @@ use namespace mx_internal;
  *  <p><b>Note:</b> Due to a software limitation, like HTTPService, the HTTPMultiService does 
  *  not generate user-friendly error messages when using GET and not using a proxy.</p>
  * 
- *  @see mx.rpc.http.HTTPService
- *  
  *  @langversion 3.0
  *  @playerversion Flash 9
  *  @playerversion AIR 1.1
@@ -519,7 +517,9 @@ public dynamic class HTTPMultiService extends AbstractService
         if (_directChannelSet == null)
         {
             var dcs:ChannelSet = new ChannelSet();
-            dcs.addChannel(new DirectHTTPChannel("direct_http_channel"));
+            var dhc:DirectHTTPChannel = new DirectHTTPChannel("direct_http_channel");
+            dhc.requestTimeout = requestTimeout;
+            dcs.addChannel(dhc);
             _directChannelSet = dcs;            
         }
         return _directChannelSet;  

@@ -21,46 +21,133 @@
 *****************************************************/
 package org.osmf.metadata
 {
-	import org.osmf.utils.URL;
+	[ExcludeClass]
 	
 	/**
-	 *  Contains the static constants for metadata namespaces used with Open Source Media Framework.
+	 * @private
+	 * 
+	 * Contains the static constants for metadata namespaces used within OSMF.
+	 * 
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */
-	public class MetadataNamespaces
+	public final class MetadataNamespaces
 	{
+		// Internal OSMF Namespaces
+		//
+
 		/**
-		 * The namespace that holds OSMF-specific metadata
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */ 		
-		public static const DEFAULT_METADATA:URL				= new URL("http://www.osmf.org/default/1.0");
+		 * @private
+		 **/
+		public static const MEDIA_ELEMENT_METADATA:String				= "http://www.osmf.org/mediaElement/1.0";
+
+		/**
+		 * @private
+		 **/
+		public static const DERIVED_RESOURCE_METADATA:String			= "http://www.osmf.org/derivedResource/1.0";
+
+		/**
+		 * @private
+		 * 
+		 * Used by the layout system to log individual IDs of regions.  For debugging only.
+		 **/
+		public static const ELEMENT_ID:String	 						= "http://www.osmf.org/layout/elementId/1.0";
+
+		/**
+		 * @private
+		 **/
+		public static const LAYOUT_RENDERER_TYPE:String					= "http://www.osmf.org/layout/renderer_type/1.0";
+
+		/**
+		 * @private
+		 **/
+		public static const ABSOLUTE_LAYOUT_PARAMETERS:String			= "http://www.osmf.org/layout/absolute/1.0";
+
+		/**
+		 * @private
+		 **/
+		public static const RELATIVE_LAYOUT_PARAMETERS:String			= "http://www.osmf.org/layout/relative/1.0";
+
+		/**
+		 * @private
+		 **/
+		public static const ANCHOR_LAYOUT_PARAMETERS:String				= "http://www.osmf.org/layout/anchor/1.0";
+
+		/**
+		 * @private
+		 **/
+		public static const PADDING_LAYOUT_PARAMETERS:String 			= "http://www.osmf.org/layout/padding/1.0";
+
+		/**
+		 * @private
+		 **/
+		public static const LAYOUT_ATTRIBUTES:String 					= "http://www.osmf.org/layout/attributes/1.0";
+
+		/**
+		 * @private
+		 **/
+		public static const BOX_LAYOUT_ATTRIBUTES:String				= "http://www.osmf.org/layout/attributes/box/1.0";
 		
-		public static const MEDIATYPE_METADATA:URL				= new URL("http://www.osmf.org/mediatype/default");
+		/**
+		 * @private
+		 **/
+		public static const DRM_METADATA:String							= "http://www.osmf.org/drm/1.0";
 		
-		public static const SUBCLIP_METADATA:URL				= new URL("http://www.osmf.org/subclip/1.0");
-		public static const SUBCLIP_START_KEY:String			= "startTime";
-		public static const SUBCLIP_END_KEY:String				= "endTime";
-		public static const SUBCLIP_START_ID:ObjectIdentifier	= new ObjectIdentifier(SUBCLIP_START_KEY);
-		public static const SUBCLIP_END_ID:ObjectIdentifier		= new ObjectIdentifier(SUBCLIP_END_KEY);
+		/**
+		 * @private
+		 **/
+		public static const DVR_METADATA:String							= "http://www.osmf.org/dvr/1.0";
+
+		/**
+		 * @private
+		 **/
+		public static const DRM_ADDITIONAL_HEADER_KEY:String			= "DRMAdditionalHeader";
+
+		/**
+		 * @private
+		 **/
+		public static const HTTP_STREAMING_METADATA:String				= "http://www.osmf.org/httpstreaming/1.0";
 		
-		public static const DRM_METADATA:URL					= new URL("http://www.osmf.org/drm/default");
-		public static const DRM_CONTENT_METADATA_KEY:String		= "DRMContentMetadata";
-		
-		public static const REGION_TARGET:URL					= new URL("http://www.osmf.org/region/target");
-		
-		public static const LAYOUT_RENDERER:URL					= new URL("http://www.osmf.org/layout/renderer");
-		public static const ABSOLUTE_LAYOUT_PARAMETERS:URL		= new URL("http://www.osmf.org/layout/absolute");
-		public static const RELATIVE_LAYOUT_PARAMETERS:URL		= new URL("http://www.osmf.org/layout/relative");
-		public static const ANCHOR_LAYOUT_PARAMETERS:URL		= new URL("http://www.osmf.org/layout/anchor");
-		public static const PADDING_LAYOUT_PARAMETERS:URL 		= new URL("http://www.osmf.org/layout/padding");
-		public static const LAYOUT_ATTRIBUTES:URL 				= new URL("http://www.osmf.org/layout/attributes");
-		
-		public static const ELEMENT_ID:URL	 					= new URL("http://www.osmf.org/elementId");
-		
-		public static const TEMPORAL_METADATA_EMBEDDED:URL		= new URL("http://www.osmf.org/temporal/embedded");
-		public static const TEMPORAL_METADATA_DYNAMIC:URL		= new URL("http://www.osmf.org/temporal/dynamic");
+		/**
+		 * @private
+		 **/
+		public static const HTTP_STREAMING_BOOTSTRAP_KEY:String			= "bootstrap";
+
+		/**
+		 * @private
+		 **/
+		public static const HTTP_STREAMING_STREAM_METADATA_KEY:String 	= "streamMetadata";
+
+		/**
+		 * @private
+		 **/
+		public static const HTTP_STREAMING_XMP_METADATA_KEY:String 		= "xmpMetadata";
+
+		/**
+		 * @private
+		 **/
+		public static const HTTP_STREAMING_SERVER_BASE_URLS_KEY:String 	= "serverBaseUrls";
+
+		/**
+		 * @private
+		 **/
+		public static const HTTP_STREAMING_DVR_BEGIN_OFFSET_KEY:String 		= "beginOffset";
+
+		/**
+		 * @private
+		 **/
+		public static const HTTP_STREAMING_DVR_END_OFFSET_KEY:String 		= "endOffset";
+
+		/**
+		 * @private
+		 **/
+		public static const HTTP_STREAMING_DVR_OFFLINE_KEY:String 			= "dvrOffline";
+
+		/**
+		 * @private
+		 **/
+		public static const HTTP_STREAMING_DVR_ID_KEY:String 					= "dvrId";
 	}
 }

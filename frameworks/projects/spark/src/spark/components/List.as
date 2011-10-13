@@ -13,14 +13,18 @@ package spark.components
 {
     
 import flash.display.DisplayObject;
+import flash.display.DisplayObjectContainer;
 import flash.events.Event;
 import flash.events.KeyboardEvent;
 import flash.events.MouseEvent;
+import flash.events.TimerEvent;
 import flash.geom.Point;
 import flash.system.ApplicationDomain;
 import flash.text.TextField;
 import flash.ui.Keyboard;
+import flash.utils.Timer;
 
+import mx.collections.ArrayCollection;
 import mx.collections.IList;
 import mx.core.DragSource;
 import mx.core.EventPriority;
@@ -28,12 +32,16 @@ import mx.core.IFactory;
 import mx.core.IFlexDisplayObject;
 import mx.core.IUID;
 import mx.core.IVisualElement;
+import mx.core.InteractionMode;
+import mx.core.ScrollPolicy;
+import mx.core.UIComponentGlobals;
 import mx.core.mx_internal;
 import mx.events.CollectionEvent;
 import mx.events.CollectionEventKind;
 import mx.events.DragEvent;
 import mx.events.FlexEvent;
 import mx.events.SandboxMouseEvent;
+import mx.events.TouchInteractionEvent;
 import mx.managers.DragManager;
 import mx.managers.IFocusManagerComponent;
 import mx.utils.ObjectUtil;
@@ -54,14 +62,12 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
 /**
  *  @copy spark.components.supportClasses.GroupBase#style:alternatingItemColors
  * 
- *  @default undefined
- *  
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="alternatingItemColors", type="Array", arrayType="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="alternatingItemColors", type="Array", arrayType="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  The alpha of the border for this component.
@@ -73,7 +79,7 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="borderAlpha", type="Number", inherit="no", theme="spark", minValue="0.0", maxValue="1.0")]
+[Style(name="borderAlpha", type="Number", inherit="no", theme="spark, mobile", minValue="0.0", maxValue="1.0")]
 
 /**
  *  The color of the border for this component.
@@ -85,7 +91,7 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="borderColor", type="uint", format="Color", inherit="no", theme="spark")]
+[Style(name="borderColor", type="uint", format="Color", inherit="no", theme="spark, mobile")]
 
 /**
  *  Controls the visibility of the border for this component.
@@ -97,7 +103,7 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="borderVisible", type="Boolean", inherit="no", theme="spark")]
+[Style(name="borderVisible", type="Boolean", inherit="no", theme="spark, mobile")]
 
 /**
  *  The alpha of the content background for this component.
@@ -107,19 +113,27 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="contentBackgroundAlpha", type="Number", inherit="yes", theme="spark", minValue="0.0", maxValue="1.0")]
+[Style(name="contentBackgroundAlpha", type="Number", inherit="yes", theme="spark, mobile", minValue="0.0", maxValue="1.0")]
 
 /**
  *  @copy spark.components.supportClasses.GroupBase#style:contentBackgroundColor
  *   
- *  @default 0xFFFFFF
- *  
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="contentBackgroundColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="contentBackgroundColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
+
+/**
+ *  @copy spark.components.supportClasses.GroupBase#style:downColor
+ *   
+ *  @langversion 3.0
+ *  @playerversion Flash 10.1
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="downColor", type="uint", format="Color", inherit="yes", theme="mobile")]
 
 /**
  *  The class to create instance of for the drag indicator during drag
@@ -161,6 +175,45 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
 [Style(name="dropIndicatorSkin", type="Class", inherit="no")]
 
 /**
+ *  Indicates under what conditions the horizontal scroll bar is displayed.
+ * 
+ *  <ul>
+ *  <li>
+ *  <code>ScrollPolicy.ON</code> ("on") - the scroll bar is always displayed.
+ *  </li> 
+ *  <li>
+ *  <code>ScrollPolicy.OFF</code> ("off") - the scroll bar is never displayed.
+ *  The viewport can still be scrolled programmatically, by setting its
+ *  horizontalScrollPosition property.
+ *  </li>
+ *  <li>
+ *  <code>ScrollPolicy.AUTO</code> ("auto") - the scroll bar is displayed when 
+ *  the viewport's contentWidth is larger than its width.
+ *  </li>
+ *  </ul>
+ * 
+ *  <p>The scroll policy affects the measured size of the scroller skin part.  This style
+ *  is simply a cover for the scroller skin part's horizontalScrollPolicy.  It is not an 
+ *  inheriting style so, for example, it will not affect item renderers.</p>
+ *
+ *  <p>When using a horizontal List control in a mobile application, 
+ *  set <code>horizontalScrollPolicy</code> to <code>on</code> 
+ *  and <code>verticalScrollPolicy</code> to <code>auto</code> 
+ *  to enable the horizontal bounce and pull effects. 
+ *  Otherwise, the control uses the vertical bounce and pull effects.</p>
+ * 
+ *  @default ScrollPolicy.AUTO
+ *
+ *  @see mx.core.ScrollPolicy
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */ 
+[Style(name="horizontalScrollPolicy", type="String", inherit="no", enumeration="off,on,auto")]
+
+/**
  *  @copy spark.components.supportClasses.GroupBase#style:rollOverColor
  *   
  *  @default 0xCEDBEF
@@ -173,16 +226,18 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
 [Style(name="rollOverColor", type="uint", format="Color", inherit="yes", theme="spark")]
 
 /**
- *  @copy mx.controls.listClasses.ListBase#style:selectionColor
+ *  The color of the background of a renderer when the user selects it.
  *
- *  @default 0xA8C6EE
+ *  <p>The default value for the Halo theme is <code>0x7FCEFF</code>.
+ *  The default value for the Spark theme is <code>0xA8C6EE</code>.
+ *  The default value for the Mobile theme is <code>0xE0E0E0</code>.</p>
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="selectionColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="selectionColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  @copy spark.components.supportClasses.GroupBase#style:symbolColor
@@ -194,7 +249,58 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
+
+/**
+ *  @copy spark.components.supportClasses.GroupBase#style:touchDelay
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10.1
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="touchDelay", type="Number", format="Time", inherit="yes", minValue="0.0")]
+
+/**
+ *  Indicates under what conditions the vertical scroll bar is displayed.
+ * 
+ *  <ul>
+ *  <li>
+ *  <code>ScrollPolicy.ON</code> ("on") - the scroll bar is always displayed.
+ *  </li> 
+ *  <li>
+ *  <code>ScrollPolicy.OFF</code> ("off") - the scroll bar is never displayed.
+ *  The viewport can still be scrolled programmatically, by setting its
+ *  verticalScrollPosition property.
+ *  </li>
+ *  <li>
+ *  <code>ScrollPolicy.AUTO</code> ("auto") - the scroll bar is displayed when 
+ *  the viewport's contentHeight is larger than its height.
+ *  </li>
+ *  </ul>
+ * 
+ *  <p>
+ *  The scroll policy affects the measured size of the scroller skin part.  This style
+ *  is simply a cover for the scroller skin part's verticalScrollPolicy.  It is not an 
+ *  inheriting style so, for example, it will not affect item renderers.
+ *  </p>
+ *
+ *  <p>When using a horizontal List control in a mobile application, 
+ *  set <code>horizontalScrollPolicy</code> to <code>on</code> 
+ *  and <code>verticalScrollPolicy</code> to <code>auto</code> 
+ *  to enable the horizontal bounce and pull effects. 
+ *  Otherwise, the control uses the vertical bounce and pull effects.</p>
+ * 
+ *  @default ScrollPolicy.AUTO
+ *
+ *  @see mx.core.ScrollPolicy
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */ 
+[Style(name="verticalScrollPolicy", type="String", inherit="no", enumeration="off,on,auto")]
 
 //--------------------------------------
 //  Other metadata
@@ -221,7 +327,15 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
  *  <p><b>Note: </b>The Spark list-based controls (the Spark ListBase class and its subclasses
  *  such as ButtonBar, ComboBox, DropDownList, List, and TabBar) do not support the BasicLayout class
  *  as the value of the <code>layout</code> property. 
- *  Do not use BasicLayout with the Spark list-based controls.</p>
+ *  Do not use BasicLayout with the Spark list-based controls.  When a layout is specified,
+ *  the layout's typicalLayoutElement property should not be set; it's automatically set
+ *  to an item renderer created with the List's <code>typicalItem</code>.</p>
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  <p>The List control has the following default characteristics:</p>
  *  <table class="innertable">
@@ -229,7 +343,7 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
  *     <tr><td>Default size</td><td>112 pixels wide by 112 pixels high</td></tr>
  *     <tr><td>Minimum size</td><td>112 pixels wide by 112 pixels high</td></tr>
  *     <tr><td>Maximum size</td><td>10000 pixels wide and 10000 pixels high</td></tr>
- *     <tr><td>Default skin class</td><td>spark.skins.spark.BorderContainerSkin</td></tr>
+ *     <tr><td>Default skin class</td><td>spark.skins.spark.ListSkin</td></tr>
  *  </table>
  *
  *  @mxml <p>The <code>&lt;s:List&gt;</code> tag inherits all of the tag 
@@ -252,6 +366,7 @@ use namespace mx_internal;  //ListBase and List share selection properties that 
  *    borderColor="0#CCCCCC"
  *    borderVisible="true"
  *    contentBackgroundColor="0xFFFFFF"
+ *    downColor="0xA8C6EE"
  *    dragIndicator="ListItemDragProxy"
  *    dropIndicatorSkin="ListDropIndicator"
  *    rollOverColor="0xCEDBEF"
@@ -314,6 +429,8 @@ public class List extends ListBase implements IFocusManagerComponent
                 Class(ApplicationDomain.currentDomain.getDefinition(
                     "spark.components.RichEditableText"));
         }
+        
+        addEventListener(TouchInteractionEvent.TOUCH_INTERACTION_START, touchInteractionStartHandler);
     }
     
     //--------------------------------------------------------------------------
@@ -336,6 +453,14 @@ public class List extends ListBase implements IFocusManagerComponent
      *  track which is the "focus item" for a drag and drop operation.
      */
     mx_internal var mouseDownIndex:int = -1;
+    
+    /**
+     *  @private
+     *  The displayObject where the mouse down event was received.
+     *  In touch interactionMode, used to track whether this item is 
+     *  the one that is moused up on so we can possibly select it. 
+     */
+    mx_internal var mouseDownObject:DisplayObject;
     
     /**
      *  @private
@@ -383,7 +508,7 @@ public class List extends ListBase implements IFocusManagerComponent
      *  that spans the width of the control.
      *  Create a custom drop indicator by creating a custom skin class for the drop target.
      *  In your skin class, create a skin part named <code>dropIndicator</code>,
-     *  in the &lt;fx:Declarations&gt; area of the skin class</p>
+     *  in the &lt;fx:Declarations&gt; area of the skin class.</p>
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -448,7 +573,7 @@ public class List extends ListBase implements IFocusManagerComponent
      *  
      *  @default false
      *  
-     *  @langversion 4.0
+     *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
@@ -501,6 +626,12 @@ public class List extends ListBase implements IFocusManagerComponent
         super.useVirtualLayout = value;
     }
     
+    //----------------------------------
+    //  dataProvider
+    //----------------------------------
+
+    [Inspectable(category="Data")]
+    
     /**
      *  @private
      *  
@@ -511,12 +642,15 @@ public class List extends ListBase implements IFocusManagerComponent
      */
     override public function set dataProvider(value:IList):void
     {
-        // Uconditionally clear the selection, see SDK-21645
+        // Uconditionally clear the selection, see SDK-21645.  Can't wait
+        // to commit the selection because it could be set again before
+        // commitProperties runs and that selection gets lost.
         if (!isEmpty(_proposedSelectedIndices) || !isEmpty(selectedIndices))
         {
             _proposedSelectedIndices.length = 0;
             multipleSelectionChanged = true;
             invalidateProperties();
+            UIComponentGlobals.layoutManager.validateClient(this, true);
         }
         super.dataProvider = value;
     }
@@ -536,11 +670,16 @@ public class List extends ListBase implements IFocusManagerComponent
      *  @private
      */
     private var _allowMultipleSelection:Boolean = false;
+
+    [Inspectable(category="General", defaultValue="false")]
     
     /**
      *  If <code>true</code> multiple selection is enabled. 
      *  When switched at run time, the current selection
      *  is cleared. 
+     * 
+     *  This should not be turned on when <code>interactionMode</code> 
+     *  is <code>touch</code>.
      *
      *  @default false
      *  
@@ -584,6 +723,9 @@ public class List extends ListBase implements IFocusManagerComponent
      *  If the <code>dropEnabled</code> property is also <code>true</code>,
      *  you can drag items and drop them within this control
      *  to reorder the items.
+     * 
+     *  <p>Drag and drop is not supported on mobile devices where 
+     *  <code>interactionMode</code> is set to <code>touch</code>.</p>
      *
      *  @default false
      *  
@@ -639,6 +781,9 @@ public class List extends ListBase implements IFocusManagerComponent
      *  Often the data provider cannot or should not have items removed
      *  from it, so a MOVE operation should not be allowed during
      *  drag-and-drop.
+     * 
+     *  <p>Drag and drop is not supported on mobile devices where 
+     *  <code>interactionMode</code> is set to <code>touch</code>.</p>
      *
      *  @default false
      *  
@@ -689,6 +834,9 @@ public class List extends ListBase implements IFocusManagerComponent
      *  Flex automatically calls the <code>showDropFeedback()</code> 
      *  and <code>hideDropFeedback()</code> methods to display the drop
      *  indicator.</p>
+     * 
+     *  <p>Drag and drop is not supported on mobile devices where 
+     *  <code>interactionMode</code> is set to <code>touch</code>.</p>
      *
      *  @default false
      *  
@@ -749,6 +897,7 @@ public class List extends ListBase implements IFocusManagerComponent
     
     [Bindable("change")]
     [Bindable("valueCommit")]
+    [Inspectable(category="General")]
     
     /**
      *  A Vector of ints representing the indices of the currently selected  
@@ -789,24 +938,36 @@ public class List extends ListBase implements IFocusManagerComponent
      * 
      *  @param dispatchChangeEvent if true, the component will dispatch a "change" event if the
      *  value has changed. Otherwise, it will dispatch a "valueCommit" event. 
+     * 
+     *  @param changeCaret if true, the caret will be set to the selectedIndex as a side-effect of calling 
+     *  this method.  If false, caretIndex won't change.
      */
-    mx_internal function setSelectedIndices(value:Vector.<int>, dispatchChangeEvent:Boolean = false):void
+    mx_internal function setSelectedIndices(value:Vector.<int>, dispatchChangeEvent:Boolean = false, changeCaret:Boolean = true):void
     {
         // TODO (jszeto) Do a deep compare of the vectors
         if (_proposedSelectedIndices == value || 
             (value && value.length == 1 && 
              selectedIndices && selectedIndices.length == 1 &&    
              value[0] == selectedIndices[0]))
-            return; 
+        {
+            // this should short-circuit, but we should check to make sure 
+            // that caret doesn't need to be changed either, as that's a side
+            // effect of setting selectedIndex
+            if (changeCaret)
+                setCurrentCaretIndex(selectedIndex);
+            
+            return;
+        }
         
         if (dispatchChangeEvent)
-            dispatchChangeAfterSelection = dispatchChangeEvent;
+            dispatchChangeAfterSelection = (dispatchChangeAfterSelection || dispatchChangeEvent);
         
         if (value)
             _proposedSelectedIndices = value;
         else
             _proposedSelectedIndices = new Vector.<int>();
-        multipleSelectionChanged = true;  
+        multipleSelectionChanged = true;
+        changeCaretOnSelection = changeCaret;
         invalidateProperties();
     }
     
@@ -816,6 +977,7 @@ public class List extends ListBase implements IFocusManagerComponent
 
     [Bindable("change")]
     [Bindable("valueCommit")]
+    [Inspectable(category="General")]
     
     /**
      *  A Vector of Objects representing the currently selected data items. 
@@ -924,35 +1086,25 @@ public class List extends ListBase implements IFocusManagerComponent
     {
         super.partAdded(partName, instance);
 
-        if (instance == dataGroup)
-        {
-            dataGroup.addEventListener(
-                RendererExistenceEvent.RENDERER_ADD, dataGroup_rendererAddHandler);
-            dataGroup.addEventListener(
-                RendererExistenceEvent.RENDERER_REMOVE, dataGroup_rendererRemoveHandler);
-        }
-        else if (instance == scroller)
+        if (instance == scroller)
         {
             scroller.hasFocusableChildren = hasFocusableChildren;
+            
+            // The scrollPolicy styles are initialized in framework/defaults.css
+            // so there's no way to determine if been explicitly set here.  To avoid 
+            // preempting explicitly set scroller scrollPolicy styles with the default
+            // "auto" value, we only forward the style if it's not "auto".            
+            
+            const vsp:String = getStyle("verticalScrollPolicy");
+            if (vsp && (vsp !== ScrollPolicy.AUTO))
+                scroller.setStyle("verticalScrollPolicy", vsp);
+            
+            const hsp:String = getStyle("horizontalScrollPolicy");
+            if (hsp && (hsp !== ScrollPolicy.AUTO))
+                scroller.setStyle("horizontalScrollPolicy", hsp);            
         }
     }
 
-    /**
-     *  @private
-     */
-    override protected function partRemoved(partName:String, instance:Object):void
-    {
-        if (instance == dataGroup)
-        {
-            dataGroup.removeEventListener(
-                RendererExistenceEvent.RENDERER_ADD, dataGroup_rendererAddHandler);
-            dataGroup.removeEventListener(
-                RendererExistenceEvent.RENDERER_REMOVE, dataGroup_rendererRemoveHandler);
-        }
-
-        super.partRemoved(partName, instance);
-    }
-    
     /**
      *  @private
      *  Called when an item has been added to this component.
@@ -990,12 +1142,12 @@ public class List extends ListBase implements IFocusManagerComponent
     {
         // Clear the flag so that we don't commit the selection again.
         multipleSelectionChanged = false;
-
+        
         var oldSelectedIndex:Number = _selectedIndex;
         var oldCaretIndex:Number = _caretIndex;  
         
         _proposedSelectedIndices = _proposedSelectedIndices.filter(isValidIndex);
-               
+        
         // Ensure that multiple selection is allowed and that proposed 
         // selected indices honors it. For example, in the single 
         // selection case, proposedSelectedIndices should only be a 
@@ -1009,7 +1161,10 @@ public class List extends ListBase implements IFocusManagerComponent
         }
         // Keep _proposedSelectedIndex in-sync with multiple selection properties. 
         if (!isEmpty(_proposedSelectedIndices))
-           _proposedSelectedIndex = getFirstItemValue(_proposedSelectedIndices); 
+            _proposedSelectedIndex = getFirstItemValue(_proposedSelectedIndices); 
+        
+        // need to store changeCaretOnSelection since super.commitSelection() may change it
+        var currentChangeCaretOnSelection:Boolean = changeCaretOnSelection;
         
         // Let ListBase handle the validating and commiting of the single-selection
         // properties.  
@@ -1033,7 +1188,8 @@ public class List extends ListBase implements IFocusManagerComponent
         commitMultipleSelection(); 
         
         // Set the caretIndex based on the current selection 
-        setCurrentCaretIndex(selectedIndex);
+        if (currentChangeCaretOnSelection)
+            setCurrentCaretIndex(selectedIndex);
         
         // And dispatch change and caretChange events so that all of 
         // the bindings update correctly. 
@@ -1049,15 +1205,16 @@ public class List extends ListBase implements IFocusManagerComponent
                 dispatchEvent(e);
                 dispatchChangeAfterSelection = false;
             }
-            else
-            {
-                dispatchEvent(new FlexEvent(FlexEvent.VALUE_COMMIT));
-            }
+
+            dispatchEvent(new FlexEvent(FlexEvent.VALUE_COMMIT));
             
-            e = new IndexChangeEvent(IndexChangeEvent.CARET_CHANGE); 
-            e.oldIndex = oldCaretIndex; 
-            e.newIndex = caretIndex;
-            dispatchEvent(e);    
+            if (currentChangeCaretOnSelection)
+            {
+                e = new IndexChangeEvent(IndexChangeEvent.CARET_CHANGE); 
+                e.oldIndex = oldCaretIndex; 
+                e.newIndex = caretIndex;
+                dispatchEvent(e);
+            }
         }
         
         return retVal; 
@@ -1168,14 +1325,138 @@ public class List extends ListBase implements IFocusManagerComponent
     
     /**
      *  @private
+     *  Scroll the dataGroup with ensureIndexIsVisible() until newCaretIndex 
+     *  is visible.  The process can be iterative and the new item renderers
+     *  are not guaranteed to be in place until after "updateComplete", i.e. 
+     *  after all layout phases have completed.
+     * 
+     *  Note also: we're selecting the item at newCaretIndex, even though it's
+     *  possible that - before the dataProvider refresh - the caretItem and
+     *  selectedItem were different. 
+     */
+    private function ensureCaretVisibility(newCaretIndex:int):void
+    {
+        setSelectedIndex(newCaretIndex, false);
+        ensureIndexIsVisible(newCaretIndex);        
+    }
+    
+    /**
+     *  @private
+     *  At this point newCaretIndex is assumed to be visible, per a call to
+     *  ensureCaretVisibility().   Fine-tune the scroll position so that 
+     *  the itemRenderer at newCaretIndex appears at offsetX,Y relative 
+     *  to the dataGroup's upper left corner.
+     */
+    private function restoreCaretScrollPosition(newCaretIndex:int, offsetX:Number, offsetY:Number):void
+    {
+        const caretItemRenderer:IVisualElement = dataGroup.getElementAt(newCaretIndex);
+        if (!caretItemRenderer)
+            return;
+        
+        const newOffsetX:Number = caretItemRenderer.getLayoutBoundsX() - dataGroup.horizontalScrollPosition;
+        const newOffsetY:Number = caretItemRenderer.getLayoutBoundsY() - dataGroup.verticalScrollPosition;            
+        
+        dataGroup.verticalScrollPosition += newOffsetY - offsetY;
+        dataGroup.horizontalScrollPosition += newOffsetX - offsetX;
+    }
+    
+    /**
+     *  @private
+     *  Adjust the scroll position so that the currently visible caret item, if any, 
+     *  still appears in the same relative position.   If the caret isn't currently 
+     *  visible then resort to the ListBase behavior, which is just to clear the selection
+     *  and scroll to 0,0.
+     * 
+     *  This method implements just one of several possible heuristics for adjusting
+     *  the scroll position after a dataProvider refresh.
+     */
+    override mx_internal function dataProviderRefreshed():void
+    {
+        // At this point the dataProvider's contents have changed but the dataGroup's 
+        // item renderers have not.  If the caret item renderer is visible, find 
+        // its x,y "offset" relative to the dataGroup's position and then scroll
+        // so that the new caret item renderer appears at the same offset.
+        
+        if ((caretItem !== undefined) && dataGroup && dataGroup.dataProvider)
+        {
+            const newCaretIndex:int = dataGroup.dataProvider.getItemIndex(caretItem);
+            const caretItemRenderer:IVisualElement = dataGroup.getElementAt(caretIndex);
+            
+            if ((newCaretIndex != -1) && dataGroup.isElementVisible(caretItemRenderer)) 
+            {
+                const caretItemRendererX:Number = caretItemRenderer.getLayoutBoundsX();
+                const caretItemRendererY:Number = caretItemRenderer.getLayoutBoundsY();
+            
+                const caretOffsetX:Number = caretItemRendererX - dataGroup.horizontalScrollPosition;
+                const caretOffsetY:Number = caretItemRendererY - dataGroup.verticalScrollPosition;
+                
+                // Wait for updateComplete before updating the scroll position to ensure 
+                // newCaretIndex is visible, so that other listeners/parts have completed
+                // their responses to the refresh event.
+                
+                const updateCompleteListenerA:Function = function():void {
+                    dataGroup.removeEventListener(FlexEvent.UPDATE_COMPLETE, updateCompleteListenerA);
+                    ensureCaretVisibility(newCaretIndex);
+                    dataGroup.addEventListener(FlexEvent.UPDATE_COMPLETE, updateCompleteListenerB);                    
+                    
+                };
+
+                // Wait for updateComplete before making the final update to the scroll position  
+                // so that layout bounds for the caret item renderer will have been computed.
+                
+                const updateCompleteListenerB:Function = function():void {
+                    dataGroup.removeEventListener(FlexEvent.UPDATE_COMPLETE, updateCompleteListenerB);                    
+                    restoreCaretScrollPosition(newCaretIndex, caretOffsetX, caretOffsetY);
+                };
+                
+                dataGroup.addEventListener(FlexEvent.UPDATE_COMPLETE, updateCompleteListenerA);
+                
+                return;
+            }
+        }
+
+        super.dataProviderRefreshed();  // clears the selectedIndex, caretIndex
+    }
+    
+    /**
+     *  @private
      */
     override mx_internal function isItemIndexSelected(index:int):Boolean
     {
         if (allowMultipleSelection && (selectedIndices != null))
             return selectedIndices.indexOf(index) != -1;
         
-        return index == selectedIndex;
+        return super.isItemIndexSelected(index);
     }
+    
+    /**
+     *  @private
+     */ 
+    override public function styleChanged(styleName:String):void
+    {
+        super.styleChanged(styleName);
+        
+        // The scrollPolicy styles are initialized in framework/defaults.css
+        // so there's no way to determine if been explicitly set here.  To avoid 
+        // preempting explicitly set scroller scrollPolicy styles with the default
+        // "auto" value, we only forward the style if it's not "auto".
+        
+        const allStyles:Boolean = (styleName == null || styleName == "styleName");
+        if (scroller)
+        {
+            const vsp:String = getStyle("verticalScrollPolicy");
+            if (styleName == "verticalScrollPolicy")
+                scroller.setStyle("verticalScrollPolicy", vsp);
+            else if (allStyles && vsp && (vsp !== ScrollPolicy.AUTO))
+                scroller.setStyle("verticalScrollPolicy", vsp);
+            
+            const hsp:String = getStyle("horizontalScrollPolicy");
+            if (styleName == "horizontalScrollPolicy")
+                scroller.setStyle("horizontalScrollPolicy", hsp);
+            else if (allStyles && hsp && (hsp !== ScrollPolicy.AUTO))
+                scroller.setStyle("horizontalScrollPolicy", hsp);
+        }
+    }    
     
     //--------------------------------------------------------------------------
     //
@@ -1241,7 +1522,8 @@ public class List extends ListBase implements IFocusManagerComponent
         
         if (!shiftKey)
         {
-            if (ctrlKey)
+            // TODO (rfrishbe): make this part a style, like "multipleSelectionRequiresModifierKey"
+            if (ctrlKey || getStyle("interactionMode") == InteractionMode.TOUCH)
             {
                 if (!isEmpty(selectedIndices))
                 {
@@ -1406,7 +1688,9 @@ public class List extends ListBase implements IFocusManagerComponent
      *  Creates an instance of a class that is used to display the visuals
      *  of the dragged items during a drag and drop operation.
      *  The default <code>DragEvent.DRAG_START</code> handler passes the
-     *  instance to the <code>DragManager.doDrag()</code> method. 
+     *  instance to the <code>DragManager.doDrag()</code> method.
+     *
+     *  @return The IFlexDisplayObject representing the drag indicator.
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -1494,39 +1778,50 @@ public class List extends ListBase implements IFocusManagerComponent
      */
     protected function item_mouseDownHandler(event:MouseEvent):void
     {
+        // someone else handled it already since this is cancellable thanks to 
+        // some extra code in SystemManager that redispatches a cancellable version 
+        // of the same event
+        if (event.isDefaultPrevented())
+            return;
+        
         // Handle the fixup of selection
         var newIndex:int
         if (event.currentTarget is IItemRenderer)
             newIndex = IItemRenderer(event.currentTarget).itemIndex;
         else
             newIndex = dataGroup.getElementIndex(event.currentTarget as IVisualElement);
-
+        
         if (!allowMultipleSelection)
         {
             // Single selection case, set the selectedIndex 
-            var currentRenderer:IItemRenderer;
-            if (caretIndex >= 0)
-            {
-                currentRenderer = dataGroup.getElementAt(caretIndex) as IItemRenderer;
-                if (currentRenderer)
-                    currentRenderer.showsCaret = false;
-            }
             
-            // Check to see if we're deselecting the currently selected item 
-            if (event.ctrlKey && selectedIndex == newIndex)
+            // Check to see if we're deselecting the currently selected item because if we're 
+            // possibly dragging we don't want to de-select this immediately.  Similarly, if we 
+            // are in touch interactionMode, we need to delay the item renderer highlight for a bit 
+            if ((event.ctrlKey && selectedIndex == newIndex) || getStyle("interactionMode") == InteractionMode.TOUCH)
             {
-                pendingSelectionOnMouseUp = true;
-                pendingSelectionCtrlKey = true;
-                pendingSelectionShiftKey = event.shiftKey;
+                // Immediately unselect if we don't support dragging. 
+                if (!dragEnabled && getStyle("interactionMode") != InteractionMode.TOUCH)
+                {
+                    setSelectedIndex(NO_SELECTION, true);    
+                }
+                else
+                {
+                    pendingSelectionOnMouseUp = true;
+                    pendingSelectionCtrlKey = event.ctrlKey;
+                    pendingSelectionShiftKey = event.shiftKey;
+                }
             }
             else
+            {
                 setSelectedIndex(newIndex, true);
+            }
         }
         else 
         {
             // Don't commit the selection immediately, but wait to see if the user
             // is actually dragging. If they don't drag, then commit the selection
-            if (isItemIndexSelected(newIndex))
+            if (isItemIndexSelected(newIndex) || getStyle("interactionMode") == InteractionMode.TOUCH)
             {
                 pendingSelectionOnMouseUp = true;
                 pendingSelectionShiftKey = event.shiftKey;
@@ -1545,11 +1840,12 @@ public class List extends ListBase implements IFocusManagerComponent
         // listeners may prevent the item from being selected.
         if (!pendingSelectionOnMouseUp)
             validateProperties();
-
+        
         mouseDownPoint = event.target.localToGlobal(new Point(event.localX, event.localY));
+        mouseDownObject = event.target as DisplayObject;
         mouseDownIndex = newIndex;
-
-        var listenForDrag:Boolean = (dragEnabled && selectedIndices && this.selectedIndices.indexOf(newIndex) != -1);
+        
+        var listenForDrag:Boolean = (dragEnabled && getStyle("interactionMode") == InteractionMode.MOUSE && selectedIndices && this.selectedIndices.indexOf(newIndex) != -1);
         // Handle any drag gestures that may have been started
         if (listenForDrag)
         {
@@ -1559,14 +1855,14 @@ public class List extends ListBase implements IFocusManagerComponent
             // operation if they move out of the list.
             systemManager.getSandboxRoot().addEventListener(MouseEvent.MOUSE_MOVE, mouseMoveHandler, false, 0, true);
         }
-
+        
         if (pendingSelectionOnMouseUp || listenForDrag)
         {
             systemManager.getSandboxRoot().addEventListener(SandboxMouseEvent.MOUSE_UP_SOMEWHERE, mouseUpHandler, false, 0, true);
             systemManager.getSandboxRoot().addEventListener(MouseEvent.MOUSE_UP, mouseUpHandler, false, 0, true);
         }
     }
-
+    
     /**
      *  @private
      *  Handles <code>MouseEvent.MOUSE_MOVE</code> events from any mouse
@@ -1611,23 +1907,61 @@ public class List extends ListBase implements IFocusManagerComponent
             dispatchEvent(dragEvent);
 
             // Finally, remove the mouse handlers
-            removeMouseHandlersForDragStart();
+            removeMouseHandlersForDragStart(event);
         }
     }
     
-    private function removeMouseHandlersForDragStart():void
+    private function removeMouseHandlersForDragStart(event:Event):void
     {
         // If dragging failed, but we had a pending selection, commit it here
         if (pendingSelectionOnMouseUp && !DragManager.isDragging)
         {
-            if (allowMultipleSelection)
+            if (getStyle("interactionMode") == InteractionMode.TOUCH)
             {
-                setSelectedIndices(calculateSelectedIndices(mouseDownIndex, pendingSelectionShiftKey, pendingSelectionCtrlKey), true);
+                // if in touch mode, and we didn't start scrolling, let's check to see
+                // whether we moused up on the same item we mouse downed on. 
+                // we don't do this check for mouse mode because technically selection happens 
+                // on mousedown there.
+                
+                // this selectionChange check is basically a "click" check to make sure we moused downed on 
+                // the same item that we moused up on.
+                // We could just put it in click handler, but this is a little easier in mouseup
+                // since we've combined some dragging logic and some touch interaction 
+                // logic around pendingSelectionOnMouseUp.
+                var selectionChange:Boolean = (event.target == mouseDownObject || 
+                    (mouseDownObject is DisplayObjectContainer && 
+                        DisplayObjectContainer(mouseDownObject).contains(event.target as DisplayObject)));
+                
+                // check to make sure they clciked on an item and selection should change
+                if (selectionChange)
+                {
+                    // now handle the cases where the item is being selected or de-selected
+                    // based on allowMultipleSelection
+                    if (allowMultipleSelection)
+                    {
+                        setSelectedIndices(calculateSelectedIndices(mouseDownIndex, pendingSelectionShiftKey, pendingSelectionCtrlKey), true);
+                    }
+                    else
+                    {
+                        setSelectedIndex(mouseDownIndex, true);
+                    }
+                }
             }
             else
             {
-                // Must be deselecting the current selected item.
-                setSelectedIndex(NO_SELECTION, true);
+                // if in mouse interactionMode, we must have finished an attempted drag, so let's
+                // select the item if in multi-select mode or de-select the item 
+                // if in single select mode.  See item_mouseDownHandler for how this was setup
+                if (allowMultipleSelection)
+                {
+                    setSelectedIndices(calculateSelectedIndices(mouseDownIndex, pendingSelectionShiftKey, pendingSelectionCtrlKey), true);
+                }
+                else
+                {
+                    // Must be deselecting the current selected item since the only
+                    // reason we are here could be dragging
+                    setSelectedIndex(NO_SELECTION, true);
+                }
             }
         }
 
@@ -1635,6 +1969,7 @@ public class List extends ListBase implements IFocusManagerComponent
         pendingSelectionOnMouseUp = false;
         
         mouseDownPoint = null;
+        mouseDownObject = null;
         mouseDownIndex = -1;
         
         systemManager.getSandboxRoot().removeEventListener(MouseEvent.MOUSE_MOVE, mouseMoveHandler, false);
@@ -1658,7 +1993,7 @@ public class List extends ListBase implements IFocusManagerComponent
      */
     protected function mouseUpHandler(event:Event):void
     {
-        removeMouseHandlersForDragStart();
+        removeMouseHandlersForDragStart(event);
     }
     
     //--------------------------------------------------------------------------
@@ -1893,6 +2228,23 @@ public class List extends ListBase implements IFocusManagerComponent
     
     /**
      *  @private
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    private function touchInteractionStartHandler(event:TouchInteractionEvent):void
+    {
+        // cancel actual selection
+        mouseDownIndex = -1;
+        mouseDownObject = null;
+        mouseDownPoint = null;
+        pendingSelectionOnMouseUp = false;
+    }
+    
+    /**
+     *  @private
      *  Handles <code>DragEvent.DRAG_DROP events</code>. This method  hides
      *  the drop feedback by calling the <code>hideDropFeedback()</code> method.
      *
@@ -1975,6 +2327,10 @@ public class List extends ListBase implements IFocusManagerComponent
         if (caretIndex != -1)
             newSelection.push(dropIndex + caretIndex);
 
+        // Create dataProvider if needed
+        if (!dataProvider)
+            dataProvider = new ArrayCollection();
+        
         var copyItems:Boolean = (event.action == DragManager.COPY);
         for (i = 0; i < items.length; i++)
         {
@@ -2061,9 +2417,10 @@ public class List extends ListBase implements IFocusManagerComponent
      *  @private
      *  Called when an item has been added to this component.
      */
-    private function dataGroup_rendererAddHandler(event:RendererExistenceEvent):void
+    override protected function dataGroup_rendererAddHandler(event:RendererExistenceEvent):void
     {
-        var index:int = event.index;
+        super.dataGroup_rendererAddHandler(event);
+        
         var renderer:IVisualElement = event.renderer;
         
         if (!renderer)
@@ -2076,9 +2433,10 @@ public class List extends ListBase implements IFocusManagerComponent
      *  @private
      *  Called when an item has been removed from this component.
      */
-    private function dataGroup_rendererRemoveHandler(event:RendererExistenceEvent):void
+    override protected function dataGroup_rendererRemoveHandler(event:RendererExistenceEvent):void
     {
-        var index:int = event.index;
+        super.dataGroup_rendererRemoveHandler(event);
+        
         var renderer:Object = event.renderer;
         
         if (!renderer)
@@ -2378,13 +2736,37 @@ public class List extends ListBase implements IFocusManagerComponent
         if (isEditableTarget(event.target))
             return;
         
-        // 1. Was the space bar hit? 
+        var touchMode:Boolean = (getStyle("interactionMode") == InteractionMode.TOUCH);
+        
+        // 1. Was the space bar hit? or was the enter key hit and we're in 5-way mode
         // Hitting the space bar means the current caret item, 
         // that is the item currently in focus, is being 
-        // selected. 
-        if (event.keyCode == Keyboard.SPACE)
+        // selected or de-selected. 
+        if (event.keyCode == Keyboard.SPACE ||
+            (touchMode && event.keyCode == Keyboard.ENTER))
         {
-            setSelectedIndex(caretIndex, true); 
+            if (allowMultipleSelection)
+            {
+                // Need to set "changeCaret" to false below so that we 
+                // don't change the caret to an item in the selectedIndices
+                // if we are currently deselecting an item
+                setSelectedIndices(calculateSelectedIndices(caretIndex, event.shiftKey, event.ctrlKey), true, false);
+            }
+            else
+            {
+                // check to see if we're de-selecting the current item
+                if (caretIndex == selectedIndex && (event.ctrlKey || touchMode))
+                {
+                    // Unselect it, but don't change the caret
+                    setSelectedIndex(NO_SELECTION, true, false);
+                }
+                else
+                {
+                    // select the current item
+                    setSelectedIndex(caretIndex, true, false);
+                }
+                
+            }
             event.preventDefault();
             return; 
         }
@@ -2474,14 +2856,17 @@ public class List extends ListBase implements IFocusManagerComponent
             ensureIndexIsVisible(proposedNewIndex); 
         }
         // Entering the caret state with the Ctrl key down 
-        else if (event.ctrlKey)
+        // TODO (rfrishbe): shouldn't just check interactionMode but should depend on 
+        // either the platform or whether it was a 5-way button or whether 
+        // soem other keyboardSelection style.
+        else if (event.ctrlKey || getStyle("interactionMode") == InteractionMode.TOUCH)
         {
             var oldCaretIndex:Number = caretIndex; 
             setCurrentCaretIndex(proposedNewIndex);
             var e:IndexChangeEvent = new IndexChangeEvent(IndexChangeEvent.CARET_CHANGE); 
             e.oldIndex = oldCaretIndex; 
             e.newIndex = caretIndex; 
-            dispatchEvent(e);    
+            dispatchEvent(e);
             ensureIndexIsVisible(proposedNewIndex); 
         }
         // Its just a new selection action, select the new index.

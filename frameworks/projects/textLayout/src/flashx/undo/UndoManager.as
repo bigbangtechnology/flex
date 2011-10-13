@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.undo
 {
 			
@@ -183,7 +183,7 @@ package flashx.undo
 
 		/** 
 		 * @copy IUndoManager#undo()
-		 * @see flashx.textLayout.edit.IEditManager#undo
+		 * @see flashx.textLayout.edit.IEditManager#undo()
 		 * 
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
@@ -201,7 +201,7 @@ package flashx.undo
 		/** 
 		 * @copy IUndoManager#redo()
 		 * 
-		 * @see flashx.textLayout.edit.IEditManager#redo
+		 * @see flashx.textLayout.edit.IEditManager#redo()
 		 * 
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5

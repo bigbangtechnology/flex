@@ -23,13 +23,13 @@ package org.osmf.net
 {
 	import flash.utils.Dictionary;
 	import flash.utils.Proxy;
-	import flash.utils.Timer;
 	import flash.utils.flash_proxy;
 
 	/**
 	 * The NetClient class provides support for handling
 	 * callbacks dynamically from an RTMP server that is streaming
-	 * to an AudioElement or VideoElement. 
+	 * to a MediaElement that works with NetStream under the hood (such
+	 * as VideoElement). 
 	 * 
 	 * <p>Use this class to listen for callbacks on the NetConnection
 	 * and NetStream created by a NetLoader's load operation.</p>
@@ -38,14 +38,16 @@ package org.osmf.net
 	 * to an instance of the NetClient class.
 	 * Then use the NetClient's <code>addHandler()</code>
 	 * and <code>removeHandler()</code> methods to register and unregister handlers for
-	 * the NetStream callbacks. 
-	 * The names of these callbacks are the constants with names beginning with "ON_" 
-	 * enumerated in the NetStreamCodes class.</p>
+	 * the NetStream callbacks.</p>
 	 * 
 	 * @see NetLoader
-	 * @see NetStreamCodes
 	 * @see flash.net.NetConnection
 	 * @see flash.net.NetStream
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */	
 	dynamic public class NetClient extends Proxy
 	{
@@ -57,33 +59,34 @@ package org.osmf.net
 		 * of each handler's invocation.
 		 * </p>
 		 * <p>
-		 * This example sets up handler for the <code>ON_METADATA</code>
+		 * This example sets up handler for the <code>onMetaData</code>
 		 * callback.
 		 * <listing>
 		 * function onMetaData(value:Object):void
 		 * {
-		 * 	trace("Got metadata.");
+		 * 	  trace("Got metadata.");
 		 * }
 		 * 
 		 * var stream:NetStream;
 		 * var client:NetClient = (stream.client as NetClient); //assign the stream to the NetClient
-		 * client.addHandler(NetStreamCodes.ON_METADATA, onMetaData); //add the handler
+		 * client.addHandler("onMetaData", onMetaData); //add the handler
 		 * </listing>
 		 * </p>
 		 * 
 		 * @param name Name of callback to handle.
-		 * The callback names are enumerated in the 
-		 * and NetStreamCodes class.
 		 * @param handler Handler to add.
-		 * @see NetStreamCodes
+		 * @priority The priority level of the handler.  The higher the number, the higher the priority.
+		 * All handlers with priority N are processed before handlers of priority N-1.  If two or more
+		 * handlers are added with the same priority, they are processed in the order in which they
+		 * were added.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
-		public function addHandler(name:String,handler:Function):void
-		{			
+		public function addHandler(name:String, handler:Function, priority:int=0):void
+		{
 			var handlersForName:Array 
 				= handlers.hasOwnProperty(name)
 					? handlers[name]
@@ -91,7 +94,31 @@ package org.osmf.net
 			
 			if (handlersForName.indexOf(handler) == -1)
 			{
-				handlersForName.push(handler);
+				var inserted:Boolean = false;
+				
+				priority = Math.max(0, priority);
+				
+				// Higher priority handlers are at the front of the list.
+				if (priority > 0)
+				{
+					for (var i:int = 0; i < handlersForName.length; i++)
+					{
+						var handlerWithPriority:Object = handlersForName[i];
+						
+						// Stop iterating when we're passed all handlers of
+						// this priority.
+						if (handlerWithPriority.priority < priority)
+						{
+							handlersForName.splice(i, 0, {handler:handler, priority:priority});
+							inserted = true;
+							break;
+						}
+					}
+				}
+				if (!inserted)
+				{
+					handlersForName.push({handler:handler, priority:priority});
+				}
 			}
 		}
 		
@@ -99,53 +126,43 @@ package org.osmf.net
 		 * Removes a handler method for the specified callback name.
 		 * 
 		 * @param name Name of callback for whose handler is being removed.
-		 * The callback names are those constants enumerated in the
-		 * NetStreamCodes class that have the prefix "ON_", such as 
-		 * ON_CUE_POINT, ON_IMAGE_DATA, etc.
 		 * @param handler Handler to remove.
-		 * @return Returns <code>true</code> if the specified handler was found and
-		 * successfully removed. 
-		 * @see NetStreamCodes
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
-		public function removeHandler(name:String,handler:Function):Boolean
+		public function removeHandler(name:String,handler:Function):void
 		{
-			var result:Boolean;
-			
-			if (handlers.hasOwnProperty(name) )
+			if (handlers.hasOwnProperty(name))
 			{
 				var handlersForName:Array = handlers[name];
-				var index:int = handlersForName.indexOf(handler);
-			
-				if (index != -1)
+				for (var i:int = 0; i < handlersForName.length; i++)
 				{
-					handlersForName.splice(index,1);
-					
-					result = true;
+					var handlerWithPriority:Object = handlersForName[i];
+					if (handlerWithPriority.handler == handler)
+					{
+						handlersForName.splice(i, 1);
+						
+						break;
+					}
 				}
 			}
-			
-			return result;	
 		}
 		
 		// Proxy Overrides
 		//
 		
 		/**
-		 * @inheritDoc
 		 * @private
 		 */		
 		override flash_proxy function callProperty(methodName:*, ... args):*
 		{
-			return invokeHandlers(methodName,args);
+			return invokeHandlers(methodName, args);
         }
         
         /**
-		 * @inheritDoc
 		 * @private
 		 */
 		override flash_proxy function getProperty(name:*):* 
@@ -156,7 +173,7 @@ package org.osmf.net
 				result 
 					=  function():*
 						{
-							return invokeHandlers(arguments.callee.name,arguments);
+							return invokeHandlers(arguments.callee.name, arguments);
 						}
 				
 				result.name = name;
@@ -164,7 +181,15 @@ package org.osmf.net
 			
 			return result;
 		}
-				
+		
+        /**
+		 * @private
+		 */
+		override flash_proxy function hasProperty(name:*):Boolean
+		{
+			return handlers.hasOwnProperty(name);
+		}
+
 		// Internals
 		//
 		
@@ -189,7 +214,7 @@ package org.osmf.net
 		 * each individual handler invokation. 
 		 * 
 		 */				
-		private function invokeHandlers(name:String,args:Array):*
+		private function invokeHandlers(name:String, args:Array):*
 		{
 			var result:Array;
 			
@@ -197,9 +222,9 @@ package org.osmf.net
 			{
 				result = [];
 				var handlersForName:Array = handlers[name];
-				for each (var handler:Function in handlersForName)
+				for each (var handler:Object in handlersForName)
 				{
-					result.push(handler.apply(null,args));
+					result.push(handler.handler.apply(null,args));
 				}
 			}
 			

@@ -51,7 +51,7 @@ CheckBox
 
 ComboBox
 {
-    dropShadowVisible: true;
+/*  dropShadowVisible: true; in spark.css */
     paddingBottom: 3;
     paddingLeft: 3;
     paddingRight: 3;
@@ -59,10 +59,40 @@ ComboBox
     skinClass: ClassReference("spark.skins.spark.ComboBoxSkin");
 }
 
+DataGrid
+{
+    skinClass: ClassReference("spark.skins.spark.DataGridSkin");
+    stretchCursor: Embed(source="Assets.swf",symbol="cursorStretch");    
+}
+
 DropDownList
 {
-    dropShadowVisible: true;
+/*  dropShadowVisible: true; in spark.css */
     skinClass: ClassReference("spark.skins.spark.DropDownListSkin");
+}
+
+Form
+{
+    skinClass : ClassReference("spark.skins.spark.FormSkin");
+}
+
+FormHeading
+{
+    fontSize : 15;
+    fontWeight : "bold";
+    skinClass : ClassReference("spark.skins.spark.FormHeadingSkin");
+}
+
+FormItem
+{
+    errorIndicatorSource : Embed(source="assets/ErrorIndicator.png");
+    requiredIndicatorSource : Embed(source="assets/RequiredIndicator.png");
+    skinClass : ClassReference("spark.skins.spark.FormItemSkin");
+}
+
+GridColumnHeaderGroup
+{
+    separatorAffordance: 5;
 }
 
 HScrollBar
@@ -75,11 +105,19 @@ HSlider
     skinClass: ClassReference("spark.skins.spark.HSliderSkin");
 }
 
+Image
+{
+    skinClass: ClassReference("spark.skins.spark.ImageSkin");
+    enableLoadingState: false;
+    showErrorSkin : false;
+    smoothingQuality: "default";
+}
+
 List
 {
-	skinClass: ClassReference("spark.skins.spark.ListSkin");
+    skinClass: ClassReference("spark.skins.spark.ListSkin");
     dragIndicatorClass: ClassReference("spark.components.supportClasses.ListItemDragProxy");
-	dropIndicatorSkin: ClassReference("spark.skins.spark.ListDropIndicator");
+    dropIndicatorSkin: ClassReference("spark.skins.spark.ListDropIndicator");
 }
 
 MuteButton
@@ -95,10 +133,13 @@ NumericStepper
 Panel
 {
     backgroundColor: #FFFFFF;
+/* in spark.css */
+/*
     borderAlpha: 0.5;
     borderColor: 0;
     cornerRadius: 0;
     dropShadowVisible: true;
+*/
 	skinClass: ClassReference("spark.skins.spark.PanelSkin");
 }
 
@@ -138,6 +179,23 @@ SkinnableContainer
     skinClass: ClassReference("spark.skins.spark.SkinnableContainerSkin");
 }
 
+SkinnablePopUpContainer
+{
+    skinClass: ClassReference("spark.skins.spark.SkinnablePopUpContainerSkin");
+}
+
+SkinnableTextBase:normalWithPrompt 
+{
+    color: #BABABA;
+    fontStyle: italic;
+}
+
+SkinnableTextBase:disabledWithPrompt 
+{
+    color: #BABABA;
+    fontStyle: italic;
+}
+
 Spinner
 {
     skinClass: ClassReference("spark.skins.spark.SpinnerSkin");    
@@ -174,10 +232,13 @@ TextInput
 
 TitleWindow
 {
+/* in spark.css */
+/*
 	borderAlpha: 0.8;
 	borderColor: 0;
 	cornerRadius: 0;
 	dropShadowVisible: true;
+*/
 	skinClass: ClassReference("spark.skins.spark.TitleWindowSkin");
 }
 
@@ -193,7 +254,7 @@ VideoDisplay
 
 VideoPlayer
 {
-    dropShadowVisible: true;
+/*  dropShadowVisible: true; in spark.css */
     layoutDirection: "ltr";
     skinClass: ClassReference("spark.skins.spark.VideoPlayerSkin");
 }
@@ -211,30 +272,4 @@ VScrollBar
 VSlider
 {
     skinClass: ClassReference("spark.skins.spark.VSliderSkin");
-}
-
-global
-{
-    /* Looks */
-    /* color: #000000; */
-    backgroundImageFillMode : "scale";
-    chromeColor: #CCCCCC;
-    borderVisible : true;
-    borderWeight : 1;
-    contentBackgroundColor: #FFFFFF;
-    rollOverColor: #CEDBEF;
-    focusColor: #70B2EE;
-    symbolColor: #000000;
-    fontLookup: "embeddedCFF";
-
-    /* Behaviors */
-    autoThumbVisibility: true;
-    fixedThumbSize: false;
-    fullScreenHideControlsDelay: 3000;
-    horizontalScrollPolicy: "auto";
-    liveDragging: true;
-    rollOverOpenDelay: 200;
-    slideDuration: 300;
-    smoothScrolling: true;
-    verticalScrollPolicy: "auto";
 }

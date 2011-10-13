@@ -1,4 +1,6 @@
-<?xml version="1.0" encoding="utf-8" standalone="no" ?><!DOCTYPE asf SYSTEM "http://ns.adobe.com/asf/asf_1_0.dtd"><asf locale="en_US" version="1.0" xmlns="http://ns.adobe.com/asf">
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE asf SYSTEM "http://ns.adobe.com/asf/asf_1_0.dtd" >
+<asf xmlns="http://ns.adobe.com/asf" version="1.0" locale="ru_RU">
    <str name="ERROR__CAPTION__ADOBE_AIR" translate="yes">
      <val>Adobe AIR</val> 
    </str>
@@ -141,7 +143,7 @@
     <val>нет данных</val>
   </str>
   <str name="HTML_UNKNOWN_FILE_SIZE" translate="yes">
-	<val>Нет данных</val>
+	<val>нет данных</val>
   </str>
 	<str name="HTML_SEARCH_MENU__CLEAR_RECENT_SEARCHES" translate="yes">
 		<val>Удалить последние поиски</val>

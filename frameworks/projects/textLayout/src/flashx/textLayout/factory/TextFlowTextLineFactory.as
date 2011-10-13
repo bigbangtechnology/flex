@@ -1,23 +1,13 @@
-//========================================================================================
-//  $File: //a3t/argon/branches/v1/1.1/dev/textLayout_core/src/flashx/textLayout/factory/TextFlowTextLineFactory.as $
-//  $DateTime: 2010/03/15 11:44:20 $
-//  $Revision: #1 $
-//  $Change: 744811 $
-//  
-//  ADOBE CONFIDENTIAL
-//  
-//  Copyright 2008 Adobe Systems Incorporated. All rights reserved.
-// 
-//  NOTICE:  All information contained herein is, and remains
-//  the property of Adobe Systems Incorporated and its suppliers,
-//  if any.  The intellectual and technical concepts contained
-//  herein are proprietary to Adobe Systems Incorporated and its
-//  suppliers, and are protected by trade secret or copyright law.
-//  Dissemination of this information or reproduction of this material
-//  is strictly forbidden unless prior written permission is obtained
-//  from Adobe Systems Incorporated.
-//  
-//========================================================================================
+////////////////////////////////////////////////////////////////////////////////
+//
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
+//
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
+//
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.factory
 {
 	import flash.display.Shape;
@@ -27,6 +17,7 @@ package flashx.textLayout.factory
 	import flash.text.engine.TextLine;
 	import flash.text.engine.TextLineValidity;
 	
+	import flashx.textLayout.compose.FloatCompositionData;
 	import flashx.textLayout.compose.IFlowComposer;
 	import flashx.textLayout.compose.SimpleCompose;
 	import flashx.textLayout.compose.StandardFlowComposer;
@@ -42,6 +33,7 @@ package flashx.textLayout.factory
 	import flashx.textLayout.elements.TextFlow;
 	import flashx.textLayout.compose.TextFlowLine;
 	import flashx.textLayout.formats.BlockProgression;
+	import flashx.textLayout.formats.Float;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.LineBreak;
 	import flashx.textLayout.formats.TextLayoutFormat;
@@ -69,7 +61,7 @@ package flashx.textLayout.factory
  * @see flashx.textLayout.elements.TextFlow TextFlow
  * @see flashx.textLayout.factory.StringTextLineFactory StringTextLineFactory
 */
-	public final class TextFlowTextLineFactory extends TextLineFactoryBase
+	public class TextFlowTextLineFactory extends TextLineFactoryBase
 	{
 		/** 
 		 * Creates a TextFlowTextLineFactory object. 
@@ -78,7 +70,7 @@ package flashx.textLayout.factory
  		 * @playerversion AIR 1.5
  		 * @langversion 3.0
  		 */
-		public function TextFlowTextLineFactory():void
+		public function TextFlowTextLineFactory()
 		{
 			super();
 		}
@@ -92,6 +84,8 @@ package flashx.textLayout.factory
 		 * is responsible for displaying the line. If a line has a background color, the factory also calls the
 		 * callback function with a Shape object containing a rectangle of the background color.</p>
 		 * 
+		 * <p>Note that the scroll policies of the factory will control how many lines are generated.</p>
+		 * 
 		 * @param callback function to call with each generated TextLine object.  
 		 * The callback will be called with a Shape object representing any background color (if present), 
 		 * and with TextLine objects for the text.
@@ -104,16 +98,35 @@ package flashx.textLayout.factory
 		 */	
 		public function createTextLines(callback:Function,textFlow:TextFlow):void
 		{
+			var saved:SimpleCompose = TextLineFactoryBase.beginFactoryCompose();
+			try
+			{
+				createTextLinesInternal(callback,textFlow);
+			}
+			finally
+			{
+				textFlow.changeFlowComposer(null,false);
+				_factoryComposer._lines.splice(0);
+				if (_pass0Lines)
+					_pass0Lines.splice(0);
+				TextLineFactoryBase.endFactoryCompose(saved);
+			}
+		}
+		private  function createTextLinesInternal(callback:Function,textFlow:TextFlow):void
+		{
 			var measureWidth:Boolean  = isNaN(compositionBounds.width);
 			
 			var bp:String = textFlow.computedFormat.blockProgression;
 						
 			var helper:IFlowComposer = createFlowComposer();
+			
 			helper.swfContext = swfContext;
 
 			helper.addController(containerController);
 			textFlow.flowComposer = helper; 
-			textFlow.backgroundManager = null;
+			textFlow.clearBackgroundManager();
+			// this assertion is for TCM.  It's valid in other cases to use the factory but Links won't work and graphics may not load properly
+			CONFIG::debug { assert(!this.hasOwnProperty("tcm") || textFlow.mustUseComposer() == false,"Factory composing in TCM when interaction needed"); }
 			
 			_isTruncated = false;
 			
@@ -226,27 +239,41 @@ package flashx.textLayout.factory
 			controllerBounds.right += xadjust;
 			controllerBounds.top += compositionBounds.y;
 			controllerBounds.bottom += compositionBounds.y;
-				
+			
 			if (textFlow.backgroundManager)
-			{
-				var bgShape:Shape = new Shape();
-				textFlow.backgroundManager.drawAllRects(bgShape,containerController);
-				bgShape.x = xadjust;
-				bgShape.y = compositionBounds.y;
-				callback(bgShape);
-				textFlow.backgroundManager = null;
-			}	
-
+				processBackgroundColors(textFlow,callback,xadjust,compositionBounds.y,containerController.compositionWidth,containerController.compositionHeight);				
 			callbackWithTextLines(callback,xadjust,compositionBounds.y);
 
 			setContentBounds(controllerBounds);
-
-			textFlow.changeFlowComposer(null,false);
+			containerController.clearCompositionResults();
+		}
+		
+		/** @private - documented in base class */
+		override protected function callbackWithTextLines(callback:Function,delx:Number,dely:Number):void
+		{
+			super.callbackWithTextLines(callback, delx, dely);
 			
-			// clear out lines in the FactoryComposer
-			_factoryComposer._lines.splice(0);
-			if (_pass0Lines)
-				_pass0Lines.splice(0);
+			// Handle floats and inlines as well
+			var numFloats:int = containerController.numFloats;
+			for (var i:int = 0; i < numFloats; ++i)
+			{
+				var floatInfo:FloatCompositionData = containerController.getFloatAt(i);
+				var inlineHolder:Sprite = new Sprite();	// NO PMD
+				inlineHolder.alpha = floatInfo.alpha;
+				if (floatInfo.matrix)
+					inlineHolder.transform.matrix = floatInfo.matrix;
+				inlineHolder.x += floatInfo.x;
+				inlineHolder.y += floatInfo.y;
+				inlineHolder.addChild(floatInfo.graphic);
+				if (floatInfo.floatType == Float.NONE)
+					floatInfo.parent.addChild(inlineHolder);
+				else 
+				{
+					inlineHolder.x += delx;
+					inlineHolder.y += dely;
+					callback(inlineHolder);
+				}
+			}
 		}
 		
 		/** @private 

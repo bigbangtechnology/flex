@@ -26,112 +26,190 @@ package org.osmf.events
 	import org.osmf.utils.OSMFStrings;
 	
 	/**
-	 * The MediaErrorCodes class provides static constants for error codes,
-	 * as well as a means for retrieving a description for a particular error
-	 * code.
+	 * The MediaErrorCodes class provides static constants for error IDs.
+	 * Error IDs zero through 999 are reserved for use by the
+	 * framework.
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */ 
 	public final class MediaErrorCodes
 	{
-		public static const CONTENT_IO_LOAD_ERROR:int 					= 1;
-		public static const CONTENT_SECURITY_LOAD_ERROR:int				= 2;
-		public static const INVALID_SWF_AS_VERSION:int					= 3;
+		/**
+		 * Error constant for when a MediaElement fails to load due to an I/O error.
+		 **/
+		public static const IO_ERROR:int 								= 1;
+		
+		/**
+		 * Error constant for when a MediaElement fails to load due to a security error.
+		 **/
+		public static const SECURITY_ERROR:int							= 2;
 
-		public static const INVALID_PLUGIN_VERSION:int					= 61;
-		public static const INVALID_PLUGIN_IMPLEMENTATION:int			= 62;
-		
-		public static const INVALID_URL_PROTOCOL:int					= 120;
-		public static const NETCONNECTION_REJECTED:int					= 121;
-		public static const NETCONNECTION_INVALID_APP:int				= 122;
-		public static const NETCONNECTION_FAILED:int					= 123;
-		public static const NETCONNECTION_TIMEOUT:int					= 124;
-		public static const NETCONNECTION_SECURITY_ERROR:int			= 125;
-		public static const NETCONNECTION_ASYNC_ERROR:int				= 126;
-		public static const NETCONNECTION_IO_ERROR:int					= 127;
-		public static const NETCONNECTION_ARGUMENT_ERROR:int			= 128;
+		/**
+		 * Error constant for when a MediaElement encounters an asynchronous error.
+		 **/
+		public static const ASYNC_ERROR:int								= 3;
 
-		public static const PLAY_FAILED:int 							= 131;
-		public static const STREAM_NOT_FOUND:int 						= 132;
-		public static const FILE_STRUCTURE_INVALID:int 					= 133;
-		public static const NO_SUPPORTED_TRACK_FOUND:int 				= 134;
-		public static const PLAY_FAILED_NETCONNECTION_FAILURE:int 		= 135;
+		/**
+		 * Error constant for when a MediaElement encounters an argument error.
+		 **/
+		public static const ARGUMENT_ERROR:int							= 4;
+
+		/**
+		 * Error constant for when the NetLoader is unable to load a resource because
+		 * of an unknown or invalid URL scheme.
+		 **/
+		public static const URL_SCHEME_INVALID:int						= 5;
+
+		/**
+		 * Error constant for when an HTTP GET request fails due to a client error
+		 * (i.e. returns a 4xx status code).
+		 **/
+		public static const HTTP_GET_FAILED:int 						= 6;
+
+		/**
+		 * Error constant for when the loading of a MediaElement fails.
+		 **/
+		public static const MEDIA_LOAD_FAILED:int 						= 7;
+
+		/**
+		 * Error constant for when a plugin fails to load due to a version mismatch.
+		 **/
+		public static const PLUGIN_VERSION_INVALID:int					= 8;
+				
+		/**
+		 * Error constant for when a plugin fails to load due to the PluginInfo not
+		 * being exposed on the root Sprite of the plugin.
+		 **/
+		public static const PLUGIN_IMPLEMENTATION_INVALID:int			= 9;
+
+		/**
+		 * Error constant for when an audio file fails to play (e.g. due to no sound channels
+		 * or no sound card being available).
+		 **/
+		public static const SOUND_PLAY_FAILED:int						= 10;
 		
-		public static const STREAMSWITCH_INVALID_INDEX:int				= 200;
-		public static const STREAMSWITCH_STREAM_NOT_FOUND:int			= 201;
-		public static const STREAMSWITCH_STREAM_NOT_IN_MANUAL_MODE:int	= 202;
+		/**
+		 * Error constant that corresponds to the NetConnection.Connect.Rejected status code.
+		 **/
+		public static const NETCONNECTION_REJECTED:int					= 11;
+
+		/**
+		 * Error constant that corresponds to the NetConnection.Connect.InvalidApp status code.
+		 **/
+		public static const NETCONNECTION_APPLICATION_INVALID:int		= 12;
+
+		/**
+		 * Error constant that corresponds to the NetConnection.Connect.Failed status code.
+		 **/
+		public static const NETCONNECTION_FAILED:int					= 13;
+
+		/**
+		 * Error constant for when a NetConnection cannot connect due to a timeout.
+		 * period.
+		 **/
+		public static const NETCONNECTION_TIMEOUT:int					= 14;
+
+		/**
+		 * Error constant for when a NetStream cannot be played.
+		 **/
+		public static const NETSTREAM_PLAY_FAILED:int 					= 15;
+
+		/**
+		 * Error constant that corresponds to the NetStream.Play.StreamNotFound status code.
+		 **/
+		public static const NETSTREAM_STREAM_NOT_FOUND:int 				= 16;
 		
-		public static const AUDIO_IO_LOAD_ERROR:int 					= 301;
-		public static const AUDIO_SECURITY_LOAD_ERROR:int				= 302;
-		public static const PLAY_FAILED_NO_SOUND_CHANNELS:int			= 303;
+		/**
+		 * Error constant that corresponds to the NetStream.Play.FileStructureInvalid status code.
+		 **/
+		public static const NETSTREAM_FILE_STRUCTURE_INVALID:int 		= 17;
+
+		/**
+		 * Error constant that corresponds to the NetStream.Play.NoSupportedTrackFound status code.
+		 **/
+		public static const NETSTREAM_NO_SUPPORTED_TRACK_FOUND:int 		= 18;
+
+		/**
+		 * Error constant for when a DRM system update fails.
+		 **/
+		public static const DRM_SYSTEM_UPDATE_ERROR:int					= 19;
+
+		/**
+		 * Error constant for when a DVRCast NetConnection cannot connect because the attempt
+		 * to subscribe to the DVRCast stream fails.
+		 **/
+		public static const DVRCAST_SUBSCRIBE_FAILED:int				= 20;
 		
-		public static const HTTP_IO_LOAD_ERROR:int 						= 351;
-		public static const HTTP_SECURITY_LOAD_ERROR:int				= 352;
+		/**
+		 * Error constant for when a DVRCast NetConnection cannot connect because the DVRCast
+		 * application is offline.
+		 **/
+		public static const DVRCAST_CONTENT_OFFLINE:int					= 21;
 		
-		public static const BEACON_FAILURE_ERROR:int 					= 370;
-		
-		public static const DRM_AUTHENTICATION_FAILED:int				= 3301;
-		public static const DRM_NEEDS_AUTHENTICATION:int				= 3330;
-		public static const DRM_CONTENT_NOT_YET_VALID:int				= 3331;
+		/**
+		 * Error constant for when information about the DVRCast stream cannot be retrieved.
+		 **/
+		public static const DVRCAST_STREAM_INFO_RETRIEVAL_FAILED:int	= 22;
 
 
 		/**
-		 * Returns a description of the error for the specified error code.  If
-		 * the error code is unknown, returns the empty string.
+		 * @private
 		 * 
-		 * @param errorCode The error code for the error.
+		 * Returns a message for the error of the specified ID.  If the error ID
+		 * is unknown, returns the empty string.
 		 * 
-		 * @return A description of the error with the specified error code.
-		 **/
-		public static function getDescriptionForErrorCode(errorCode:int):String
+		 * @param errorID The ID for the error.
+		 * 
+		 * @return The message for the error with the specified ID.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		internal static function getMessageForErrorID(errorID:int):String
 		{
-			var description:String = "";
+			var message:String = "";
 			
 			for (var i:int = 0; i < errorMap.length; i++)
 			{
-				if (errorMap[i].code == errorCode)
+				if (errorMap[i].errorID == errorID)
 				{
-					description = OSMFStrings.getString(errorMap[i].description);
+					message = OSMFStrings.getString(errorMap[i].message);
 					break;
 				}
 			}
 			
-			return description;
+			return message;
 		}
 
 		private static const errorMap:Array =
 		[
-			  {code:CONTENT_IO_LOAD_ERROR,					description:OSMFStrings.CONTENT_IO_LOAD_ERROR}
-			, {code:CONTENT_SECURITY_LOAD_ERROR,			description:OSMFStrings.CONTENT_SECURITY_LOAD_ERROR}
-			, {code:INVALID_SWF_AS_VERSION,					description:OSMFStrings.INVALID_SWF_AS_VERSION}
-			, {code:INVALID_PLUGIN_VERSION,					description:OSMFStrings.INVALID_PLUGIN_VERSION}
-			, {code:INVALID_PLUGIN_IMPLEMENTATION,			description:OSMFStrings.INVALID_PLUGIN_IMPLEMENTATION}
-			, {code:INVALID_URL_PROTOCOL,					description:OSMFStrings.INVALID_URL_PROTOCOL}
-			, {code:PLAY_FAILED, 							description:OSMFStrings.PLAY_FAILED}
-			, {code:STREAM_NOT_FOUND,	 					description:OSMFStrings.STREAM_NOT_FOUND}
-			, {code:FILE_STRUCTURE_INVALID,					description:OSMFStrings.FILE_STRUCTURE_INVALID}
-			, {code:NO_SUPPORTED_TRACK_FOUND,				description:OSMFStrings.NO_SUPPORTED_TRACK_FOUND}
-			, {code:PLAY_FAILED_NETCONNECTION_FAILURE, 		description:OSMFStrings.PLAY_FAILED_NETCONNECTION_FAILURE}
-			, {code:NETCONNECTION_REJECTED,					description:OSMFStrings.NETCONNECTION_REJECTED}
-			, {code:NETCONNECTION_INVALID_APP,				description:OSMFStrings.NETCONNECTION_INVALID_APP}
-			, {code:NETCONNECTION_FAILED,					description:OSMFStrings.NETCONNECTION_FAILED}
-			, {code:NETCONNECTION_TIMEOUT,					description:OSMFStrings.NETCONNECTION_TIMEOUT}
-			, {code:NETCONNECTION_SECURITY_ERROR,			description:OSMFStrings.NETCONNECTION_SECURITY_ERROR}
-			, {code:NETCONNECTION_ASYNC_ERROR,				description:OSMFStrings.NETCONNECTION_ASYNC_ERROR}
-			, {code:NETCONNECTION_IO_ERROR,					description:OSMFStrings.NETCONNECTION_IO_ERROR}
-			, {code:NETCONNECTION_ARGUMENT_ERROR,			description:OSMFStrings.NETCONNECTION_ARGUMENT_ERROR}
-			, {code:STREAMSWITCH_INVALID_INDEX,				description:OSMFStrings.STREAMSWITCH_INVALID_INDEX}
-			, {code:STREAMSWITCH_STREAM_NOT_FOUND,  		description:OSMFStrings.STREAMSWITCH_STREAM_NOT_FOUND}
-			, {code:STREAMSWITCH_STREAM_NOT_IN_MANUAL_MODE,	description:OSMFStrings.STREAMSWITCH_STREAM_NOT_IN_MANUAL_MODE}			
-			, {code:AUDIO_IO_LOAD_ERROR,					description:OSMFStrings.AUDIO_IO_LOAD_ERROR}
-			, {code:AUDIO_SECURITY_LOAD_ERROR,				description:OSMFStrings.AUDIO_SECURITY_LOAD_ERROR}
-			, {code:PLAY_FAILED_NO_SOUND_CHANNELS,			description:OSMFStrings.PLAY_FAILED_NO_SOUND_CHANNELS}
-			, {code:HTTP_IO_LOAD_ERROR,						description:OSMFStrings.HTTP_IO_LOAD_ERROR}
-			, {code:HTTP_SECURITY_LOAD_ERROR,				description:OSMFStrings.HTTP_SECURITY_LOAD_ERROR}
-			, {code:BEACON_FAILURE_ERROR,					description:OSMFStrings.BEACON_FAILURE_ERROR}
-			, {code:DRM_AUTHENTICATION_FAILED,				description:OSMFStrings.DRM_AUTHENTICATION_FAILED}
-			, {code:DRM_NEEDS_AUTHENTICATION,				description:OSMFStrings.DRM_NEEDS_AUTHENTICATION}
-			, {code:DRM_CONTENT_NOT_YET_VALID,				description:OSMFStrings.DRM_CONTENT_NOT_YET_VALID}
+			  {errorID:IO_ERROR,								message:OSMFStrings.IO_ERROR}
+			, {errorID:SECURITY_ERROR,							message:OSMFStrings.SECURITY_ERROR}
+			, {errorID:ASYNC_ERROR,								message:OSMFStrings.ASYNC_ERROR}
+			, {errorID:ARGUMENT_ERROR,							message:OSMFStrings.ARGUMENT_ERROR}
+			, {errorID:URL_SCHEME_INVALID,						message:OSMFStrings.URL_SCHEME_INVALID}
+			, {errorID:HTTP_GET_FAILED,							message:OSMFStrings.HTTP_GET_FAILED}
+			, {errorID:MEDIA_LOAD_FAILED,						message:OSMFStrings.MEDIA_LOAD_FAILED}
+			, {errorID:PLUGIN_VERSION_INVALID,					message:OSMFStrings.PLUGIN_VERSION_INVALID}
+			, {errorID:PLUGIN_IMPLEMENTATION_INVALID,			message:OSMFStrings.PLUGIN_IMPLEMENTATION_INVALID}
+			, {errorID:SOUND_PLAY_FAILED,						message:OSMFStrings.SOUND_PLAY_FAILED}
+			, {errorID:NETCONNECTION_REJECTED,					message:OSMFStrings.NETCONNECTION_REJECTED}
+			, {errorID:NETCONNECTION_APPLICATION_INVALID,		message:OSMFStrings.NETCONNECTION_APPLICATION_INVALID}
+			, {errorID:NETCONNECTION_FAILED,					message:OSMFStrings.NETCONNECTION_FAILED}
+			, {errorID:NETCONNECTION_TIMEOUT,					message:OSMFStrings.NETCONNECTION_TIMEOUT}
+			, {errorID:NETSTREAM_PLAY_FAILED, 					message:OSMFStrings.NETSTREAM_PLAY_FAILED}
+			, {errorID:NETSTREAM_STREAM_NOT_FOUND,	 			message:OSMFStrings.NETSTREAM_STREAM_NOT_FOUND}
+			, {errorID:NETSTREAM_FILE_STRUCTURE_INVALID,		message:OSMFStrings.NETSTREAM_FILE_STRUCTURE_INVALID}
+			, {errorID:NETSTREAM_NO_SUPPORTED_TRACK_FOUND,		message:OSMFStrings.NETSTREAM_NO_SUPPORTED_TRACK_FOUND}
+			, {errorID:DRM_SYSTEM_UPDATE_ERROR,					message:OSMFStrings.DRM_SYSTEM_UPDATE_ERROR}
+			, {errorID:DVRCAST_SUBSCRIBE_FAILED,				message:OSMFStrings.DVRCAST_SUBSCRIBE_FAILED}
+			, {errorID:DVRCAST_CONTENT_OFFLINE,					message:OSMFStrings.DVRCAST_CONTENT_OFFLINE}
+			, {errorID:DVRCAST_STREAM_INFO_RETRIEVAL_FAILED,	message:OSMFStrings.DVRCAST_STREAM_INFO_RETRIEVAL_FAILED}
 		];
 	}
-			
-	
 }

@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit
 {
 	import flash.display.InteractiveObject;
@@ -18,7 +18,7 @@ package flashx.textLayout.edit
 	import flash.events.TextEvent;
 	
 	import flashx.textLayout.elements.TextFlow;
-	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.elements.TextRange;
 
 	/** 
@@ -97,7 +97,7 @@ package flashx.textLayout.edit
 		function selectRange(anchorPosition:int, activePosition:int) : void
 		
 		/**
-		 * Selects the entire flow
+		 * Selects the entire flow.
 		 * 
 		 * @playerversion Flash 10
 		 * @playerversion AIR 1.5
@@ -246,7 +246,7 @@ package flashx.textLayout.edit
 		 * Gets the character format attributes that are common to all characters in the specified text range or current selection.
 		 * 
 		 * <p>Format attributes that do not have the same value for all characters in the specified element range or selection are set to 
-		 * <code>null</code> in the returned ITextLayoutFormat instance.</p>
+		 * <code>null</code> in the returned TextLayoutFormat instance.</p>
 		 * 
 		 * @param range The optional range of text for which common attributes are requested. If null, the current selection is used. 
 		 * @return The common character style settings
@@ -257,13 +257,13 @@ package flashx.textLayout.edit
 		 * @playerversion AIR 1.5
  		 * @langversion 3.0
 		 */
-		function getCommonCharacterFormat (range:TextRange=null):ITextLayoutFormat;
+		function getCommonCharacterFormat (range:TextRange=null):TextLayoutFormat;
 		 
 		 /**
 		 * Gets the paragraph format attributes that are common to all paragraphs in the specified text range or current selection.
 		 * 
 		 * <p>Format attributes that do not have the same value for all paragraphs in the specified element range or selection are set to 
-		 * <code>null</code> in the returned ITextLayoutFormat instance.</p>
+		 * <code>null</code> in the returned TextLayoutFormat instance.</p>
 		 * 
 		 * @param range The optional range of text for which common attributes are requested. If null, the current selection is used. 
 		 * @return The common paragraph style settings
@@ -274,13 +274,13 @@ package flashx.textLayout.edit
 		 * @playerversion AIR 1.5
  		 * @langversion 3.0
 		 */
-		function getCommonParagraphFormat (range:TextRange=null):ITextLayoutFormat;
+		function getCommonParagraphFormat (range:TextRange=null):TextLayoutFormat;
 		 
 		/**
 		 * Gets the container format attributes that are common to all containers in the specified text range or current selection.
 		 * 
 		 * <p>Format attributes that do not have the same value for all containers in the specified element range or selection are set to 
-		 * <code>null</code> in the returned ITextLayoutFormat instance.</p>
+		 * <code>null</code> in the returned TextLayoutFormat instance.</p>
 		 * 
 		 * @param range The optional range of text for which common attributes are requested. If null, the current selection is used. 
 		 * @return The common container style settings
@@ -291,7 +291,7 @@ package flashx.textLayout.edit
 		 * @playerversion AIR 1.5
  		 * @langversion 3.0
 		 */
-		function getCommonContainerFormat (range:TextRange=null):ITextLayoutFormat;
+		function getCommonContainerFormat (range:TextRange=null):TextLayoutFormat;
 
 		/**
 		 * The editing mode. 

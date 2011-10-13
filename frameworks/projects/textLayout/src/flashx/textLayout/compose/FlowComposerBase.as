@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.compose
 {	
 	import flash.text.engine.TextBlock;
@@ -15,9 +15,9 @@ package flashx.textLayout.compose
 	import flash.text.engine.TextLineValidity;
 	
 	import flashx.textLayout.container.ContainerController;
-	import flashx.textLayout.elements.BackgroundManager;
 	import flashx.textLayout.debug.Debugging;
 	import flashx.textLayout.debug.assert;
+	import flashx.textLayout.elements.BackgroundManager;
 	import flashx.textLayout.elements.FlowLeafElement;
 	import flashx.textLayout.elements.TextFlow;
 	import flashx.textLayout.tlf_internal;
@@ -66,7 +66,7 @@ package flashx.textLayout.compose
 	 	 * @langversion 3.0
 	 	 */
 	 	 
-		public function FlowComposerBase():void
+		public function FlowComposerBase()
 		{
 			_lines = new Array();
 			_swfContext = null;
@@ -299,11 +299,9 @@ package flashx.textLayout.compose
 			CONFIG::debug { assert(startPosition + damageLength <= textFlow.textLength, "Damaging past end of flow!"); }
 			
 			// Start damaging one line before the startPosition location in case some of the first "damaged" line will fit on the previous line.
-			// We do this only if we're not on the first line of the paragraph -- figuring this out is expensive but otherwise we could damage
-			// back while we're composing because we damaged in the process of constructing a textBlock.
 			var lineIndex:int = findLineIndexAtPosition(startPosition);
 			var leaf:FlowLeafElement = textFlow.findLeaf(startPosition);
-			if (leaf && lineIndex > 0 && leaf.getParagraph().getAbsoluteStart() != startPosition)
+			if (leaf && lineIndex > 0)
 				lineIndex--;
 
 			if (lines[lineIndex].absoluteStart < _damageAbsoluteStart)
@@ -429,7 +427,7 @@ package flashx.textLayout.compose
 		 */
 		public function addLine(newLine:TextFlowLine,workIndex:int):void
 		{
-			CONFIG::debug { assert(workIndex == findLineIndexAtPosition(newLine.absoluteStart),"bad workIndex to TextFlow.addLine"); };
+			CONFIG::debug { assert(workIndex == findLineIndexAtPosition(newLine.absoluteStart),"bad workIndex to TextFlow.addLine"); }
 			CONFIG::debug { assert (!newLine.isDamaged(), "adding damaged line"); }
 			var workLine:TextFlowLine = _lines[workIndex];
 			var afterLine:TextFlowLine;

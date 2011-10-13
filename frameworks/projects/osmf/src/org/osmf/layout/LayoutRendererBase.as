@@ -24,32 +24,30 @@ package org.osmf.layout
 	import __AS3__.vec.Vector;
 	
 	import flash.display.DisplayObject;
-	import flash.display.DisplayObjectContainer;
+	import flash.display.Sprite;
 	import flash.errors.IllegalOperationError;
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
+	import flash.geom.Point;
 	import flash.geom.Rectangle;
 	import flash.utils.Dictionary;
 	
-	import org.osmf.events.DimensionEvent;
-	import org.osmf.events.ViewEvent;
-	import org.osmf.logging.ILogger;
-	import org.osmf.metadata.IFacet;
+	import org.osmf.events.DisplayObjectEvent;
+	import org.osmf.logging.Logger;
 	import org.osmf.metadata.Metadata;
-	import org.osmf.metadata.MetadataNamespaces;
-	import org.osmf.metadata.MetadataUtils;
 	import org.osmf.metadata.MetadataWatcher;
-	import org.osmf.utils.BinarySearch;
 	import org.osmf.utils.OSMFStrings;
-	import org.osmf.utils.URL;
 	
 	/**
-	 * Use LayoutRendererBase as the base class for custom layout renders. The class
-	 * provides a number of facilities:
+	 * LayoutRendererBase is the base class for custom layout renderers
+	 *
+	 * @private The rest of the class comment consists of implementation details.
+	 *  
+	 * The class provides a number of facilities:
 	 * 
 	 *  * A base implementation for collecting and managing layout layoutTargets.
 	 *  * A base implementation for metadata watching: override usedMetadataFacets to
-	 *    return the set of metadata facet namespaces that	your renderer reads from its
+	 *    return the set of metadata facet namespaces thatyour renderer reads from its
 	 *    target on rendering them. All specified facets will be watched for change, at
 	 *    which the invalidate methods gets invoked.
 	 *  * A base invalidation scheme that postpones rendering until after all other frame
@@ -61,90 +59,129 @@ package org.osmf.layout
 	 * 
 	 * Optionally, the following protected methods may be overridden:
 	 * 
-	 *  * get usedMetadataFacets, used when layoutTargets get added or removed, to add
+	 *  * get usedMetadatas, used when layoutTargets get added or removed, to add
 	 *    change watchers that will trigger invalidation of the renderer.
 	 *  * compareTargets, which is used to put the layoutTargets in a particular display
 	 *    list index order.
 	 * 
-	 *  * processContextChange, invoked when the renderer's context changed.
+	 *  * processContainerChange, invoked when the renderer's container changed.
 	 *  * processStagedTarget, invoked when a target is put on the stage of the
-	 *    context's container.
+	 *    container's displayObjectContainer.
 	 *  * processUnstagedTarget, invoked when a target is removed from the stage
-	 *    of the context's container.  
+	 *    of the container's displayObjectContainer.  
 	 * 
+	 *  
+	 *  @langversion 3.0
+	 *  @playerversion Flash 10
+	 *  @playerversion AIR 1.5
+	 *  @productversion OSMF 1.0
 	 */	
-	public class LayoutRendererBase extends EventDispatcher implements ILayoutRenderer
+	public class LayoutRendererBase extends EventDispatcher
 	{
-		// ILayoutRenderer
+		// LayoutRenderer
 		//
 		
-		final public function set parent(value:ILayoutRenderer):void
-		{
-			_parent = value;
-		}
-		
-		final public function get parent():ILayoutRenderer
+		/**
+		 * Defines the renderer that this renderer is a child of.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */	
+		final public function get parent():LayoutRendererBase
 		{
 			return _parent;	
 		}
 		
 		/**
-		 * @inheritDoc
+		 * @private
+		 **/
+		final internal function setParent(value:LayoutRendererBase):void
+		{
+			_parent = value;
+			processParentChange(_parent);
+		}
+		
+		/**
+		 * Defines the container against which the renderer will calculate the size
+		 * and position values of its targets. The renderer additionally manages
+		 * targets being added and removed as children of the set container's
+		 * display list.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
-		final public function set context(value:ILayoutContext):void
+		final public function get container():ILayoutTarget
 		{
-			if (value != _context)
+			return _container;
+		}
+		final public function set container(value:ILayoutTarget):void
+		{
+			if (value != _container)
 			{
-				if (_context != null)
+				var oldContainer:ILayoutTarget = _container;
+				
+				if (oldContainer != null)
 				{
 					reset();
+					
+					oldContainer.dispatchEvent
+						( new LayoutTargetEvent
+							( LayoutTargetEvent.UNSET_AS_LAYOUT_RENDERER_CONTAINER
+							, false, false, this
+							)
+						);
+					
+					oldContainer.removeEventListener
+						( DisplayObjectEvent.MEDIA_SIZE_CHANGE
+						, invalidatingEventHandler
+						);
 				}
-			
-				var oldContext:ILayoutContext = _context;	
-				_context = value;
-				
-				if (_context)
+					
+				_container = value;
+					
+				if (_container)
 				{
-					container = _context.container;
-					metadata = _context.metadata;
+					layoutMetadata = _container.layoutMetadata;
 					
-					absoluteLayoutWatcher
-						= MetadataUtils.watchFacet
-							( metadata
-							, MetadataNamespaces.ABSOLUTE_LAYOUT_PARAMETERS
-							, absoluteLayoutChangeCallback
-							);
-					
-					_context.addEventListener
-						( DimensionEvent.DIMENSION_CHANGE
+					_container.addEventListener
+						( DisplayObjectEvent.MEDIA_SIZE_CHANGE
 						, invalidatingEventHandler
 						, false, 0, true
+						);
+
+					_container.dispatchEvent
+						( new LayoutTargetEvent
+							( LayoutTargetEvent.SET_AS_LAYOUT_RENDERER_CONTAINER
+							, false, false, this
+							)
 						);
 						
 					invalidate();
 				}
 				
-				processContextChange(oldContext, value);
+				processContainerChange(oldContainer, value);
 			}
 		}
 		
-		final public function get context():ILayoutContext
-		{
-			return _context;
-		}
-		
 		/**
-		 * @inheritDoc
+		 * Method for adding a target to the layout renderer's list of objects
+		 * that it calculates the size and position for. Adding a target will
+		 * result the associated display object to be placed on the display
+		 * list of the renderer's container.
+		 * 
+		 * @param target The target to add.
+		 * @throws IllegalOperationError when the specified target is null, or 
+		 * already a target of the renderer.
+		 * @returns The added target.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		final public function addTarget(target:ILayoutTarget):ILayoutTarget
 		{
@@ -158,35 +195,43 @@ package org.osmf.layout
 				throw new IllegalOperationError(OSMFStrings.getString(OSMFStrings.INVALID_PARAM));
 			}
 			
+			// Dispatch a ADD_TO_LAYOUT_RENDERER event on the target. This is the cue for
+			// the currently owning renderer to remove the target from its listing:
+			target.dispatchEvent
+				( new LayoutTargetEvent
+					( LayoutTargetEvent.ADD_TO_LAYOUT_RENDERER
+					, false, false, this
+					)
+				);
+			
 			// Get the index where the target should be inserted:
 			var index:int = Math.abs(BinarySearch.search(layoutTargets, compareTargets, target));
 			
 			// Add the target to our listing:
 			layoutTargets.splice(index, 0, target);	
 			
-			// Parent the added layout renderer (if available):
-			var targetContext:ILayoutContext = target as ILayoutContext;
-			if (targetContext && targetContext.layoutRenderer)
-			{
-				targetContext.layoutRenderer.parent = this;
-			}
-			
-			// Watch the facets on the target's metadata that we're interested in:
+			// Watch the metadata on the target's collection that we're interested in:
 			var watchers:Array = metaDataWatchers[target] = new Array();
-			for each (var namespaceURL:URL in usedMetadataFacets)
+			for each (var namespaceURL:String in usedMetadatas)
 			{
-				watchers.push
-					( MetadataUtils.watchFacet
-						( target.metadata
+				var watcher:MetadataWatcher =
+					new MetadataWatcher
+						( target.layoutMetadata
 						, namespaceURL
+						, null
 						, targetMetadataChangeCallback
 						)
-					);
+					;
+				watcher.watch();
+				watchers.push(watcher);
 			}
 			
-			// Watch the target's view and dimenions change:
-			target.addEventListener(ViewEvent.VIEW_CHANGE, invalidatingEventHandler);
-			target.addEventListener(DimensionEvent.DIMENSION_CHANGE, invalidatingEventHandler);
+			// Watch the target's displayObject, dimenions, and layoutRenderer change:
+			target.addEventListener(DisplayObjectEvent.DISPLAY_OBJECT_CHANGE, invalidatingEventHandler);
+			target.addEventListener(DisplayObjectEvent.MEDIA_SIZE_CHANGE, invalidatingEventHandler);
+			
+			target.addEventListener(LayoutTargetEvent.ADD_TO_LAYOUT_RENDERER, onTargetAddedToRenderer);
+			target.addEventListener(LayoutTargetEvent.SET_AS_LAYOUT_RENDERER_CONTAINER, onTargetSetAsContainer);
 			
 			invalidate();
 			
@@ -196,13 +241,19 @@ package org.osmf.layout
 		}
 		
 		/**
-		 * @inheritDoc
+		 * Method for removing a target from the layout render's list of objects
+		 * that it will render. See addTarget for more information.
+		 * 
+		 * @param target The target to remove.
+		 * @throws IllegalOperationErrror when the specified target is null, or
+		 * not a target of the renderer.
+		 * @returns The removed target.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */	
 		final public function removeTarget(target:ILayoutTarget):ILayoutTarget
 		{
 			if (target == null)
@@ -214,31 +265,18 @@ package org.osmf.layout
 			var index:Number = layoutTargets.indexOf(target);
 			if (index != -1)
 			{
-				// Remove the target from the context stage:
-				var targetView:DisplayObject = staged[target]; 
-				if (targetView != null)
-				{
-					if (container.contains(targetView))
-					{
-						container.removeChild(targetView);
-					}
-					
-					delete staged[target];
-				}
+				// Remove the target from the container stage:
+				removeFromStage(target);
 				
 				// Remove the target from our listing:
 				removedTarget = layoutTargets.splice(index,1)[0];
 				
-				// Un-parent the target if it is a layout renderer:
-				var targetContext:ILayoutContext = target as ILayoutContext;
-				if (targetContext && targetContext.layoutRenderer)
-				{
-					targetContext.layoutRenderer.parent = null;
-				}
+				// Un-watch the target's displayObject and dimenions change:
+				target.removeEventListener(DisplayObjectEvent.DISPLAY_OBJECT_CHANGE, invalidatingEventHandler);
+				target.removeEventListener(DisplayObjectEvent.MEDIA_SIZE_CHANGE, invalidatingEventHandler);
 				
-				// Un-watch the target's view and dimenions change:
-				target.removeEventListener(ViewEvent.VIEW_CHANGE, invalidatingEventHandler);
-				target.removeEventListener(DimensionEvent.DIMENSION_CHANGE, invalidatingEventHandler);
+				target.removeEventListener(LayoutTargetEvent.ADD_TO_LAYOUT_RENDERER, onTargetAddedToRenderer);
+				target.removeEventListener(LayoutTargetEvent.SET_AS_LAYOUT_RENDERER_CONTAINER, onTargetSetAsContainer);
 								
 				// Remove the metadata change watchers that we added:
 				for each (var watcher:MetadataWatcher in metaDataWatchers[target])
@@ -250,6 +288,13 @@ package org.osmf.layout
 				
 				processTargetRemoved(target);
 				
+				target.dispatchEvent
+					( new LayoutTargetEvent
+						( LayoutTargetEvent.REMOVE_FROM_LAYOUT_RENDERER
+						, false, false, this
+						)
+					);
+					
 				invalidate();
 			}
 			else
@@ -261,25 +306,46 @@ package org.osmf.layout
 		}
 		
 		/**
-		 * @inheritDoc
+		 * Method for querying if a layout target is currently a target of this
+		 * layout renderer.
+		 *  
+		 * @return True if the specified target is a target of this renderer.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		final public function targets(target:ILayoutTarget):Boolean
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */	
+		final public function hasTarget(target:ILayoutTarget):Boolean
 		{
 			return layoutTargets.indexOf(target) != -1;
 		}
 		
 		/**
-		 * @inheritDoc
+		 * Defines the width that the layout renderer measured on its last rendering pass.
+		 */		
+		final public function get measuredWidth():Number
+		{
+			return _measuredWidth;
+		}
+		
+		/**
+		 * Defines the height that the layout renderer measured on its last rendering pass.
+		 */		
+		final public function get measuredHeight():Number
+		{
+			return _measuredHeight;
+		}
+		
+		/**
+		 * Method that will mark the renderer's last rendering pass invalid. At
+		 * the descretion of the implementing instance, the renderer may either
+		 * directly re-render, or do so at a later time.
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		final public function invalidate():void
 		{
@@ -299,22 +365,25 @@ package org.osmf.layout
 				{
 					// Since we don't have a parent, put us in the queue
 					// to be recalculated when the next frame exits:
-					flagDirty(this, _context.container);
+					flagDirty(this);
 				}
 			}
 		}
 		
 		/**
-		 * @inheritDoc
+		 * Method ordering the direct recalculation of the position and size
+		 * of all of the renderer's assigned targets. The implementing class
+		 * may still skip recalculation if the renderer has not been invalidated
+		 * since the last rendering pass. 
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		final public function validateNow():void
 		{
-			if (_context == null || container == null || cleaning == true)
+			if (_container == null || cleaning == true)
 			{
 				// no-op:
 				return;	
@@ -330,169 +399,93 @@ package org.osmf.layout
 			// This is a root-node. Flag that we're cleaning up:
 			cleaning = true;
 			
-			updateCalculatedBounds();
-			updateLayout();
+			measure();
+			layout(_measuredWidth, _measuredHeight);
 			
 			cleaning = false;
 		}
 		
 		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 * @private
 		 */
-		public function updateCalculatedBounds():Rectangle
-		{
-			var bounds:Rectangle = calculateTargetBounds(_context);
-			var counter:int = 0;
-			
-			var targetContext:ILayoutContext
-			var targetRenderer:ILayoutRenderer;
-			var targetBounds:Rectangle;
-			var unifiedTargetBounds:Rectangle;
-			
-			// Traverse, execute bottom-up:
-			for each (var target:ILayoutTarget in layoutTargets)
-			{
-				targetContext = target as ILayoutContext;
-				targetRenderer = null;
-				targetBounds = null;
-				
-				if (targetContext != null)
-				{
-					// Reset the last calculations:
-					targetContext.calculatedWidth = NaN;
-					targetContext.calculatedHeight = NaN;
-					targetContext.projectedWidth = NaN;
-					targetContext.projectedHeight = NaN;
-					
-					targetRenderer = targetContext.layoutRenderer;
-				}
-						
-				if (targetRenderer != null) 
-				{
-					// Process another node (going in, top to bottom):
-					targetBounds = targetRenderer.updateCalculatedBounds();
-					flagClean(targetRenderer as LayoutRendererBase);
-				}
-				else
-				{
-					// This is a leaf:
-					targetBounds = calculateTargetBounds(target);
-				}
-				
-				if (targetBounds != null)
-				{
-					if (targetContext)
-					{
-						targetContext.calculatedWidth = targetBounds.width;
-						targetContext.calculatedHeight = targetBounds.height;
-					}
-					
-					// Set X and Y to zero: if they're NaN, then the union with the
-					// previously calculated bounds fails:
-					targetBounds.x ||= 0;
-					targetBounds.y ||= 0;
-				
-					unifiedTargetBounds
-						= unifiedTargetBounds
-							? unifiedTargetBounds.union(targetBounds)
-							: targetBounds;
-				}
-			}
-			
-			_context.calculatedWidth
-				= (bounds && bounds.width)
-					? bounds.width
-					: unifiedTargetBounds
-						? unifiedTargetBounds.width
-						: NaN;
-						
-			_context.calculatedHeight
-				= (bounds && bounds.height)
-					? bounds.height
-					: unifiedTargetBounds
-						? unifiedTargetBounds.height
-						: NaN;
-			
-			bounds 
-				= (_context.calculatedWidth || _context.calculatedHeight)
-					? new Rectangle(0, 0, _context.calculatedWidth, _context.calculatedHeight) 
-					: null;
-					
-			return bounds;
-		}
-		
-		/**
-		 * @inheritDoc
-		 *  
-		 *  @langversion 3.0
-		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
-		 */
-		public function updateLayout():void
+		internal function measure():void
 		{
 			// Take care of all targets being staged correctly:
 			prepareTargets();
 			
+			// Traverse, execute bottom-up:
+			for each (var target:ILayoutTarget in layoutTargets)
+			{
+				target.measure(true /* deep */);
+			}
+			
+			// Calculate our own size:
+			var size:Point = calculateContainerSize(layoutTargets);
+			
+			_measuredWidth = size.x;
+			_measuredHeight = size.y;
+			
+			_container.measure(false /* shallow */);
+		}
+		
+		/**
+		 * @private
+		 */
+		internal function layout(availableWidth:Number, availableHeight:Number):void
+		{
+			processUpdateMediaDisplayBegin(layoutTargets);
+			
+			_container.layout(availableWidth, availableHeight, false /* shallow */);
+			
 			// Traverse, execute top-down:
 			for each (var target:ILayoutTarget in layoutTargets)
 			{
-				var targetContext:ILayoutContext = target as ILayoutContext;
-				var targetRenderer:ILayoutRenderer = targetContext ? targetContext.layoutRenderer : null;
-				var targetBounds:Rectangle 
-					= applyTargetLayout
-						( target
-						, _context.projectedWidth || _context.calculatedWidth
-						, _context.projectedHeight || _context.calculatedHeight
-						);
+				var bounds:Rectangle = calculateTargetBounds(target, availableWidth, availableHeight);
 				
-				if (targetContext)
-				{
-					targetContext.projectedWidth = targetBounds.width;
-					targetContext.projectedHeight = targetBounds.height;
-				}
+				target.layout(bounds.width, bounds.height, true /* deep */);
 				
-				if (targetRenderer)
+				var displayObject:DisplayObject = target.displayObject;
+				if (displayObject)
 				{
-					targetRenderer.updateLayout();
+					displayObject.x = bounds.x;
+					displayObject.y = bounds.y;
 				}
 			}
 			
-			_context.updateIntrinsicDimensions();
-			
 			dirty = false;
+			
+			processUpdateMediaDisplayEnd();
 		}
 		
 		// Subclass stubs
 		//
 		
 		/**
+		 * @private
+		 * 
 		 * Subclasses may override this method to have it return the list
-		 * of URL namespaces that identify the metadata facets that the
+		 * of URL namespaces that identify the metadata objects that the
 		 * renderer uses on its calculations.
 		 * 
 		 * The base class will make sure that the renderer gets invalidated
-		 * when any of the specified facets change value.
+		 * when any of the specified metadatas' values change.
 		 * 
-		 * @return The list of URL namespaces that identify the metadata facets
+		 * @return The list of URL namespaces that identify the metadata objects
 		 * that the renderer uses on its calculations. 
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
-		protected function get usedMetadataFacets():Vector.<URL>
+		protected function get usedMetadatas():Vector.<String>
 		{
-			return new Vector.<URL>;
+			return new Vector.<String>;
 		}
 		
 		/**
+		 * @private
+		 *
 		 * Subclasses may override this method, providing the algorithm
 		 * by which the list of targets gets sorted.
 		 * 
@@ -501,8 +494,8 @@ package org.osmf.layout
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		protected function compareTargets(x:ILayoutTarget, y:ILayoutTarget):Number
 		{
@@ -511,23 +504,27 @@ package org.osmf.layout
 		}
 		
 		/**
-		 * Subclasses may override this method to process the renderer's context
+		 * @private
+		 *
+		 * Subclasses may override this method to process the renderer's container
 		 * changing.
 		 * 
-		 * @param oldContext The old context.
-		 * @param newContext The new context.
+		 * @param oldContainer The old container.
+		 * @param newContainer The new container.
 		 * 
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
-		protected function processContextChange(oldContext:ILayoutTarget, newContext:ILayoutTarget):void
+		protected function processContainerChange(oldContainer:ILayoutTarget, newContainer:ILayoutTarget):void
 		{	
 		}
 		
 		/**
+		 * @private
+		 *
 		 * Subclasses may override this method to do processing on a target
 		 * item being added.
 		 *   
@@ -535,14 +532,16 @@ package org.osmf.layout
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
 		protected function processTargetAdded(target:ILayoutTarget):void
 		{	
 		}
 		
 		/**
+		 * @private
+		 *
 		 * Subclasses may override this method to do processing on a target
 		 * item being removed.
 		 *   
@@ -550,57 +549,89 @@ package org.osmf.layout
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
 		protected function processTargetRemoved(target:ILayoutTarget):void
 		{	
 		}
 		
 		/**
+		 * @private
+		 *
 		 * Subclasses may override this method should they require special
-		 * processing on the view of a target being staged.
+		 * processing on the displayObject of a target being staged.
 		 *  
 		 * @param target The target that is being staged
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */		
 		protected function processStagedTarget(target:ILayoutTarget):void
 		{	
-			CONFIG::LOGGING { logger.debug("staged: {0}", target.metadata.getFacet(MetadataNamespaces.ELEMENT_ID)); }
+			// CONFIG::LOGGING { logger.debug("staged: {0}", target.metadata.getFacet(MetadataNamespaces.ELEMENT_ID)); }
 		}
 		
 		/**
+		 * @private
+		 *
 		 * Subclasses may override this method should they require special
-		 * processing on the view of a target being unstaged.
+		 * processing on the displayObject of a target being unstaged.
 		 *  
 		 * @param target The target that has been unstaged
 		 *  
 		 *  @langversion 3.0
 		 *  @playerversion Flash 10
-		 *  @playerversion AIR 1.0
-		 *  @productversion OSMF 4.0
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
 		 */
 		protected function processUnstagedTarget(target:ILayoutTarget):void
 		{	
-			CONFIG::LOGGING { logger.debug("unstaged: {0}", target.metadata.getFacet(MetadataNamespaces.ELEMENT_ID)); }
+			// CONFIG::LOGGING { logger.debug("unstaged: {0}", target.metadata.getFacet(MetadataNamespaces.ELEMENT_ID)); }
 		}
 		
-		protected function calculateTargetBounds(target:ILayoutTarget):Rectangle
+		/**
+		 * @private
+		 *
+		 * Subclasses may override this method should they require special
+		 * processing on the layout routine starting it execution.
+		 *  
+		 * @param targets The targets that are about to be measured.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		protected function processUpdateMediaDisplayBegin(targets:Vector.<ILayoutTarget>):void
+		{	
+		}
+		
+		/**
+		 * @private
+		 *
+		 * Subclasses may override this method should they require special
+		 * processing on the layout routine completing its execution.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		protected function processUpdateMediaDisplayEnd():void
 		{
-			return target.view.getBounds(target.view);
-		}
+		}	
 		
-		protected function applyTargetLayout(target:ILayoutTarget, availableWidth:Number, availableHeight:Number):Rectangle
-		{
-			var view:DisplayObject;
-			
-			return new Rectangle(0, 0, target.intrinsicWidth, target.intrinsicHeight);
-		}
-		
+		/**
+		 * @private
+		 *
+		 * Subclasses should override this method to implement the algorithm by
+		 * which the targets of the renderer get sorted.
+		 * 
+		 * @param target The element to order.
+		 */		
 		protected function updateTargetOrder(target:ILayoutTarget):void
 		{
 			var index:int = layoutTargets.indexOf(target);
@@ -613,46 +644,86 @@ package org.osmf.layout
 			}
 		}
 		
+		/**
+		 * @private
+		 *
+		 * Subclasses should override this method to implement the algorithm by which
+		 * the position and size of a target gets calculated.
+		 * 
+		 * @param target The target to calculate the bounds for.
+		 * @param availableWidth The width available to the target.
+		 * @param availableHeight The height available to the target.
+		 * @return The calculated bounds for the specified target.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */ 
+		protected function calculateTargetBounds(target:ILayoutTarget, availableWidth:Number, availableHeight:Number):Rectangle
+		{
+			return new Rectangle();
+		}
+		
+		/**
+		 * @private
+		 *
+		 * Subclasses should override this method to implement the algorithm by which
+		 * the size of the renderer's container is calculated:
+		 * 
+		 * @return The calculated size of the renderer's container.
+		 */		
+		protected function calculateContainerSize(targets:Vector.<ILayoutTarget>):Point
+		{
+			return new Point();
+		}
+		
+		/**
+		 * @private
+		 *
+		 * Subclasses should override this method to implement to do processing on the
+		 * renderer's parent being changed.
+		 * 
+		 * @value The new parent of the renderer.
+		 */
+		protected function processParentChange(value:LayoutRendererBase):void
+		{	
+		}
+		
 		// Internals
 		//
 		
 		private function reset():void
 		{
-			if (absoluteLayoutWatcher)
-			{
-				absoluteLayoutWatcher.unwatch();
-				absoluteLayoutWatcher = null;
-			}
-			
 			for each (var target:ILayoutTarget in layoutTargets)
 			{
 				removeTarget(target);
 			}
 			
-			if (_context)
+			if (_container)
 			{
-				_context.removeEventListener
-					( DimensionEvent.DIMENSION_CHANGE
+				_container.removeEventListener
+					( DisplayObjectEvent.MEDIA_SIZE_CHANGE
 					, invalidatingEventHandler
 					);
 						
-				// Make sure to update the existing context
+				// Make sure to update the existing container
 				// before we loose it:
 				validateNow();
 			}
 			
-			_context = null;
-			this.container = null;
-			this.metadata = null;
+			_container = null;
+			layoutMetadata = null;
 		}
 		
-		private function targetMetadataChangeCallback(facet:IFacet):void
+		private function targetMetadataChangeCallback(metadata:Metadata):void
 		{
 			invalidate();
 		}
 		
 		private function invalidatingEventHandler(event:Event):void
 		{
+			/*
 			CONFIG::LOGGING 
 			{
 				var targetMetadata:Metadata
@@ -667,109 +738,144 @@ package org.osmf.layout
 					, targetMetadata ? targetMetadata.getFacet(MetadataNamespaces.ELEMENT_ID) : "?" 
 					); 
 			}
+			*/
 			invalidate();
 		}
 		
-		private function absoluteLayoutChangeCallback(absoluteLayout:AbsoluteLayoutFacet):void
+		private function onTargetAddedToRenderer(event:LayoutTargetEvent):void
 		{
-			if (_parent == null && absoluteLayout != null)
+			if (event.layoutRenderer != this)
 			{
-				_context.projectedWidth = absoluteLayout.width;
-				_context.projectedHeight = absoluteLayout.height;
-				
-				_context.container.width = absoluteLayout.width;
-				_context.container.height = absoluteLayout.height;
-				
-				invalidate();
+				// The target is being added to another renderer. If we have
+				// it on as a target, then remove it from our listing:
+				var target:ILayoutTarget = event.target as ILayoutTarget;
+				if (hasTarget(target))
+				{
+					removeTarget(target);
+				}
 			}
+		}
+		
+		private function onTargetSetAsContainer(event:LayoutTargetEvent):void
+		{
+			if (event.layoutRenderer != this)
+			{
+				// Our container is being set as the container to another
+				// layout renderer. If this container still is our container,
+				// we need to release our own reference:
+				var target:ILayoutTarget = event.target as ILayoutTarget;
+				if (container == target)
+				{
+					container = null;
+				}
+			}	
 		}
 		
 		private function prepareTargets():void
 		{
-			// Setup a view counter:
-			var displayListCounter:int = _context.firstChildIndex;
+			// Setup a displayObject counter:
+			var displayListCounter:int = 0;
 			
 			for each (var target:ILayoutTarget in layoutTargets)
 			{
-				var view:DisplayObject = target.view;
-				if (view)
+				var displayObject:DisplayObject = target.displayObject;
+				if (displayObject)
 				{
-					// If the target's view is not on our container, then stage it. If
-					// it is already present, then make sure it is at the right index
-					// of the display list:
-					if (container.contains(view))
-					{
-						container.setChildIndex
-							( view
-							// Make sure that the display index that we pass, is within
-							// dimensions:
-							, Math.min(Math.max(0,container.numChildren-1),displayListCounter)
-							);
-							
-						CONFIG::LOGGING { logger.debug("prepareTarget: setChildIndex, {0}",target.metadata.getFacet(MetadataNamespaces.ELEMENT_ID)); }
-					}
-					else
-					{
-						container.addChildAt
-							( view
-							// Make sure that the display index that we pass, is within
-							// dimensions:
-							, Math.min(Math.max(0,container.numChildren),displayListCounter)
-							);
-						
-						CONFIG::LOGGING { logger.debug("addChildAt: setChildIndex, {0}",target.metadata.getFacet(MetadataNamespaces.ELEMENT_ID)); }
-					}
-					
-					// Only invoke 'processStagedTarget' if the view
-					// is not on our list of staged items yet:
-					if (staged[target] == undefined)
-					{
-						staged[target] = view;
-						
-						processStagedTarget(target);
-					}
-					else
-					{
-						staged[target] = view;
-						
-						CONFIG::LOGGING { logger.debug("prepareTarget:updated staged view, {0}",target.metadata.getFacet(MetadataNamespaces.ELEMENT_ID)); }
-					}
-					
+					addToStage(target, target.displayObject, displayListCounter);
 					displayListCounter++;
 				}
-				else if (view == null)
+				else
 				{
-					// If this target does not (currently) have a view, then check if
-					// we have a view for it that is still on stage. If so, then 
-					// remove it:
-					var oldView:DisplayObject = staged[target];
-					if (oldView)
-					{
-						if (container.contains(oldView))
-						{
-							container.removeChild(oldView);
-						}
-						
-						delete staged[target];
-						
-						processUnstagedTarget(target);
-					}
-					else
-					{
-						CONFIG::LOGGING { logger.debug("prepareTarget: no view for, {0}",target.metadata.getFacet(MetadataNamespaces.ELEMENT_ID)); }
-					}
+					removeFromStage(target);
 				}
 			}
 		}
 		
-		private var _parent:ILayoutRenderer;
-		private var _context:ILayoutContext;		
-		private var container:DisplayObjectContainer;
-		private var metadata:Metadata;
-		private var absoluteLayoutWatcher:MetadataWatcher;
+		private function addToStage(target:ILayoutTarget, object:DisplayObject, index:Number):void
+		{
+			var currentObject:DisplayObject = stagedDisplayObjects[target];
+			if (currentObject == object)
+			{
+				// Make sure that the object is at the right position in the display list:
+				
+				_container.dispatchEvent
+					( new LayoutTargetEvent
+						( LayoutTargetEvent.SET_CHILD_INDEX
+						, false, false
+						, this
+						, target
+						, currentObject
+						, index
+						)
+					);
+			}
+			else
+			{
+				if (currentObject != null)
+				{
+					
+					// Remove the current object:
+					_container.dispatchEvent
+						( new LayoutTargetEvent
+							( LayoutTargetEvent.REMOVE_CHILD
+							, false, false
+							, this
+							, target
+							, currentObject
+							)
+						);
+				}
+				
+				// Add the new object:
+				stagedDisplayObjects[target] = object;
+				
+				_container.dispatchEvent
+					( new LayoutTargetEvent
+						( LayoutTargetEvent.ADD_CHILD_AT
+						, false, false
+						, this
+						, target
+						, object
+						, index
+						)
+					);
+				
+				// If there wasn't an old object, then trigger the staging processor:
+				if (currentObject == null)
+				{
+					processStagedTarget(target);
+				}
+			}
+		}
+		
+		private function removeFromStage(target:ILayoutTarget):void
+		{
+			var currentObject:DisplayObject = stagedDisplayObjects[target];
+			if (currentObject != null)
+			{
+				delete stagedDisplayObjects[target];
+				
+				_container.dispatchEvent
+					( new LayoutTargetEvent
+						( LayoutTargetEvent.REMOVE_CHILD
+						, false, false
+						, this
+						, target
+						, currentObject
+						)
+					);
+			}
+		}
+		
+		private var _parent:LayoutRendererBase;
+		private var _container:ILayoutTarget;		
+		private var layoutMetadata:LayoutMetadata;
 		
 		private var layoutTargets:Vector.<ILayoutTarget> = new Vector.<ILayoutTarget>;
-		private var staged:Dictionary = new Dictionary(true);
+		private var stagedDisplayObjects:Dictionary = new Dictionary(true);
+		
+		private var _measuredWidth:Number;
+		private var _measuredHeight:Number;
 		
 		private var dirty:Boolean;
 		private var cleaning:Boolean;
@@ -779,7 +885,7 @@ package org.osmf.layout
 		// Private Static
 		//
 		
-		private static function flagDirty(renderer:LayoutRendererBase, displayObject:DisplayObject):void
+		private static function flagDirty(renderer:LayoutRendererBase):void
 		{
 			if (renderer == null || dirtyRenderers.indexOf(renderer) != -1)
 			{
@@ -787,18 +893,10 @@ package org.osmf.layout
 				return;
 			}
 			
-			if (displayObject == null)
-			{
-				throw new IllegalOperationError(OSMFStrings.getString(OSMFStrings.NULL_PARAM));
-			}
-			
 			dirtyRenderers.push(renderer);
 			
-			if	(	cleaningRenderers == false
-				&&	dispatcher == null
-				)
+			if (cleaningRenderers == false)
 			{
-				dispatcher = displayObject;
 				dispatcher.addEventListener(Event.EXIT_FRAME, onExitFrame);
 			}
 		}
@@ -815,28 +913,34 @@ package org.osmf.layout
 		private static function onExitFrame(event:Event):void
 		{
 			dispatcher.removeEventListener(Event.EXIT_FRAME, onExitFrame);
-			dispatcher = null;
 			
 			cleaningRenderers = true;
+			
+			CONFIG::LOGGING { logger.debug("ON EXIT FRAME: BEGIN"); }
 			
 			while (dirtyRenderers.length != 0)
 			{
 				var renderer:LayoutRendererBase = dirtyRenderers.shift();
-				if 	(	renderer.parent == null
-					||	dirtyRenderers.indexOf(renderer.parent) == -1
-					)
+				if (renderer.parent == null)
 				{
+					CONFIG::LOGGING { logger.debug("VALIDATING LAYOUT"); }
 					renderer.validateNow();
+					CONFIG::LOGGING { logger.debug("LAYOUT VALIDATED"); }
+				}
+				else
+				{
+					renderer.dirty = false;
 				}
 			}
+			CONFIG::LOGGING { logger.debug("ON EXIT FRAME: END"); }
 			
 			cleaningRenderers = false;
 		}
 		
-		private static var dispatcher:DisplayObject;
+		private static var dispatcher:DisplayObject = new Sprite();
 		private static var cleaningRenderers:Boolean;
 		private static var dirtyRenderers:Vector.<LayoutRendererBase> = new Vector.<LayoutRendererBase>;
 		
-		CONFIG::LOGGING private static const logger:org.osmf.logging.ILogger = org.osmf.logging.Log.getLogger("LayoutRendererBase");
+		CONFIG::LOGGING private static const logger:org.osmf.logging.Logger = org.osmf.logging.Log.getLogger("org.osmf.layout.LayoutRendererBase");
 	}
 }

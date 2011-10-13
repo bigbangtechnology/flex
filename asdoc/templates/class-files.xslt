@@ -2021,28 +2021,26 @@
 								</xsl:if>
 								<xsl:call-template name="shortDescriptionReview"/>
 								<xsl:variable name="styleText">
+									<xsl:variable name="asCustomsText">
+										<xsl:value-of select="prolog/asCustoms/review"/>
+									</xsl:variable>
+									<xsl:if test="string-length($asCustomsText) &gt; 0">
+										<xsl:if test="$config/options/@showReview='true'">
+											<h2>
+												<font color="red">Review Needed</font>
+											</h2>
+										</xsl:if>
+										<xsl:value-of select="$asCustomsText"/>
+									</xsl:if>
+									<xsl:for-each select="./description">
+										<xsl:apply-templates/>
+									</xsl:for-each>
 									<xsl:if test="./description/@conref">
 										<xsl:call-template name="getConRefText">
 											<xsl:with-param name="conref" select="./description/@conref"/>
 											<xsl:with-param name="descriptionType" select="local-name(./description)"/>
 											<xsl:with-param name="entryType" select="'style'"/>
 										</xsl:call-template>
-									</xsl:if>
-									<xsl:if test="not(./description/@conref)">
-										<xsl:variable name="asCustomsText">
-											<xsl:value-of select="prolog/asCustoms/review"/>
-										</xsl:variable>
-										<xsl:if test="string-length($asCustomsText) &gt; 0">
-											<xsl:if test="$config/options/@showReview='true'">
-												<h2>
-													<font color="red">Review Needed</font>
-												</h2>
-											</xsl:if>
-											<xsl:value-of select="$asCustomsText"/>
-										</xsl:if>
-										<xsl:for-each select="./description">
-											<xsl:apply-templates/>
-										</xsl:for-each>
 									</xsl:if>
 								</xsl:variable>
 								<xsl:variable name="finalStyleText">
@@ -3167,6 +3165,7 @@
 										<xsl:text>. </xsl:text>
 									</xsl:if>
 									<xsl:variable name="eventText">
+										<xsl:value-of select="normalize-space(./shortdesc)"/>
 										<xsl:if test="./shortdesc/@conref">
 											<xsl:call-template name="getConRefText">
 												<xsl:with-param name="conref" select="./shortdesc/@conref"/>
@@ -3174,9 +3173,6 @@
 												<xsl:with-param name="entryType" select="'event'"/>
 												<xsl:with-param name="currentPackage" select="$currentPackage"/>
 											</xsl:call-template>
-										</xsl:if>
-										<xsl:if test="not(./shortdesc/@conref)">
-											<xsl:value-of select="normalize-space(./shortdesc)"/>
 										</xsl:if>
 									</xsl:variable>
 									<xsl:if test="string-length($eventText) &gt;0 ">

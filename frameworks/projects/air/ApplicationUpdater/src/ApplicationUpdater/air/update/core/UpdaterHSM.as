@@ -268,7 +268,7 @@ package air.update.core
 			switch (event.type)
 			{
 				case HSMEvent.ENTER:
-					if (dispatchEvent(new StatusUpdateEvent(StatusUpdateEvent.UPDATE_STATUS, false, true, true, descriptor.version, descriptor.description)))
+					if (dispatchEvent(new StatusUpdateEvent(StatusUpdateEvent.UPDATE_STATUS, false, true, true, descriptor.version, descriptor.description, descriptor.versionLabel)))
 					{
 						// if the event wasn't cancelled, start downloading
 						transition(stateDownloading);
@@ -343,7 +343,7 @@ package air.update.core
 					}catch(e:Error)
 					{
 						unpackager = null;
-						lastErrorEvent = new DownloadErrorEvent(DownloadErrorEvent.DOWNLOAD_ERROR, false, true, "", Constants.ERROR_VALIDATE, e.errorID);
+						lastErrorEvent = new DownloadErrorEvent(DownloadErrorEvent.DOWNLOAD_ERROR, false, true, e.message, Constants.ERROR_VALIDATE, e.errorID);
 						transition(stateErrored);
 						return;
 					}
@@ -449,7 +449,7 @@ package air.update.core
 			switch (event.type)
 			{
 				case HSMEvent.ENTER:
-					if (dispatchEvent(new StatusFileUpdateEvent(StatusFileUpdateEvent.FILE_UPDATE_STATUS, false, true, true, _applicationDescriptor.version, requestedFile.nativePath)))
+					if (dispatchEvent(new StatusFileUpdateEvent(StatusFileUpdateEvent.FILE_UPDATE_STATUS, false, true, true, _applicationDescriptor.version, requestedFile.nativePath, _applicationDescriptor.versionLabel)))
 					{
 						// if the event wasn't cancelled, start downloading
 						transition(stateInstallingFile);
@@ -558,7 +558,7 @@ package air.update.core
 				}
 				if (!isNewerVersion(VersionUtils.getApplicationVersion(), _applicationDescriptor.version))
 				{
-					if(dispatchEvent(new StatusFileUpdateEvent(StatusFileUpdateEvent.FILE_UPDATE_STATUS, false, true, false, _applicationDescriptor.version, requestedFile.nativePath)))
+					if(dispatchEvent(new StatusFileUpdateEvent(StatusFileUpdateEvent.FILE_UPDATE_STATUS, false, true, false, _applicationDescriptor.version, requestedFile.nativePath, _applicationDescriptor.versionLabel)))
 					{
 						transition(stateReady);
 					}
@@ -583,6 +583,8 @@ package air.update.core
 				var xml:XML = FileUtils.readXMLFromFile(updateFile);
 				_descriptor = new UpdateDescriptor(xml);
 				_descriptor.validate();
+				if(!_descriptor.isCompatibleWithApplicationDescriptor(VersionUtils.applicationHasVersionNumber()))
+					throw new Error("Application namespace and update descriptor namespace are not compatible", Constants.ERROR_INCOMPATIBLE_NAMESPACE);
 				//
 				if (!isNewerVersion(VersionUtils.getApplicationVersion(), _descriptor.version))
 				{

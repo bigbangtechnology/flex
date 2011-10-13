@@ -10,7 +10,14 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
- *  @copy flashx.textLayout.formats.ITextLayoutFormat#columnCount
+ *  Number of text columns.
+ * 
+ *  <p><b>For the Spark theme, see
+ *  flashx.textLayout.formats.ITextLayoutFormat.columnCount.</b></p>
+ *
+ *  <p><b>For the Mobile theme, this is not supported.</b></p>
+ * 
+ *  @see flashx.textLayout.formats.ITextLayoutFormat#columnCount
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10
@@ -20,7 +27,14 @@
 [Style(name="columnCount", type="Object", inherit="no")]
 
 /**
- *  @copy flashx.textLayout.formats.ITextLayoutFormat#columnGap
+ *  Amount of gutter space, in pixels, to leave between the columns.
+ * 
+ *  <p><b>For the Spark theme, see
+ *  flashx.textLayout.formats.ITextLayoutFormat.columnGap.</b></p>
+ *
+ *  <p><b>For the Mobile theme, this is not supported.</b></p>
+ * 
+ *  @see flashx.textLayout.formats.ITextLayoutFormat#columnGap
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10
@@ -30,7 +44,14 @@
 [Style(name="columnGap", type="Number", format="Length", inherit="no")]
 
 /**
- *  @copy flashx.textLayout.formats.ITextLayoutFormat#columnWidth
+ *  Column width in pixels. 
+ * 
+ *  <p><b>For the Spark theme, see
+ *  flashx.textLayout.formats.ITextLayoutFormat.columnWidth.</b></p>
+ *
+ *  <p><b>For the Mobile theme, this is not supported.</b></p>
+ * 
+ *  @see flashx.textLayout.formats.ITextLayoutFormat#columnWidth
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10

@@ -1,22 +1,22 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.operations
 {
+	import flashx.textLayout.edit.IMemento;
+	import flashx.textLayout.edit.ModelEdit;
+	import flashx.textLayout.edit.SelectionState;
+	import flashx.textLayout.edit.TextFlowEdit;
 	import flashx.textLayout.elements.FlowLeafElement;
 	import flashx.textLayout.elements.LinkElement;
 	import flashx.textLayout.elements.TextFlow;
-	import flashx.textLayout.edit.TextFlowEdit;
-	import flashx.textLayout.edit.SelectionState;
-	import flashx.textLayout.edit.TextScrap;
-	import flashx.textLayout.edit.TextFlowEdit;
 	import flashx.textLayout.tlf_internal;
 	use namespace tlf_internal;
 	
@@ -35,10 +35,11 @@ package flashx.textLayout.operations
 	 */			
 	public class ApplyLinkOperation extends FlowTextOperation
 	{
-		private var _textScrap:TextScrap;
 		private var _hrefString:String;
 		private var _target:String;
 		private var _extendToLinkBoundary:Boolean;
+		private var _memento:IMemento;
+		private var _linkElement:LinkElement;
 
 		/** 
 		 * Creates an ApplyLinkOperation object.
@@ -113,16 +114,30 @@ package flashx.textLayout.operations
 			_extendToLinkBoundary = value;
 		}
 
+		/** 
+		 * The LinkElement that was created by doOperation.
+		 * 
+		 * @playerversion Flash 10
+		 * @playerversion AIR 2.0
+		 * @langversion 3.0 
+		 */
+		public function get newLinkElement():LinkElement
+		{
+			return _linkElement;
+		}
+		
+
 		
 		/** @private */
 		public override function doOperation():Boolean
 		{
+			var leaf:FlowLeafElement;
 			if (absoluteStart == absoluteEnd)
 				return false;
 			
 			if (_extendToLinkBoundary)
 			{
-				var leaf:FlowLeafElement = textFlow.findLeaf(absoluteStart);
+				leaf = textFlow.findLeaf(absoluteStart);
 				var link:LinkElement = leaf.getParentByType(LinkElement) as LinkElement;
 				if (link)
 				{
@@ -136,13 +151,22 @@ package flashx.textLayout.operations
 					absoluteEnd = link.getAbsoluteStart() + link.textLength;
 				}
 			}
-			//save it off so that we can restore the flow on undo			
-			_textScrap = TextFlowEdit.createTextScrap(textFlow, absoluteStart, absoluteEnd);
+			//save off so that we can restore the flow on undo			
+			_memento = ModelEdit.saveCurrentState(textFlow, absoluteStart, absoluteEnd);
 				
-			if (_hrefString != "")
+			if (_hrefString && _hrefString != "")
 			{
 				var madeLink:Boolean = TextFlowEdit.makeLink(textFlow, absoluteStart, absoluteEnd, _hrefString, _target);
-				if (!madeLink) return false;
+				if (!madeLink) 
+				{
+					_memento = null;
+					return false;
+				}
+				else
+				{
+					leaf = textFlow.findLeaf(absoluteStart);
+					_linkElement = leaf.getParentByType(LinkElement) as LinkElement;
+				}
 			}
 			else
 			{
@@ -154,15 +178,15 @@ package flashx.textLayout.operations
 		/** @private */
 		public override function undo():SelectionState
 		{
-			if (absoluteStart != absoluteEnd && _textScrap != null) 
-				TextFlowEdit.replaceRange(textFlow, absoluteStart, absoluteEnd, _textScrap);
+			if (_memento)
+				_memento.undo();
 			return originalSelectionState;				
 		}
 	
 		/** @private */
 		public override function redo():SelectionState
 		{
-			if (absoluteStart != absoluteEnd)
+			if (absoluteStart != absoluteEnd && _memento)
 			{
 				if (_hrefString != "")
 				{

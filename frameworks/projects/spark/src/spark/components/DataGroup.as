@@ -13,7 +13,6 @@ package spark.components
 {
 import flash.display.DisplayObject;
 import flash.events.Event;
-import flash.events.IEventDispatcher;
 import flash.geom.PerspectiveProjection;
 import flash.geom.Rectangle;
 import flash.utils.getQualifiedClassName;
@@ -24,14 +23,19 @@ import mx.core.IFactory;
 import mx.core.IInvalidating;
 import mx.core.ILayoutElement;
 import mx.core.IVisualElement;
+import mx.core.UIComponentGlobals;
 import mx.core.mx_internal;
 import mx.events.CollectionEvent;
 import mx.events.CollectionEventKind;
 import mx.events.PropertyChangeEvent;
+import mx.managers.ILayoutManagerClient;
+import mx.managers.LayoutManager;
 import mx.utils.MatrixUtil;
 
 import spark.components.supportClasses.GroupBase;
 import spark.events.RendererExistenceEvent;
+import spark.layouts.HorizontalAlign;
+import spark.layouts.VerticalLayout;
 import spark.layouts.supportClasses.LayoutBase;
 
 use namespace mx_internal;  // for mx_internal property contentChangeDelta
@@ -190,9 +194,9 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
      *  @inheritDoc
      *  
      *  @langversion 3.0
-     *  @playerversion Flash 9
-     *  @playerversion AIR 1.1
-     *  @productversion Flex 3
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
      */
     override public function get baselinePosition():Number
     {
@@ -219,6 +223,8 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
     private var explicitTypicalItem:Object = null;
     private var typicalItemChanged:Boolean = false;
     private var typicalLayoutElement:ILayoutElement = null;
+    
+    [Inspectable(category="Data")]
     
     /**
      *  Layouts use the preferred size of the <code>typicalItem</code>
@@ -470,6 +476,12 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
      *  <pre>
      *    function myItemRendererFunction(item:Object):IFactory</pre>
      * 
+     *  <p>Currently, when using itemRendererFunction with a virtual layout 
+     *  (useVirtualLayout=true), item renderer recycling 
+     *  is turned off.  Because of this, using itemRendererFunction 
+     *  can cause a performance degredation and is not recommended for mobile.  
+     *  This may be fixed in future versions of Flex.</p>
+     * 
      *  @default null
      *  
      *  @langversion 3.0
@@ -544,6 +556,8 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
     private var dataProviderChanged:Boolean;
     
     [Bindable("dataProviderChanged")]
+    [Inspectable(category="Data")]
+    
     /**
      *  The data provider for this DataGroup. 
      *  It must be an IList.
@@ -616,13 +630,16 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
         // just the event with have the wrong item associated with it
         
         const renderer:IVisualElement = indexToRenderer[index] as IVisualElement;
-        var item:Object;
-        
-        if (renderer is IDataRenderer && (itemRenderer != null || itemRendererFunction != null))
-            item = IDataRenderer(renderer).data;
-        else
-            item = renderer;
-        itemRemoved(item, index);
+        if (renderer)
+        {
+            var item:Object;
+            
+            if (renderer is IDataRenderer && (itemRenderer != null || itemRendererFunction != null))
+                item = IDataRenderer(renderer).data;
+            else
+                item = renderer;
+            itemRemoved(item, index);
+        }
     }
     
     /**
@@ -666,11 +683,16 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
     }
     
     /**
-     *  @inheritDoc
-     * 
-     *  Given a data item, return the toString() representation 
-     *  of the data item for an item renderer to display. Null 
-     *  data items return the empty string. 
+     *  <p>Given a data item, return the <code>toString()</code> representation 
+     *  of the data item for an item renderer to display. 
+     *  Null data items return the empty string. </p>
+     *
+     *  @copy spark.components.IItemRendererOwner#itemToLabel()
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
     public function itemToLabel(item:Object):String
     {
@@ -682,23 +704,34 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
     /**
      *  Return the indices of the item renderers visible within this DataGroup.
      * 
-     *  <p>If clipAndEnableScrolling=true, return the indices of the visible=true 
-     *  ItemRenderers that overlap this DataGroup's scrollRect, i.e. the ItemRenders 
-     *  that are at least partially visible relative to this DataGroup.  If 
-     *  clipAndEnableScrolling=false, return a list of integers from 
-     *  0 to dataProvider.length - 1.  Note that if this DataGroup's owner is a 
-     *  Scroller, then clipAndEnableScrolling has been set to true.</p>
+     *  <p>If <code>clipAndEnableScrolling</code> is <code>true</code>, 
+     *  return the indices of the <code>visible</code> = <code>true</code> 
+     *  ItemRenderers that overlap this DataGroup's <code>scrollRect</code>.
+     *  That is, the ItemRenders 
+     *  that are at least partially visible relative to this DataGroup.  
+     *  If <code>clipAndEnableScrolling</code> is <code>false</code>, 
+     *  return a list of integers from 
+     *  0 to <code>dataProvider.length</code> - 1.  
+     *  Note that if this DataGroup's owner is a 
+     *  Scroller, then <code>clipAndEnableScrolling</code> has been 
+     *  set to <code>true</code>.</p>
      * 
      *  <p>The corresponding item renderer for each returned index can be 
-     *  retrieved with getElementAt(), even if the layout is virtual</p>
+     *  retrieved with the <code>getElementAt()</code> method, 
+     *  even if the layout is virtual</p>
      * 
      *  <p>The order of the items in the returned Vector is not guaranteed.</p>
      * 
      *  <p>Note that the VerticalLayout and HorizontalLayout classes provide bindable
-     *  firstIndexInView and lastIndexInView properties which convey the same information
-     *  as this method.</p>
+     *  <code>firstIndexInView</code> and <code>lastIndexInView</code> properties 
+     *  which contain the same information as this method.</p>
      * 
      *  @return The indices of the visible item renderers.
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
     public function getItemIndicesInView():Vector.<int>
     {
@@ -846,7 +879,15 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
             removeAllItemRenderers();   // indexToRenderer.length = 0
 
         if (layout && layout.useVirtualLayout)
-        {
+        {   
+            // Add any existing renderers to the free list.
+            if (virtualRendererIndices != null && 
+                virtualRendererIndices.length > 0)
+            {
+                startVirtualLayout();   
+                finishVirtualLayout();
+            }
+            
             // The item renderers will be created lazily, at updateDisplayList() time
             invalidateSize();
             invalidateDisplayList();
@@ -894,6 +935,16 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
         {
             itemRendererChanged = false;
             useVirtualLayoutChanged = false;
+
+            // SDK-29916: The layout's cache may be in sync with the old data provider.
+            // The layout will sync up its cache with the new data provider
+            // when the DataGroup validateSize() / validateDisplayList().
+            // By clearing the cache here, we make sure that any insert/remove 
+            // events for the new dataProvider, that occur from this point on till 
+            // validteSize() / validateDisplayList(), won't be mixed up with the 
+            // stale layout cache state that reflects the old data provider.
+            if (layout)
+                layout.clearVirtualLayoutCache();
             
             // item renderers and the dataProvider listener have already been removed
             createItemRenderers();
@@ -977,6 +1028,11 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
     
     /**
      *  @inheritDoc
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
     public function updateRenderer(renderer:IVisualElement, itemIndex:int, data:Object):void
     {
@@ -1158,6 +1214,9 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
     /**
      *  @private
      *  Called before super.updateDisplayList() if layout.useVirtualLayout=true.
+     *  Also called by createItemRenderers to ready existing renderers
+     *  to be recycled by the following call to finishVirtualLayout.
+     * 
      *  Copies virtualRendererIndices to oldRendererIndices, clears virtualRendererIndices
      *  (which will be repopulated by subsequence getVirtualElementAt() calls), and
      *  calls ensureTypicalElement().
@@ -1185,7 +1244,10 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
     
     /**
      *  @private
-     *  Called after super.updateDisplayList() finishes.
+     *  Called after super.updateDisplayList() finishes.  Also called by
+     *  createItemRenderers to recycle existing renderers that were added
+     *  to oldVirtualRendererIndices by the preceeding call to 
+     *  startVirtualLayout.
      * 
      *  Discard the ItemRenderers that aren't needed anymore, i.e. the ones
      *  not explicitly requested with getVirtualElementAt() during the most
@@ -1223,11 +1285,6 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
                 // IDataRenderer(elt).data = null;  see https://bugs.adobe.com/jira/browse/SDK-20962
                 elt.includeInLayout = false;
                 elt.visible = false;
-                
-                // Reset back to (0,0), otherwise when the element is reused
-                // it will be validated at its last layout size which causes
-                // problems with text reflow.
-                elt.setLayoutBoundsSize(0, 0, false);
                 
                 freeRenderers.push(elt);
             }
@@ -1308,18 +1365,18 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
         drawBackground();
         
         if (layout && layout.useVirtualLayout)
-		{
-			virtualLayoutUnderway = true;
+        {
+            virtualLayoutUnderway = true;
             startVirtualLayout();   
-		}			
+        }           
         
         super.updateDisplayList(unscaledWidth, unscaledHeight);
         
         if (virtualLayoutUnderway)
-		{
+        {
             finishVirtualLayout();
-			virtualLayoutUnderway = false;
-		}
+            virtualLayoutUnderway = false;
+        }
     }
     
     /**
@@ -1344,7 +1401,7 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
      */
     override public function getElementAt(index:int):IVisualElement
     {
-        if ((index < 0) || (dataProvider == null) || (index >= dataProvider.length))
+        if ((index < 0) || (index >= indexToRenderer.length))
             return null;
         
         return indexToRenderer[index];
@@ -1403,23 +1460,30 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
                 }
                 
                 indexToRenderer[index] = elt;
+
+                addItemRendererToDisplayList(DisplayObject(elt)); 
+                setUpItemRenderer(elt, index, item);
             }
-            
-            addItemRendererToDisplayList(DisplayObject(elt));           
-            setUpItemRenderer(elt, index, item);
-            
-            if (!isNaN(eltWidth) || !isNaN(eltHeight))
+            else
             {
-                // If we're going to set the width or height of this
-                // layout element, first force it to initialize its
-                // measuredWidth,Height.    
-                if (elt is IInvalidating) 
-                    IInvalidating(elt).validateNow();
-                elt.setLayoutBoundsSize(eltWidth, eltHeight);
+                // No need to set the data and label in the IR again.
+                // The collectionChangeHandler will handle updates to data.
+                addItemRendererToDisplayList(DisplayObject(elt)); 
             }
             
-            if (elt is IInvalidating)
-                IInvalidating(elt).validateNow();
+            // We have the renderer now.  getVirtualElement() is called from within layout's 
+            // updateDisplayList().  This means it hasn't gone through a fully baked validation 
+            // pass yet.  To get it in to a valid state, we want to first force a 
+            // commitProperties() and measure() to run on our item renderer.
+            if (elt is ILayoutManagerClient)
+                LayoutManager.getInstance().validateClient(elt as ILayoutManagerClient, true);
+            
+            // Now, we can resume normal layout updateDisplayList() code.  The layout 
+            // could directly run this setLayoutBoundsSize() for us, but as legacy, 
+            // getVirtualElementAt() calls this on behalf of the layout system
+            // if eltWidth and eltHeight are both NaN
+            if (!isNaN(eltWidth) || !isNaN(eltHeight))
+                elt.setLayoutBoundsSize(eltWidth, eltHeight);
             
             if (createdIR)
                 dispatchEvent(new RendererExistenceEvent(RendererExistenceEvent.RENDERER_ADD, false, false, elt, index, item));
@@ -1791,13 +1855,8 @@ public class DataGroup extends GroupBase implements IItemRendererOwner
     private function adjustAfterMove(item:Object, location:int, oldLocation:int):void
     {
         itemRemoved(item, oldLocation);
-        
-        // if item is removed before the newly added item
-        // then change index to account for this
-        if (location > oldLocation)
-            itemAdded(item, location-1);
-        else
-            itemAdded(item, location);
+        itemAdded(item, location);
+        resetRenderersIndices();
     }
     
     /**

@@ -31,6 +31,7 @@ import spark.effects.animation.SimpleMotionPath;
 import spark.effects.easing.IEaser;
 import spark.effects.easing.Linear;
 import spark.effects.easing.Sine;
+import spark.events.TrackBaseEvent;
 
 use namespace mx_internal;
 
@@ -75,9 +76,10 @@ use namespace mx_internal;
  *  If true (the default), the thumb's visibility will be reset
  *  whenever its size is updated.  
  * 
- *  Overrides of <code>sizeThumb()</code> in <code>HScrollBar</code> and 
- *  <code>VScrollBar</code> make the thumb visible if it's smaller than
- *  the track, unless this style is false.   
+ *  Overrides of <code>updateSkinDisplayList()</code> in 
+ *  <code>HScrollBar</code> and <code>VScrollBar</code> 
+ *  make the thumb visible if it's smaller than the track, 
+ *  unless this style is false.   
  * 
  *  Set this style to false to control thumb visibility directly.  
  * 
@@ -89,6 +91,21 @@ use namespace mx_internal;
  *  @productversion Flex 4
  */
 [Style(name="autoThumbVisibility", type="Boolean", inherit="no")]
+
+
+/**
+ *  If true (the default) then dragging the scrollbar's thumb with the mouse immediately 
+ *  updates the scrollbar's value.  If false, the scrollbar's value is only updated when 
+ *  the mouse button is released.
+ *  
+ *  @default true
+ * 
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Style(name="liveDragging", type="Boolean", inherit="no")]
 
 /**
  *  Number of milliseconds after the first page event
@@ -311,6 +328,13 @@ public class ScrollBarBase extends TrackBase
     private var animatingOnce:Boolean;
     
     /**
+     *  @private
+     *  Location of the mouse down event on the thumb, relative to the thumb's origin.
+     *  Used to update the value property when the mouse is dragged. 
+     */
+    private var clickOffset:Point;      
+    
+    /**
      * @private
      * Easers used in animated scrolling operations
      */
@@ -339,6 +363,8 @@ public class ScrollBarBase extends TrackBase
     //
     //--------------------------------------------------------------------------
     
+    [Inspectable(category="General", defaultValue="0.0")]
+    
     /**
      *  @private
      *  Invalidate the skin state when minimum is changed.
@@ -351,6 +377,8 @@ public class ScrollBarBase extends TrackBase
         super.minimum = value;
         invalidateSkinState();
     }
+    
+    [Inspectable(category="General", defaultValue="100.0")]
     
     /**
      *  @private
@@ -365,7 +393,7 @@ public class ScrollBarBase extends TrackBase
         invalidateSkinState();
     }
     
-    [Inspectable(minValue="0.0")]
+    [Inspectable(category="General", defaultValue="1.0", minValue="0.0")]
     
     /**
      *  @inheritDoc
@@ -384,6 +412,18 @@ public class ScrollBarBase extends TrackBase
         // setting snapInterval may change the pageSize
         pageSizeChanged = true;
     }
+     
+     /**
+      *  @private
+      *  Keep the pendingValue in sync with the actual value so that updateSkinDisplayList()
+      *  overrides can just use pendingValue.
+      */
+     override protected function setValue(value:Number):void
+     {
+         _pendingValue = value;
+         
+         super.setValue(value);
+     }     
 
     //--------------------------------------------------------------------------
     //
@@ -399,7 +439,7 @@ public class ScrollBarBase extends TrackBase
 
     private var pageSizeChanged:Boolean = false;
 
-    [Inspectable(minValue="0.0")]
+    [Inspectable(category="General", defaultValue="20", minValue="0.0")]
 
     /**
      *  The change in the value of the <code>value</code> property 
@@ -431,6 +471,49 @@ public class ScrollBarBase extends TrackBase
         invalidateProperties();
         invalidateDisplayList();
     }
+    
+    //----------------------------------
+    //  pendingValue
+    //----------------------------------
+    
+    /**
+     *  @private
+     */
+    private var _pendingValue:Number = 0;
+    
+    /**
+     *  The value the scrollbar will have when the mouse button is released. 
+     * 
+     *  <p>If the <code>liveDragging</code> style is false, then the scrollbar's value is only set
+     *  when the mouse button is released. The value is not updated while the slider thumb is
+     *  being dragged.</p>
+     * 
+     *  <p>This property is updated when the scrollbar thumb moves, even if 
+     *  <code>liveDragging</code> is false.</p>
+     *  
+     *  @default 0
+     *  @return The value implied by the thumb position. 
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4
+     */
+    protected function get pendingValue():Number
+    {
+        return _pendingValue;
+    }
+    
+    /**
+     *  @private
+     */
+    protected function set pendingValue(value:Number):void
+    {
+        if (value == _pendingValue)
+            return;
+        _pendingValue = value;
+        invalidateDisplayList();
+    }    
     
     //----------------------------------
     //  viewport
@@ -650,6 +733,49 @@ public class ScrollBarBase extends TrackBase
         if (styleProp == "autoThumbVisibility")
             invalidateDisplayList();
     }
+    
+    /**
+     *  @private
+     */
+    override protected function system_mouseMoveHandler(event:MouseEvent):void
+    {      
+        if (!track)
+            return;
+        
+        var p:Point = track.globalToLocal(new Point(event.stageX, event.stageY));
+        var newValue:Number = pointToValue(p.x - clickOffset.x, p.y - clickOffset.y);
+        newValue = nearestValidValue(newValue, snapInterval);
+        
+        if (newValue != pendingValue)
+        {
+            dispatchEvent(new TrackBaseEvent(TrackBaseEvent.THUMB_DRAG));
+            if (getStyle("liveDragging") === true)
+            {
+                setValue(newValue);
+                dispatchEvent(new Event(Event.CHANGE));
+            }
+            else
+            {
+                pendingValue = newValue;
+            }
+        }
+        
+        event.updateAfterEvent();
+    }
+    
+    /**
+     *  @private
+     */
+    override protected function system_mouseUpHandler(event:Event):void
+    {
+        if ((getStyle("liveDragging") === false) && (value != pendingValue))
+        {
+            setValue(pendingValue);
+            dispatchEvent(new Event(Event.CHANGE));
+        }
+        
+        super.system_mouseUpHandler(event);
+    }
 
     /**
      *  Adds or subtracts <code>pageSize</code> from <code>value</code>.
@@ -772,6 +898,7 @@ public class ScrollBarBase extends TrackBase
         stopAnimation();
         
         super.thumb_mouseDownHandler(event);
+        clickOffset = thumb.globalToLocal(new Point(event.stageX, event.stageY));        
     }
     
     //---------------------------------
@@ -784,6 +911,8 @@ public class ScrollBarBase extends TrackBase
      *  The delay before repetition begins and the delay between repeated events
      *  are determined by the <code>repeatDelay</code> and 
      *  <code>repeatInterval</code> styles of the underlying Button objects.
+     *
+     *  @param event The event object.
      * 
      *  @see spark.components.Button
      *
@@ -825,8 +954,8 @@ public class ScrollBarBase extends TrackBase
             
             // Only animate if smoothScrolling enabled and we're not at the end already
             if (getStyle("smoothScrolling") &&
-                ((increment && value < maximum) ||
-                 (!increment && value > minimum)))
+                ((increment && pendingValue < maximum) ||
+                 (!increment && pendingValue > minimum)))
             {
                 // Default stepSize may be too small to be useful here; use fraction of
                 // pageSize if it's larger
@@ -841,6 +970,8 @@ public class ScrollBarBase extends TrackBase
      *  Handles releasing the increment or decrement button of the scrollbar. 
      *  This ends the stepping operation started by the original buttonDown
      *  event on the button.
+     *
+     *  @param event The event object.
      *
      *  @see spark.components.Button
      *
@@ -912,7 +1043,7 @@ public class ScrollBarBase extends TrackBase
         }
 
         var newScrollValue:Number = pointToValue(trackPosition.x, trackPosition.y);
-        trackScrollDown = (newScrollValue > value);
+        trackScrollDown = (newScrollValue > pendingValue);
         
         if (event.shiftKey)
         {
@@ -1003,7 +1134,7 @@ public class ScrollBarBase extends TrackBase
         animatingOnce = false;
         // TODO (chaase): hard-coding easing behavior, how to style it?
         startAnimation(
-            getStyle("repeatInterval") * (Math.abs(newValue - value) / pageSize),
+            getStyle("repeatInterval") * (Math.abs(newValue - pendingValue) / pageSize),
             newValue, linearEaser);
     }
 
@@ -1029,11 +1160,11 @@ public class ScrollBarBase extends TrackBase
     
     protected function animateStepping(newValue:Number, stepSize:Number):void
     {
-        steppingDown = (newValue > value);
+        steppingDown = (newValue > pendingValue);
         steppingUp = !steppingDown;
         var denominator:Number = (stepSize != 0) ? stepSize : 1; // avoid div-by-0 below
         var duration:Number = getStyle("repeatInterval") * 
-            (Math.abs(newValue - value) / denominator);
+            (Math.abs(newValue - pendingValue) / denominator);
         // Cap ease-in factor to 500 ms on long-duration animations
         var easer:IEaser;
         if (duration > 5000)
@@ -1084,7 +1215,7 @@ public class ScrollBarBase extends TrackBase
         }
         
         // End paging or shift-click animation.
-        setValue(nearestValidValue(this.value, snapInterval));
+        setValue(nearestValidValue(pendingValue, snapInterval));
         dispatchEvent(new Event(Event.CHANGE));
         
         // We only dispatch the changeEnd event in the endHandler

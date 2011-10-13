@@ -21,27 +21,32 @@
 *****************************************************/
 package org.osmf.net
 {
-	import org.osmf.media.IMediaResource;
+	import org.osmf.media.MediaResourceBase;
 	import org.osmf.media.URLResource;
-	import org.osmf.metadata.KeyValueFacet;
-	import org.osmf.metadata.MetadataNamespaces;
-	import org.osmf.metadata.ObjectIdentifier;
-	import org.osmf.net.dynamicstreaming.DynamicStreamingResource;
-	import org.osmf.utils.FMSURL;
 	import org.osmf.utils.URL;
+	
+	CONFIG::FLASH_10_1
+	{
+	import org.osmf.metadata.MetadataNamespaces;
+	}
 	
 	[ExcludeClass]
 	
 	/**
 	 * @private
-	 **/
+	 */
 	public class NetStreamUtils
 	{
 		/**
 		 * Returns the stream name to be passed to NetStream for a given URL,
 		 * the empty string if no such stream name can be extracted.
-		 **/
-		public static function getStreamNameFromURL(url:URL):String
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static function getStreamNameFromURL(url:String, urlIncludesFMSApplicationInstance:Boolean=false):String
 		{
 			var streamName:String = "";
 			
@@ -50,23 +55,19 @@ package org.osmf.net
 			{
 				if (isRTMPStream(url))
 				{
-					var fmsURL:FMSURL = url as FMSURL;
-					if (fmsURL == null)
-					{
-						fmsURL = new FMSURL(url.rawUrl);
-					}
+					var fmsURL:FMSURL = new FMSURL(url, urlIncludesFMSApplicationInstance);
 	
 					streamName = fmsURL.streamName;
 	
 					// Add optional query parameters to the stream name.
-					if (url.query != null && url.query != "")
+					if (fmsURL.query != null && fmsURL.query != "")
 					{
-						 streamName += "?" + url.query;
+						 streamName += "?" + fmsURL.query;
 					}
 				}
 				else
 				{
-					streamName = url.rawUrl;
+					streamName = url;
 				}
 			}
 			
@@ -74,42 +75,85 @@ package org.osmf.net
 		}
 		
 		/**
-		 * Returns true if the given resource represents an RTMP resource, false otherwise.
-		 **/
-		public static function isRTMPResource(resource:IMediaResource):Boolean
+		 * Returns true if the given resource represents a streaming resource, false otherwise.
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static function isStreamingResource(resource:MediaResourceBase):Boolean
 		{
-			if (resource == null) return false;
+			var result:Boolean = false;
 			
-			var urlResource:URLResource = resource as URLResource;
-			if (urlResource != null)
+			if (resource != null)
 			{
-				return NetStreamUtils.isRTMPStream(urlResource.url);
-			}
-
-			var dsResource:DynamicStreamingResource = resource as DynamicStreamingResource;
-			if (dsResource != null)
-			{
-				return NetStreamUtils.isRTMPStream(dsResource.host);
+				var urlResource:URLResource = resource as URLResource;
+				if (urlResource != null)
+				{
+					result = NetStreamUtils.isRTMPStream(urlResource.url);
+					
+ 					CONFIG::FLASH_10_1
+					{
+					if (result == false)
+					{
+						result = urlResource.getMetadataValue(MetadataNamespaces.HTTP_STREAMING_METADATA) != null;
+					}
+					}
+ 				}
 			}
 			
-			return false;
+			return result;
 		}
 
 		/**
 		 * Returns true if the given URL represents an RTMP stream, false otherwise.
-		 **/
-		public static function isRTMPStream(url:URL):Boolean
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static function isRTMPStream(url:String):Boolean
 		{
-			if (url == null) return false;
+			var result:Boolean = false;
 			
-			var protocol:String = url.protocol;
-			
-			if (protocol == null || protocol.length <= 0)
+			if (url != null)
 			{
-				return false;
+				var theURL:URL = new URL(url);
+				var protocol:String = theURL.protocol;
+				if (protocol != null && protocol.length > 0)
+				{
+					result = (protocol.search(/^rtmp$|rtmp[tse]$|rtmpte$/i) != -1);
+				}
 			}
 			
-			return (protocol.search(/^rtmp$|rtmp[tse]$|rtmpte$/i) != -1);
+			return result;
+		}
+				
+		/**
+		 * Returns the stream type of the given resource.
+		 * 
+		 * @returns One of the stream types defined in org.osmf.net.StreamType
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static function getStreamType(resource:MediaResourceBase):String
+		{
+			// Default to RECORDED.
+			var streamType:String = StreamType.RECORDED;
+			
+			var streamingURLResource:StreamingURLResource = resource as StreamingURLResource;
+
+			if (streamingURLResource != null)
+			{
+				streamType = streamingURLResource.streamType;
+			}
+
+			return streamType;
 		}
 		
 		/**
@@ -118,27 +162,21 @@ package org.osmf.net
 		 * live vs. recorded, subclips, etc.  The results are returned
 		 * in an untyped Object where the start value maps to "start"
 		 * and the len value maps to "len".
-		 **/
-		public static function getPlayArgsForResource(resource:IMediaResource):Object
+		 *  
+		 *  @langversion 3.0
+		 *  @playerversion Flash 10
+		 *  @playerversion AIR 1.5
+		 *  @productversion OSMF 1.0
+		 */
+		public static function getPlayArgsForResource(resource:MediaResourceBase):Object
 		{
-			var startArg:int = PLAY_START_ARG_ANY;
-			var lenArg:int = PLAY_LEN_ARG_ALL;
+			var startArg:Number = PLAY_START_ARG_ANY;
+			var lenArg:Number = PLAY_LEN_ARG_ALL;
 			
 			// Check for live vs. recorded.
-			var streamType:String = null;
-			var streamingURLResource:StreamingURLResource = resource as StreamingURLResource;
-			var dsResource:DynamicStreamingResource = resource as DynamicStreamingResource;
-			if (streamingURLResource != null)
+			switch (getStreamType(resource))
 			{
-				streamType = streamingURLResource.streamType;
-			}
-			else if (dsResource != null)
-			{
-				streamType = dsResource.streamType;
-			}
-			switch (streamType)
-			{
-				case StreamType.ANY:
+				case StreamType.LIVE_OR_RECORDED:
 					startArg = PLAY_START_ARG_ANY;
 					break;
 				case StreamType.LIVE:
@@ -150,28 +188,30 @@ package org.osmf.net
 			}
 			
 			// Check for subclip metadata (which is ignored for live).
-			if (startArg != PLAY_START_ARG_LIVE &&
-				resource != null)
+			if 	(	startArg != PLAY_START_ARG_LIVE
+				&&	resource != null
+				)
 			{
-				var kvFacet:KeyValueFacet = resource.metadata.getFacet(MetadataNamespaces.SUBCLIP_METADATA) as KeyValueFacet;
-				if (kvFacet != null)
+				var streamingResource:StreamingURLResource = resource as StreamingURLResource;
+				if (streamingResource != null && isStreamingResource(streamingResource))
 				{
-					startArg = kvFacet.getValue(MetadataNamespaces.SUBCLIP_START_ID);
-					if (isNaN(startArg))
+					if (!isNaN(streamingResource.clipStartTime))
 					{
-						startArg = PLAY_START_ARG_RECORDED;
+						startArg = streamingResource.clipStartTime;
 					}
-					var subclipEndTime:Number = kvFacet.getValue(MetadataNamespaces.SUBCLIP_END_ID);
-					if (!isNaN(subclipEndTime))
+					if (!isNaN(streamingResource.clipEndTime))
 					{
-						// Disallow negative durations.  And make sure we don't
-						// subtract the startArg if it's ANY.
-						lenArg = Math.max(0, subclipEndTime - Math.max(0, startArg));
+						// The presence of any subclip info means that our startArg
+						// should be non-negative.
+						startArg = Math.max(0, startArg);
+						
+						// Disallow negative durations.
+						lenArg = Math.max(0, streamingResource.clipEndTime - startArg);
 					}
 				}
 			}
 			
-			return {"start":startArg, "len":lenArg};
+			return {start:startArg, len:lenArg};
 		}
 		
 		// Consts for the NetStream.play() method

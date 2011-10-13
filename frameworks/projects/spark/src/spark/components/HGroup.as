@@ -44,12 +44,14 @@ import spark.layouts.supportClasses.LayoutBase;
  *    <strong>Properties</strong>
  *    columnWidth="no default"
  *    gap="6"
- *    horizontalAlign="top"
+ *    horizontalAlign="left"
  *    paddingBottom="0"
  *    paddingLeft="0"
  *    paddingRight="0"
  *    paddingTop="0"
  *    requestedColumnCount="-1"
+ *    requestedMaxColumnCount="-1"
+ *    requestedMinColumnCount="-1"
  *    variableColumnWidth"true"
  *    verticalAlign="top"
  *  /&gt;
@@ -101,7 +103,7 @@ public class HGroup extends Group
     //  gap
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="6")]
 
     /**
      *  @copy spark.layouts.HorizontalLayout#gap
@@ -152,7 +154,7 @@ public class HGroup extends Group
     //  paddingLeft
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="0.0")]
 
     /**
      *  @copy spark.layouts.HorizontalLayout#paddingLeft
@@ -181,7 +183,7 @@ public class HGroup extends Group
     //  paddingRight
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="0.0")]
 
     /**
      *  @copy spark.layouts.HorizontalLayout#paddingRight
@@ -210,7 +212,7 @@ public class HGroup extends Group
     //  paddingTop
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="0.0")]
 
     /**
      *  @copy spark.layouts.HorizontalLayout#paddingTop
@@ -239,7 +241,7 @@ public class HGroup extends Group
     //  paddingBottom
     //----------------------------------
 
-    [Inspectable(category="General")]
+    [Inspectable(category="General", defaultValue="0.0")]
 
     /**
      *  @copy spark.layouts.HorizontalLayout#paddingBottom
@@ -262,8 +264,67 @@ public class HGroup extends Group
     public function set paddingBottom(value:Number):void
     {
         horizontalLayout.paddingBottom = value;
+    }
+    
+    
+    //----------------------------------
+    //  requestedMaxColumnCount
+    //----------------------------------
+    
+    [Inspectable(category="General")]
+    
+    /**
+     *  @copy spark.layouts.HorizontalLayout#requestedMaxColumnCount
+     * 
+     *  @default -1
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     */
+    public function get requestedMaxColumnCount():int
+    {
+        return horizontalLayout.requestedMaxColumnCount;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set requestedMaxColumnCount(value:int):void
+    {
+        horizontalLayout.requestedMaxColumnCount = value;
     }    
     
+    //----------------------------------
+    //  requestedMinColumnCount
+    //----------------------------------
+    
+    [Inspectable(category="General")]
+    
+    /**
+     *  @copy spark.layouts.HorizontalLayout#requestedMinColumnCount
+     * 
+     *  @default -1
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
+     */
+    public function get requestedMinColumnCount():int
+    {
+        return horizontalLayout.requestedMinColumnCount;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set requestedMinColumnCount(value:int):void
+    {
+        horizontalLayout.requestedMinColumnCount = value;
+    }    
+
     //----------------------------------
     //  requestedColumnCount
     //----------------------------------
@@ -324,7 +385,7 @@ public class HGroup extends Group
     //  variablecolumnHeight
     //----------------------------------
 
-    [Inspectable(category="General", enumeration="true,false")]
+    [Inspectable(category="General", enumeration="true,false", defaultValue="true")]
 
     /**
      * @copy spark.layouts.HorizontalLayout#variableColumnWidth
@@ -382,7 +443,7 @@ public class HGroup extends Group
     //  verticalAlign
     //----------------------------------
 
-    [Inspectable(category="General", enumeration="top,bottom,middle,justify,contentJustify", defaultValue="top")]
+    [Inspectable(category="General", enumeration="top,bottom,middle,justify,contentJustify,baseline", defaultValue="top")]
 
     /**
      *  @copy spark.layouts.HorizontalLayout#verticalAlign

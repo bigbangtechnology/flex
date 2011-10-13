@@ -30,12 +30,43 @@ import mx.managers.IFocusManagerComponent;
 
 import spark.components.ButtonBarButton;
 import spark.components.IItemRenderer;
+import spark.components.supportClasses.ButtonBase;
 import spark.events.IndexChangeEvent;
 import spark.events.RendererExistenceEvent;
 
 use namespace mx_internal;  // use of ListBase/setCurrentCaretIndex(index);
 
+//--------------------------------------
+//  Styles
+//--------------------------------------
+
+/**
+ *  Orientation of the icon in relation to the label.
+ *  Valid MXML values are <code>right</code>, <code>left</code>,
+ *  <code>bottom</code>, and <code>top</code>.
+ *
+ *  <p>In ActionScript, you can use the following constants
+ *  to set this property:
+ *  <code>IconPlacement.RIGHT</code>,
+ *  <code>IconPlacement.LEFT</code>,
+ *  <code>IconPlacement.BOTTOM</code>, and
+ *  <code>IconPlacement.TOP</code>.</p>
+ *
+ *  @default IconPlacement.LEFT
+ * 
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Style(name="iconPlacement", type="String", enumeration="top,bottom,right,left", inherit="no")]
+
+//--------------------------------------
+//  Other metadata
+//--------------------------------------
+
 [AccessibilityClass(implementation="spark.accessibility.ButtonBarBaseAccImpl")]
+
 /**
  *  The ButtonBarBase class defines the common behavior for the ButtonBar, TabBar and similar subclasses.   
  *  This class does not add any new API however it refines selection, keyboard focus and keyboard navigation
@@ -69,7 +100,7 @@ use namespace mx_internal;  // use of ListBase/setCurrentCaretIndex(index);
  *  <pre>
  *  &lt;s:ButtonBarBase/&gt;
  *  </pre> 
-  * 
+ * 
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
@@ -78,7 +109,7 @@ use namespace mx_internal;  // use of ListBase/setCurrentCaretIndex(index);
 public class ButtonBarBase extends ListBase
 {
     include "../../core/Version.as";    
-
+    
     //--------------------------------------------------------------------------
     //
     //  Class mixins
@@ -90,7 +121,7 @@ public class ButtonBarBase extends ListBase
      *  Placeholder for mixin by ButtonBarBaseAccImpl.
      */
     mx_internal static var createAccessibilityImplementation:Function;
-
+    
     /**
      *  Constructor.
      * 
@@ -117,7 +148,7 @@ public class ButtonBarBase extends ListBase
     //  Variables
     //
     //--------------------------------------------------------------------------
-
+    
     /**
      *  @private
      *  If false, don't show the focusRing for the tab at caretIndex, see
@@ -159,28 +190,10 @@ public class ButtonBarBase extends ListBase
     //--------------------------------------------------------------------------
     
     //----------------------------------
-    //  requireSelection
-    //---------------------------------- 
-    
-    private var requireSelectionChanged:Boolean;
-    
-    /**
-     *  @private
-     *  See commitProperties(). 
-     */
-    override public function set requireSelection(value:Boolean):void
-    {
-        if (value == requireSelection)
-            return;
-        
-        super.requireSelection = value;
-        requireSelectionChanged = true;
-        invalidateProperties();
-    }
-    
-    //----------------------------------
     //  dataProvider
     //----------------------------------
+    
+    [Inspectable(category="Data")]
     
     /**
      *  @private
@@ -195,8 +208,8 @@ public class ButtonBarBase extends ListBase
         
         if (value is ISelectableList)
         {
-            value.addEventListener(FlexEvent.VALUE_COMMIT, dataProvider_changeHandler);
-            value.addEventListener(IndexChangedEvent.CHANGE, dataProvider_changeHandler);
+            value.addEventListener(FlexEvent.VALUE_COMMIT, dataProvider_changeHandler, false, 0, true);
+            value.addEventListener(IndexChangedEvent.CHANGE, dataProvider_changeHandler, false, 0, true);
         }
         
         super.dataProvider = value;
@@ -204,6 +217,120 @@ public class ButtonBarBase extends ListBase
         if (value is ISelectableList)
             selectedIndex = ISelectableList(dataProvider).selectedIndex;
     }    
+    
+    //----------------------------------
+    //  iconField
+    //----------------------------------
+    
+    /**
+     *  @private
+     */
+    private var _iconField:String = "icon";
+    
+    /**
+     *  @private
+     */
+    private var iconFieldOrFunctionChanged:Boolean; 
+    
+    /**
+     *  The name of the field in the data provider items which serves
+     *  as the icon to display.
+     * 
+     *  The <code>iconFunction</code> property overrides this property.
+     *
+     *  @default null
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4.5
+     */
+    public function get iconField():String
+    {
+        return _iconField;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set iconField(value:String):void
+    {
+        if (value == _iconField)
+            return; 
+            
+        _iconField = value;
+        iconFieldOrFunctionChanged = true;
+        invalidateProperties();
+    }
+    
+    //----------------------------------
+    //  iconFunction
+    //----------------------------------
+    
+    /**
+     *  @private
+     */
+    private var _iconFunction:Function; 
+    
+    /**
+     *  A user-supplied function to run on each item to determine its icon.  
+     *  The <code>iconFunction</code> property overrides 
+     *  the <code>iconField</code> property.
+     *
+     *  <p>You can supply an <code>iconFunction</code> that finds the 
+     *  appropriate fields and returns a displayable icon. </p>
+     *
+     *  <p>The icon function takes a single argument which is the item in 
+     *  the data provider and returns a valid BitmapImage source.</p>
+     *  <pre>
+     *  myIconFunction(item:Object):Object</pre>
+     *
+     *  @default null
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 1.5
+     *  @productversion Flex 4.5
+     */
+    public function get iconFunction():Function
+    {
+        return _iconFunction;
+    }
+    
+    /**
+     *  @private
+     */
+    public function set iconFunction(value:Function):void
+    {
+        if (value == _iconFunction)
+            return; 
+            
+        _iconFunction = value;
+        iconFieldOrFunctionChanged = true;
+        invalidateProperties(); 
+    }
+    
+    //----------------------------------
+    //  requireSelection
+    //---------------------------------- 
+    
+    private var requireSelectionChanged:Boolean;
+    
+    [Inspectable(category="General", defaultValue="false")]
+    
+    /**
+     *  @private
+     *  See commitProperties(). 
+     */
+    override public function set requireSelection(value:Boolean):void
+    {
+        if (value == requireSelection)
+            return;
+        
+        super.requireSelection = value;
+        requireSelectionChanged = true;
+        invalidateProperties();
+    }
     
     //--------------------------------------------------------------------------
     //
@@ -234,13 +361,13 @@ public class ButtonBarBase extends ListBase
     override protected function dataProvider_collectionChangeHandler(event:Event):void
     {
         inCollectionChangeHandler = true;
-
+        
         super.dataProvider_collectionChangeHandler(event);
-
+        
         inCollectionChangeHandler = false;
-
+        
     }
-
+    
     /**
      *  @private
      */
@@ -249,10 +376,10 @@ public class ButtonBarBase extends ListBase
         // see comment in dataProvider_collectionChangeHandler
         if (inCollectionChangeHandler && dataProvider is ISelectableList)
             return;
-
+        
         super.adjustSelection(newIndex, add);
     }
-
+    
     /**
      *  @private
      */
@@ -270,6 +397,12 @@ public class ButtonBarBase extends ListBase
                 if (renderer)
                     renderer.allowDeselection = !requireSelection;
             }
+        }
+        
+        if (iconFieldOrFunctionChanged)
+        {
+            updateRendererIcons();
+            iconFieldOrFunctionChanged = false;
         }
         
         enableFocusHighlight = true;
@@ -341,33 +474,95 @@ public class ButtonBarBase extends ListBase
     }
     
     /**
-     *  @private
-     */
-    override protected function partAdded(partName:String, instance:Object):void
-    {
-        super.partAdded(partName, instance);
-
-        if (instance == dataGroup)
+     *  @private 
+     *  Detected changes to iconPlacement and update as necessary.
+     */ 
+    override public function styleChanged(styleProp:String):void 
+    {    
+        if (!styleProp || 
+            styleProp == "styleName" || styleProp == "iconPlacement")
         {
-            dataGroup.addEventListener(RendererExistenceEvent.RENDERER_ADD, dataGroup_rendererAddHandler);
-            dataGroup.addEventListener(RendererExistenceEvent.RENDERER_REMOVE, dataGroup_rendererRemoveHandler);
+            // Cause icon association to reoccur, taking into consideration
+            // the new placement.
+            iconFieldOrFunctionChanged = true; 
+            invalidateProperties();
         }
+        
+        super.styleChanged(styleProp);
     }
     
     /**
      *  @private
      */
-    override protected function partRemoved(partName:String, instance:Object):void
+    override public function updateRenderer(renderer:IVisualElement, itemIndex:int, data:Object):void
     {
-        if (instance == dataGroup)
+        itemToIcon(renderer, data);
+        super.updateRenderer(renderer, itemIndex, data);
+    }  
+    
+    //--------------------------------------------------------------------------
+    //
+    //  Methods
+    //
+    //--------------------------------------------------------------------------
+    
+    /**
+     *  @private
+     */
+    private function itemToIcon(renderer:IVisualElement, item:Object):void
+    {
+        if (!(renderer is ButtonBase))
+            return;
+        
+        // Assign iconPlacement if appropriate.
+        var iconPlacement:String = getStyle("iconPlacement");
+        if (iconPlacement)
+            ButtonBase(renderer).setStyle("iconPlacement", iconPlacement);
+        
+        // iconFunction takes precedence.
+        if (_iconFunction != null)
         {
-            dataGroup.removeEventListener(RendererExistenceEvent.RENDERER_ADD, dataGroup_rendererAddHandler);
-            dataGroup.removeEventListener(RendererExistenceEvent.RENDERER_REMOVE, dataGroup_rendererRemoveHandler);
+            ButtonBase(renderer).setStyle("icon", _iconFunction(item));
+            return;
+        }
+        
+        // iconField
+        if (_iconField && 
+            _iconField.length > 0 && 
+            item is Object)
+        {
+            try
+            {
+                if (item[_iconField] != null)
+                {
+                    ButtonBase(renderer).setStyle("icon", item[_iconField]);
+                    return;
+                }
+            }
+            catch(e:Error)
+            {
+            }
         }
 
-        super.partRemoved(partName, instance);
+        ButtonBase(renderer).clearStyle("icon");
     }
     
+    /**
+     *  @private
+     */
+    private function updateRendererIcons():void
+    {
+        if (!dataGroup)
+            return;
+        
+        const count:int = dataGroup.numElements;
+        for (var i:int = 0; i < count; i++)
+        {
+            var renderer:IItemRenderer = dataGroup.getElementAt(i) as IItemRenderer; 
+            if (renderer && renderer.data)
+                itemToIcon(renderer, renderer.data);
+        }
+    }
     
     //--------------------------------------------------------------------------
     //
@@ -380,14 +575,22 @@ public class ButtonBarBase extends ListBase
      */
     private function dataProvider_changeHandler(event:Event):void
     {
-        selectedIndex = ISelectableList(dataProvider).selectedIndex;
+        var newSelectedIndex:int = ISelectableList(dataProvider).selectedIndex;
+        if (selectedIndex != newSelectedIndex)
+        {
+            selectedIndex = newSelectedIndex;
+            commitSelection(false);
+            dispatchEvent(new FlexEvent(FlexEvent.VALUE_COMMIT));
+        }
     }
     
     /**
      *  @private
      */
-    private function dataGroup_rendererAddHandler(event:RendererExistenceEvent):void
+    override protected function dataGroup_rendererAddHandler(event:RendererExistenceEvent):void
     {
+        super.dataGroup_rendererAddHandler(event);
+        
         const renderer:IVisualElement = event.renderer; 
         if (renderer)
         {
@@ -402,8 +605,10 @@ public class ButtonBarBase extends ListBase
     /**
      *  @private
      */
-    private function dataGroup_rendererRemoveHandler(event:RendererExistenceEvent):void
-    {        
+    override protected function dataGroup_rendererRemoveHandler(event:RendererExistenceEvent):void
+    {   
+        super.dataGroup_rendererRemoveHandler(event);
+        
         const renderer:IVisualElement = event.renderer;
         if (renderer)
             renderer.removeEventListener(MouseEvent.CLICK, item_clickHandler);
@@ -420,7 +625,7 @@ public class ButtonBarBase extends ListBase
             newIndex = IItemRenderer(event.currentTarget).itemIndex;
         else
             newIndex = dataGroup.getElementIndex(event.currentTarget as IVisualElement);
-
+        
         var oldSelectedIndex:int = selectedIndex;
         if (newIndex == selectedIndex)
         {
@@ -455,7 +660,7 @@ public class ButtonBarBase extends ListBase
             setCurrentCaretIndex((caretIndex + delta + length) % length);
         else
             setCurrentCaretIndex(Math.min(length - 1, Math.max(0, caretIndex + delta)));
-
+        
         if (oldCaretIndex != caretIndex)
             dispatchEvent(new IndexChangeEvent(IndexChangeEvent.CARET_CHANGE, false, false, oldCaretIndex, caretIndex)); 
     }
@@ -483,20 +688,20 @@ public class ButtonBarBase extends ListBase
         // If rtl layout, need to swap LEFT/UP and RIGHT/DOWN so correct action
         // is done.
         var keyCode:uint = mapKeycodeForLayoutDirection(event, true);
-                        
+        
         switch (keyCode)
         {
             case Keyboard.UP:
             case Keyboard.LEFT:
             {
-                    adjustCaretIndex(-1);
+                adjustCaretIndex(-1);
                 event.preventDefault();
                 break;
             }
             case Keyboard.DOWN:
             case Keyboard.RIGHT:
             {
-                    adjustCaretIndex(+1);
+                adjustCaretIndex(+1);
                 event.preventDefault();
                 break;
             }            

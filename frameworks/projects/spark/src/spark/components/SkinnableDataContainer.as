@@ -69,7 +69,7 @@ include "../styles/metadata/BasicInheritingTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="focusAlpha", type="Number", inherit="no", theme="spark", minValue="0.0", maxValue="1.0")]
+[Style(name="focusAlpha", type="Number", inherit="no", theme="spark, mobile", minValue="0.0", maxValue="1.0")]
 
 /**
  *  Color of focus ring when the component is in focus.
@@ -81,7 +81,7 @@ include "../styles/metadata/BasicInheritingTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  Thickness, in pixels, of the focus rectangle outline.
@@ -89,9 +89,9 @@ include "../styles/metadata/BasicInheritingTextStyles.as"
  *  @default 2
  *  
  *  @langversion 3.0
- *  @playerversion Flash 9
- *  @playerversion AIR 1.1
- *  @productversion Flex 3
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
  */
 [Style(name="focusThickness", type="Number", format="Length", inherit="no", minValue="0.0")]
 
@@ -160,7 +160,7 @@ include "../styles/metadata/BasicInheritingTextStyles.as"
  *    focusAlpha="0.55"
  *    focusColor=""
  *    focusThickness="2"
- *    fontFamily="Times New Roman"
+ *    fontFamily="Arial"
  *    fontLookup="device"
  *    fontSize="12"
  *    fontStyle="normal"
@@ -263,6 +263,7 @@ public class SkinnableDataContainer extends SkinnableContainerBase implements II
     //
     //--------------------------------------------------------------------------
     
+    [Bindable]
     [SkinPart(required="false")]
     
     /**
@@ -370,6 +371,7 @@ public class SkinnableDataContainer extends SkinnableContainerBase implements II
      *  @productversion Flex 4
      */
     [Bindable("dataProviderChanged")]
+    [Inspectable(category="Data")]
     
     public function get dataProvider():IList
     {       
@@ -394,6 +396,8 @@ public class SkinnableDataContainer extends SkinnableContainerBase implements II
     //----------------------------------
     //  itemRenderer
     //----------------------------------
+    
+    [Inspectable(category="Data")]
     
     /**
      *  @copy spark.components.DataGroup#itemRenderer
@@ -429,6 +433,8 @@ public class SkinnableDataContainer extends SkinnableContainerBase implements II
     //  itemRendererFunction
     //----------------------------------
     
+    [Inspectable(category="Data")]
+    
     /**
      *  @copy spark.components.DataGroup#itemRendererFunction
      *  
@@ -462,6 +468,8 @@ public class SkinnableDataContainer extends SkinnableContainerBase implements II
     //----------------------------------
     //  layout
     //----------------------------------
+    
+    [Inspectable(category="General")]
     
     /**
      *  @copy spark.components.supportClasses.GroupBase#layout
@@ -499,6 +507,8 @@ public class SkinnableDataContainer extends SkinnableContainerBase implements II
     //  typicalItem
     //----------------------------------
 
+    [Inspectable(category="Data")]
+    
     /**
      *  @copy spark.components.DataGroup#typicalItem
      *  
@@ -566,7 +576,11 @@ public class SkinnableDataContainer extends SkinnableContainerBase implements II
      *  item renderer's <code>label</code> property and 
      *  <code>owner</code> property. 
      *  
-     *  @param renderer The renderer being updated 
+     *  @param renderer The renderer being updated. 
+     *  
+     *  @param itemIndex The index of the data item in the data provider. 
+     *  
+     *  @param data The data object this item renderer is representing. 
      * 
      *  @langversion 3.0
      *  @playerversion Flash 10

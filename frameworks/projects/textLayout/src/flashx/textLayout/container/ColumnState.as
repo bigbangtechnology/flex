@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.container
 {
 	import flash.geom.Rectangle;
@@ -18,6 +18,7 @@ package flashx.textLayout.container
 	import flashx.textLayout.formats.FormatValue;
 	import flashx.textLayout.formats.ITextLayoutFormat;
 	import flashx.textLayout.formats.LineBreak;
+	import flashx.textLayout.utils.Twips;
 	import flashx.textLayout.tlf_internal;
 		
 	use namespace tlf_internal;
@@ -168,19 +169,19 @@ package flashx.textLayout.container
 		 */
 		tlf_internal function updateInputs(newBlockProgression:String, newColumnDirection:String, controller:ContainerController, newCompositionWidth:Number, newCompositionHeight:Number ):void
 		{
-			var newPaddingTop:Number = controller.effectivePaddingTop;
-			var newPaddingBottom:Number = controller.effectivePaddingBottom;
-			var newPaddingLeft:Number = controller.effectivePaddingLeft;
-			var newPaddingRight:Number = controller.effectivePaddingRight;
+			var newPaddingTop:Number = controller.getTotalPaddingTop();
+			var newPaddingBottom:Number = controller.getTotalPaddingBottom();
+			var newPaddingLeft:Number = controller.getTotalPaddingLeft();
+			var newPaddingRight:Number = controller.getTotalPaddingRight();
 			
 			var containerAttr:ITextLayoutFormat = controller.computedFormat;
 			
 			var newColumnWidth:Object = containerAttr.columnWidth;
 			var newColumnGap:Number = containerAttr.columnGap;
-			var newColumnCount:Object = containerAttr.columnCount;;
+			var newColumnCount:Object = containerAttr.columnCount;
 			
 			var newForceSingleColumn:Boolean = ((containerAttr.columnCount == FormatValue.AUTO && (containerAttr.columnWidth == FormatValue.AUTO || Number(containerAttr.columnWidth) == 0)) ||
-				controller.rootElement.computedFormat.lineBreak == LineBreak.EXPLICIT)
+				controller.rootElement.computedFormat.lineBreak == LineBreak.EXPLICIT) || isNaN(newBlockProgression == BlockProgression.RL ? newCompositionHeight : newCompositionWidth);
 			
 			if (_inputsChanged == false) 
 				_inputsChanged = newCompositionWidth != _compositionHeight || newCompositionHeight != _compositionHeight
@@ -324,7 +325,7 @@ package flashx.textLayout.container
 				else
 				{
 					CONFIG::debug { assert(_columnDirection == Direction.RTL,"bad columndirection in ColumnState.computeColumns"); }
-					xPos = isNaN(_compositionWidth) ? 0 : _compositionWidth-_paddingRight-_columnWidth;
+					xPos = isNaN(_compositionWidth) ? _paddingLeft : _compositionWidth-_paddingRight-_columnWidth;
 					delX = -(_columnWidth + _columnGap);
 					colW = _columnWidth;
 				}
@@ -347,12 +348,12 @@ package flashx.textLayout.container
 			// make colW and colH just off zero so that we don't get empties
 			if (colW == 0)
 			{
-				colW = .001;
+				colW = Twips.ONE_TWIP;	// MINIMUM VALUE OF ONE TWIP
 				if (_blockProgression == BlockProgression.RL)
 					xPos -= colW;
 			}
 			if (colH == 0)
-				colH = .001;
+				colH = Twips.ONE_TWIP;	// MINIMUM VALUE OF ONE TWIP
 			
 			if (_columnCount == 1)
 			{

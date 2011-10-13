@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.elements 
 {
 	import flash.display.Shape;
@@ -16,6 +16,7 @@ package flashx.textLayout.elements
 	import flash.text.engine.GroupElement;
 	import flash.text.engine.LineJustification;
 	import flash.text.engine.SpaceJustifier;
+	import flash.text.engine.TabAlignment;
 	import flash.text.engine.TabStop;
 	import flash.text.engine.TextBaseline;
 	import flash.text.engine.TextBlock;
@@ -38,6 +39,7 @@ package flashx.textLayout.elements
 	import flashx.textLayout.formats.TextAlign;
 	import flashx.textLayout.formats.TextJustify;
 	import flashx.textLayout.formats.TextLayoutFormat;
+	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 	import flashx.textLayout.utils.CharacterUtil;
 	import flashx.textLayout.utils.LocaleUtil;
@@ -69,6 +71,7 @@ package flashx.textLayout.elements
 	public final class ParagraphElement extends ParagraphFormattedElement
 	{
 		private var _textBlock:TextBlock;
+		private var _terminatorSpan:SpanElement;
 		
 		/** Constructor - represents a paragraph in a text flow. 
 		*
@@ -80,6 +83,7 @@ package flashx.textLayout.elements
 		public function ParagraphElement()
 		{
 			super();
+			_terminatorSpan = null;
 		}
 
 		/** @private */
@@ -104,14 +108,6 @@ package flashx.textLayout.elements
 			if (!_textBlock)
 				return;
 				
-			// Preflight children to see if any are in use
-			for (var i:int = 0; i < numChildren; i++)
-			{
-				var child:FlowElement = getChildAt(i);
-				if (!child.canReleaseContentElement())
-					return;
-			}
-
 			if (_textBlock.firstLine)	// A TextBlock may have no firstLine if it has previously been released.
 			{
 				for (var textLineTest:TextLine = _textBlock.firstLine; textLineTest != null; textLineTest = textLineTest.nextLine)
@@ -127,16 +123,14 @@ package flashx.textLayout.elements
 					}
 				}
 				
-				for (var textLine:TextLine = _textBlock.firstLine; textLine != null; textLine = textLine.nextLine)
-					TextFlowLine(textLine.userData).markReleased();
 				CONFIG::debug { Debugging.traceFTECall(null,_textBlock,"releaseLines",_textBlock.firstLine, _textBlock.lastLine); }				
 				_textBlock.releaseLines(_textBlock.firstLine, _textBlock.lastLine);	
 			}	
 
 			_textBlock.content = null;
-			for (i = 0; i < numChildren; i++)
+			for (var i:int = 0; i < numChildren; i++)
 			{
-				child = getChildAt(i);
+				var child:FlowElement = getChildAt(i);
 				child.releaseContentElement();
 			}
 			_textBlock = null;
@@ -149,6 +143,12 @@ package flashx.textLayout.elements
 		{ 
 			if (!_textBlock)
 				createTextBlock();
+			return _textBlock; 
+		}
+		
+		/** TextBlock where the text of the paragraph is kept, or null if we currently don't have one. @private */
+		tlf_internal function peekTextBlock():TextBlock
+		{ 
 			return _textBlock; 
 		}
 		
@@ -263,7 +263,7 @@ package flashx.textLayout.elements
 			{
 				if (block is GroupElement)
 				{
-					// this case forces the Group to be in a Group so that following FlowLeafElements aren't in a SubParagraphGroupElement's group
+					// this case forces the Group to be in a Group so that following FlowLeafElements aren't in a SubParagraphGroupElementBase's group
 					gc = new Vector.<ContentElement>();
 					CONFIG::debug { Debugging.traceFTECall(gc,null,"new Vector.<ContentElement>()") }
 					gc.push(block);
@@ -294,22 +294,15 @@ package flashx.textLayout.elements
 		
 		/** @private */
 		override protected function get abstract():Boolean
-		{
-			return false;
-		}		
+		{ return false;	}	
+		
+		/** @private */
+		tlf_internal override function get defaultTypeName():String
+		{ return "p"; }
 
 		/** @private */
 		public override function replaceChildren(beginChildIndex:int,endChildIndex:int,...rest):void
 		{
-			// are we replacing the last element?
-			var oldLastLeaf:FlowLeafElement = getLastLeaf();
-			
-			CONFIG::debug 
-			{ 
-				if (oldLastLeaf && (oldLastLeaf is SpanElement))
-					SpanElement(oldLastLeaf).verifyParagraphTerminator();
-
-			}
 			var applyParams:Array;
 			
 			// makes a measurable difference - rest.length zero and one are the common cases
@@ -321,31 +314,47 @@ package flashx.textLayout.elements
 				if (rest.length != 0)
 					applyParams = applyParams.concat.apply(applyParams, rest);
 			}
+
 			super.replaceChildren.apply(this, applyParams);
 			
-			ensureTerminatorAfterReplace(oldLastLeaf);
+			ensureTerminatorAfterReplace();
 		}
 		/** @private */
-		tlf_internal function ensureTerminatorAfterReplace(oldLastLeaf:FlowLeafElement):void
+		tlf_internal function ensureTerminatorAfterReplace():void
 		{
 			var newLastLeaf:FlowLeafElement = getLastLeaf();
-			if (oldLastLeaf != newLastLeaf)
+			if (_terminatorSpan != newLastLeaf)
 			{
-				if (oldLastLeaf && oldLastLeaf is SpanElement)
-					oldLastLeaf.removeParaTerminator();
+				if (_terminatorSpan)
+				{
+					_terminatorSpan.removeParaTerminator();
+					this._terminatorSpan = null;
+				}
+				
 				if (newLastLeaf)
 				{
 					if (newLastLeaf is SpanElement)
-						newLastLeaf.addParaTerminator();
+					{
+						(newLastLeaf as SpanElement).addParaTerminator();
+						this._terminatorSpan = newLastLeaf as SpanElement;
+					}
 					else
 					{
 						var s:SpanElement = new SpanElement();
 						super.replaceChildren(numChildren,numChildren,s);
 						s.format = newLastLeaf.format;
 						s.addParaTerminator();
+						this._terminatorSpan = s;
 					}
 				}
 			}
+		}
+		
+		/** @private */
+		tlf_internal function updateTerminatorSpan(splitSpan:SpanElement,followingSpan:SpanElement):void
+		{
+			if (_terminatorSpan == splitSpan)
+				_terminatorSpan = followingSpan;
 		}
 
 		[RichTextContent]
@@ -359,7 +368,7 @@ package flashx.textLayout.elements
 			{
 				if (child is FlowElement)
 				{
-					if ((child is SpanElement) || (child is SubParagraphGroupElement))
+					if ((child is SpanElement) || (child is SubParagraphGroupElementBase))
 						child.bindableElement = true;
 					
 					// Note: calling super.replaceChildren because we don't want to transfer para terminator each time
@@ -379,7 +388,7 @@ package flashx.textLayout.elements
 			}
 			
 			// Now ensure para terminator
-			ensureTerminatorAfterReplace(null);
+			ensureTerminatorAfterReplace();
 		}
 		
 		/** @private
@@ -409,7 +418,7 @@ package flashx.textLayout.elements
 		 * @playerversion AIR 1.5
 	 	 * @langversion 3.0
 	 	 * 
-	 	 * @see #getPreviousParagraph
+	 	 * @see #getPreviousParagraph()
 	 	 */
 		public function getNextParagraph():ParagraphElement
 		{
@@ -426,7 +435,7 @@ package flashx.textLayout.elements
 		 * @playerversion AIR 1.5
 	 	 * @langversion 3.0
 	 	 *
-	 	 * @see #getNextParagraph
+	 	 * @see #getNextParagraph()
 	 	 */
 		public function getPreviousParagraph():ParagraphElement
 		{
@@ -552,13 +561,12 @@ package flashx.textLayout.elements
 			return getTextBlock().findNextWordBoundary(relativePosition);
 		}
 		
-		private static var _defaultTabStops:Vector.<TabStop>;
-		private const defaultTabWidth:int = 48;		// matches default tabs setting in Argo
-		private const defaultTabCount:int = 20;
+		static private var _defaultTabStops:Vector.<TabStop>;
+		static private const defaultTabWidth:int = 48;		// matches default tabs setting in Argo
+		static private const defaultTabCount:int = 20;
 		
-		private function initializeDefaultTabStops():void
+		static private function initializeDefaultTabStops():void
 		{
-			var lastTabPos:int = defaultTabWidth * defaultTabCount;
 			_defaultTabStops = new Vector.<TabStop>(defaultTabCount, true);
 			for (var i:int = 0; i < defaultTabCount; ++i)
 				_defaultTabStops[i] = new TabStop(TextAlign.START, defaultTabWidth * i);
@@ -597,7 +605,22 @@ package flashx.textLayout.elements
 			{
 				var spaceJustifier:SpaceJustifier = new SpaceJustifier(_computedFormat.locale,lineJust,false);
 				spaceJustifier.letterSpacing = _computedFormat.textJustify == TextJustify.DISTRIBUTE ? true : false;
-				CONFIG::debug { Debugging.traceFTECall(spaceJustifier,null,"new SpaceJustifier",_computedFormat.locale,lineJust,false); }
+
+				if (Configuration.playerEnablesArgoFeatures)
+				{
+					// These three properties have to be set in the correct order so that consistency checks done
+					// in the Player on set are never violated
+					var newMinimumSpacing:Number = Property.toNumberIfPercent(_computedFormat.wordSpacing.minimumSpacing)/100;
+					var newMaximumSpacing:Number = Property.toNumberIfPercent(_computedFormat.wordSpacing.maximumSpacing)/100;
+					var newOptimumSpacing:Number = Property.toNumberIfPercent(_computedFormat.wordSpacing.optimumSpacing)/100; 
+					spaceJustifier["minimumSpacing"] = Math.min(newMinimumSpacing, spaceJustifier["minimumSpacing"]);
+					spaceJustifier["maximumSpacing"] = Math.max(newMaximumSpacing, spaceJustifier["maximumSpacing"]);
+					spaceJustifier["optimumSpacing"] = newOptimumSpacing;
+					spaceJustifier["minimumSpacing"] = newMinimumSpacing;
+					spaceJustifier["maximumSpacing"] = newMaximumSpacing;
+				}
+
+				CONFIG::debug { Debugging.traceFTECall(spaceJustifier,null,"new SpaceJustifier",_computedFormat.locale,lineJust,spaceJustifier.letterSpacing); }
 				_textBlock.textJustifier = spaceJustifier;
 				CONFIG::debug { Debugging.traceFTEAssign(_textBlock,"textJustifier",spaceJustifier); }
 				_textBlock.baselineZero = getLeadingBasis(this.getEffectiveLeadingModel());
@@ -627,7 +650,8 @@ package flashx.textLayout.elements
 				for each(var tsa:TabStopFormat in _computedFormat.tabStops)
 				{
 					var token:String = tsa.decimalAlignmentToken==null ? "" : tsa.decimalAlignmentToken;
-					var tabStop:TabStop = new TabStop(tsa.alignment,Number(tsa.position),token);
+					var alignment:String = tsa.alignment==null ? TabAlignment.START : tsa.alignment;
+					var tabStop:TabStop = new TabStop(alignment,Number(tsa.position),token);
 					// this next line when uncommented works around bug 1912782
 					if (tsa.decimalAlignmentToken != null) var garbage:String = "x" + tabStop.decimalAlignmentToken;
 					CONFIG::debug { Debugging.traceFTECall(tabStop,null,"new TabStop",tabStop.alignment,tabStop.position,tabStop.decimalAlignmentToken); }
@@ -668,7 +692,7 @@ package flashx.textLayout.elements
 		/** @private */
 		tlf_internal override function canOwnFlowElement(elem:FlowElement):Boolean
 		{
-			return elem is FlowLeafElement || elem is SubParagraphGroupElement;
+			return elem is FlowLeafElement || elem is SubParagraphGroupElementBase;
 		}
 		
 		/** @private */
@@ -707,7 +731,7 @@ package flashx.textLayout.elements
 						if (idx != 0)
 						{
 							var lastChild:FlowElement = this.getChildAt(idx-1);
-							if (lastChild is SubParagraphGroupElement && lastChild.textLength == 1 && !lastChild.bindableElement)
+							if (lastChild is SubParagraphGroupElementBase && lastChild.textLength == 1 && !lastChild.bindableElement)
 								replaceChildren(idx-1,idx);
 						}
 						break;
@@ -790,6 +814,7 @@ package flashx.textLayout.elements
 					CONFIG::debug { assert(false,"Unsupported parameter to ParagraphElement.getLeadingBasis"); } // In particular, AUTO is not supported by this method. Must be mapped to one of the above 
 				case LeadingModel.ASCENT_DESCENT_UP:
 				case LeadingModel.APPROXIMATE_TEXT_FIELD:
+				case LeadingModel.BOX:
 				case LeadingModel.ROMAN_UP:
 					return flash.text.engine.TextBaseline.ROMAN;
 				case LeadingModel.IDEOGRAPHIC_TOP_UP:
@@ -810,6 +835,7 @@ package flashx.textLayout.elements
 					CONFIG::debug { assert(false,"Unsupported parameter to ParagraphElement.useUpLeadingDirection"); } // In particular, AUTO is not supported by this method. Must be mapped to one of the above 
 				case LeadingModel.ASCENT_DESCENT_UP:
 				case LeadingModel.APPROXIMATE_TEXT_FIELD:
+				case LeadingModel.BOX:
 				case LeadingModel.ROMAN_UP:
 				case LeadingModel.IDEOGRAPHIC_TOP_UP:
 				case LeadingModel.IDEOGRAPHIC_CENTER_UP:

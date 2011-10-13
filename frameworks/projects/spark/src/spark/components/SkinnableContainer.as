@@ -81,7 +81,7 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="accentColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="accentColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  @copy spark.components.supportClasses.GroupBase#style:alternatingItemColors
@@ -91,7 +91,7 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="alternatingItemColors", type="Array", arrayType="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="alternatingItemColors", type="Array", arrayType="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
  *  Alpha level of the background for this component.
@@ -104,7 +104,7 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="backgroundAlpha", type="Number", inherit="no", theme="spark")]
+[Style(name="backgroundAlpha", type="Number", inherit="no", theme="spark, mobile")]
 
 /**
  *  Background color of a component.
@@ -116,7 +116,7 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="backgroundColor", type="uint", format="Color", inherit="no", theme="spark")]
+[Style(name="backgroundColor", type="uint", format="Color", inherit="no", theme="spark, mobile")]
 
 /**
  *  The alpha of the content background for this component.
@@ -126,7 +126,7 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */
-[Style(name="contentBackgroundAlpha", type="Number", inherit="yes", theme="spark")]
+[Style(name="contentBackgroundAlpha", type="Number", inherit="yes", theme="spark, mobile")]
 
 /**
  *  @copy spark.components.supportClasses.GroupBase#style:contentBackgroundColor
@@ -136,7 +136,17 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="contentBackgroundColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="contentBackgroundColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
+
+/**
+ *  @copy spark.components.supportClasses.GroupBase#style:downColor
+ *   
+ *  @langversion 3.0
+ *  @playerversion Flash 10.1
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="downColor", type="uint", format="Color", inherit="yes", theme="mobile")]
 
 /**
  *  @copy spark.components.supportClasses.GroupBase#style:focusColor
@@ -146,16 +156,18 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="focusColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 /**
- * @copy spark.components.supportClasses.GroupBase#style:rollOverColor
+ *  @copy spark.components.supportClasses.GroupBase#style:rollOverColor
+ *   
+ *  @default 0xCEDBEF
  *  
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
- */ 
+ */
 [Style(name="rollOverColor", type="uint", format="Color", inherit="yes", theme="spark")]
 
 /**
@@ -166,8 +178,41 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
+/**
+ *  @copy spark.components.supportClasses.GroupBase#style:touchDelay
+ *  
+ *  @langversion 3.0
+ *  @playerversion Flash 10.1
+ *  @playerversion AIR 2.5
+ *  @productversion Flex 4.5
+ */
+[Style(name="touchDelay", type="Number", format="Time", inherit="yes", minValue="0.0")]
+
+/**
+ *  Color of text shadows.
+ * 
+ *  @default #FFFFFF
+ * 
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Style(name="textShadowColor", type="uint", format="Color", inherit="yes", theme="mobile")]
+
+/**
+ *  Alpha of text shadows.
+ * 
+ *  @default 0.55
+ * 
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Style(name="textShadowAlpha", type="Number",inherit="yes", minValue="0.0", maxValue="1.0", theme="mobile")]
 
 [IconFile("SkinnableContainer.png")]
 
@@ -207,7 +252,6 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *    <strong>Properties</strong>
  *    autoLayout="true"
  *    creationPolicy="auto"
- *    horizontalScrollPosition="null"
  *    layout="BasicLayout"
  *  
  *    <strong>Styles</strong>
@@ -220,6 +264,7 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *    blockProgression="TB"
  *    breakOpportunity="auto"
  *    cffHinting="horizontal_stem"
+ *    clearFloats="none"
  *    color="0"
  *    contentBackgroundAlpha=""
  *    contentBackgroundColor=""
@@ -227,10 +272,11 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *    digitWidth="default"
  *    direction="LTR"
  *    dominantBaseline="auto"
+ *    downColor=""
  *    firstBaselineOffset="auto"
  *    focusColor=""
  *    focusedTextSelectionColor=""
- *    fontFamily="Times New Roman"
+ *    fontFamily="Arial"
  *    fontLookup="device"
  *    fontSize="12"
  *    fontStyle="normal"
@@ -243,6 +289,9 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *    ligatureLevel="common"
  *    lineHeight="120%"
  *    lineThrough="false"
+ *    listAutoPadding="40"
+ *    listStylePosition="outside"
+ *    listStyleType="disc"
  *    locale="en"
  *    paragraphEndIndent="0"
  *    paragraphSpaceAfter="0"
@@ -265,7 +314,8 @@ include "../styles/metadata/SelectionFormatTextStyles.as"
  *    unfocusedTextSelectionColor=""
  *    verticalScrollPolicy="auto"
  *    whiteSpaceCollapse="collapse"
- *  
+ *    wordSpacing="100%,50%,150%"
+ *   
  *    <strong>Events</strong>
  *    elementAdd="<i>No default</i>"
  *    elementRemove="<i>No default</i>"
@@ -330,6 +380,7 @@ public class SkinnableContainer extends SkinnableContainerBase
     //
     //--------------------------------------------------------------------------
     
+    [Bindable]
     [SkinPart(required="false")]
     
     /**
@@ -534,6 +585,8 @@ public class SkinnableContainer extends SkinnableContainerBase
     //----------------------------------
     //  layout
     //----------------------------------
+    
+    [Inspectable(category="General")]
     
     /**
      *  @copy spark.components.supportClasses.GroupBase#layout
@@ -766,6 +819,11 @@ public class SkinnableContainer extends SkinnableContainerBase
     
     /**
      *  @inheritDoc
+     *  
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
     public function setElementIndex(element:IVisualElement, index:int):void
     {
@@ -854,13 +912,19 @@ public class SkinnableContainer extends SkinnableContainerBase
                     // then it wouldn't been added to the display list and we can't just 
                     // copy the mxmlContent from the placeHolderGroup, but we must also 
                     // call removeElement() on those children.
+                    
+                    // remove listener prior to removal of elements
+                    // or else we'll accidentally null out the owner field
+                    _placeHolderGroup.removeEventListener(
+                        ElementExistenceEvent.ELEMENT_REMOVE, contentGroup_elementRemovedHandler);
+                    
                     for (var i:int = _placeHolderGroup.numElements; i > 0; i--)
                     {
                         _placeHolderGroup.removeElementAt(0);  
                     }
                     
                     contentGroup.mxmlContent = sourceContent ? sourceContent.slice() : null;
-                    
+
                 }
                 else if (_mxmlContent != null)
                 {

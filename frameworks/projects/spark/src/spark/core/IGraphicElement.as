@@ -13,32 +13,34 @@ package spark.core
 import flash.display.DisplayObject;
 import flash.display.DisplayObjectContainer;
 
-import spark.components.Group;
 import mx.core.IVisualElement;
 
 /**
  *  The IGraphicElement is implemented by IVisualElements that
- *  take advantage of the parent Group's DisplayObject management.
+ *  take advantage of the parent <code>IGraphicElementContainer</code>
+ *  DisplayObject management.
  *
  *  <p>One typical use case is DisplayObject sharing.  
- *  Group organizes its
+ *  the Group class, which implements <code>IGraphicElementContainer</code>, organizes its
  *  IGraphicElement children in sequences that share and draw to
  *  the same DisplayObject.
  *  The DisplayObject is created by the first element in the
  *  sequence.</p>
  *
- *  <p>Another use case is when an element does not derrive from
+ *  <p>Another use case is when an element does not derive from
  *  DisplayObject but instead maintains, creates and/or destroys
- *  its own DisplayObject. The Group will ensure to
+ *  its own DisplayObject. The <code>IGraphicElementContainer</code> will 
  *  call the element to create the DisplayObject, add the
- *  DisplayObject as its child at the correct index as well as
+ *  DisplayObject as its child at the correct index, and 
  *  handle its removal.</p> 
  *
- *  <p>Typically a developer extends the GraphicElement class
+ *  <p>Typically, you extend the GraphicElement class
  *  instead of directly implementing the IGraphciElement
  *  interface. The GraphicElement class already provides most of the
  *  required functionality.</p>
- *  
+ *
+ *  @see spark.core.IGraphicElementContainer
+ *
  *  @langversion 3.0
  *  @playerversion Flash 10
  *  @playerversion AIR 1.5
@@ -80,8 +82,8 @@ public interface IGraphicElement extends IVisualElement
 
     /**
      *  Indicates the association between this IGraphicElement and its
-     *  display objects.  The Group manages this property and the values
-     *  are one of the DisplayObjectSharingMode enum class.
+     *  display objects. The <code>IGraphicElementContainer</code> manages this 
+     *  property and the values are one of the DisplayObjectSharingMode enum class.
      *
      *  <ul> 
      *    <li>A value of <code>DisplayObjectSharingMode.OWNS_UNSHARED_OBJECT</code>
@@ -107,6 +109,11 @@ public interface IGraphicElement extends IVisualElement
      *    into that same displayObject, and the first element that draws
      *    has its mode set to <code>DisplayObjectMode.OWNS_SHARED_OBJECT</code></li>
      *  </ul>
+     *
+     *  @langversion 3.0
+     *  @playerversion Flash 10
+     *  @playerversion AIR 2.5
+     *  @productversion Flex 4.5
      */
      function get displayObjectSharingMode():String;
 
@@ -125,33 +132,34 @@ public interface IGraphicElement extends IVisualElement
      *  Creates a new DisplayObject where this IGraphicElement
      *  is drawn.
      *  
-     *  Subsequent calls to the getter of the <code>displayObject</code> property must
-     *  return the same display object.
+     *  <p>Subsequent calls to the getter of the <code>displayObject</code> property must
+     *  return the same display object.</p>
      *
-     *  After the DisplayObject is created, the parent <code>Group</code>
-     *  will pass along the display objects to the rest of the elements in the sequence.
+     *  <p>After the DisplayObject is created, the parent <code>IGraphicElementContainer</code>
+     *  will pass along the display objects to the rest of the elements in the sequence.</p>
      *
-     *  The Group ensures that this method is called only when needed.
+     *  <p>The <code>IGraphicElementContainer</code> ensures that this method is called only when needed.</p>
      *
      *  <p>If the element wants to participate in the DisplayObject
      *  sharing, then the new DisplayObject must implement IShareableDisplayObject.
-     *  This interface is being used by the Group to manage invalidation and
+     *  This interface is being used by the <code>IGraphicElementContainer</code> to manage invalidation and
      *  redrawing of the graphic element sequence and typically is not directly
-     *  used by the Developer.</p>
+     *  used by the developer.</p>
      *
-     *  <p>To reevaluate the shared sequences, call the parent Group
-     *  <code>invalidateGraphicElementSharing()</code> method.</p>
+     *  <p>To reevaluate the shared sequences, call the 
+     *  <code>invalidateGraphicElementSharing()</code> method
+     *  on the <code>IGraphicElementContainer</code>.</p>
      *
-     *  <p>To force the Group to remove the element's current
+     *  <p>To force the <code>IGraphicElementContainer</code> to remove the element's current
      *  DisplayObject from its display list and recalculate the
-     *  display object sharing, call the parent Group's
-     *  <code>discardDisplayObject()</code> method.</p>
+     *  display object sharing, call the
+     *  <code>discardDisplayObject()</code> method on the <code>IGraphicElementContainer</code>.</p>
      *
      *  @return The display object created.
      * 
      *  @see #displayObject
-     *  @see spark.components.Group#invalidateGraphicElementSharing
-     *  @see spark.components.Group#discardDisplayObject
+     *  @see spark.core.IGraphicElementContainer#invalidateGraphicElementSharing
+     *  @see spark.core.IGraphicElementContainer#discardDisplayObject
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -164,7 +172,7 @@ public interface IGraphicElement extends IVisualElement
      *  Determines whether this element can draw itself to the
      *  <code>sharedDisplayObject</code> of the sequence.
      * 
-     *  <p>Typically implementers will return <code>true</code> when this
+     *  <p>Typically implementers return <code>true</code> when this
      *  IGraphicElement can cumulatively draw in the shared
      *  DisplayObject <code>graphics</code> property.
      *  In all cases where this IGraphicElement needs to set
@@ -173,23 +181,25 @@ public interface IGraphicElement extends IVisualElement
      *  Examples for such properties are rotation, scale, transform,
      *  mask, alpha, filters, color transform, 3D, and layer.</p>
      *
-     *  <p>When this method returns true, subsequent calls to the getter of the
+     *  <p>When this method returns <code>true</code>, subsequent calls to the getter of the
      *  <code>displayObject</code> property must return the same display object.</p>
      *
      *  <p>In certain cases, the <code>sharedDisplayObject</code> property might be
-     *  the parent Group itself. In the rest of the cases, the
+     *  the <code>IGraphicElementContainer</code> itself. In the rest of the cases, the
      *  DisplayObject is created by the first element in the sequence.</p> 
      *  
      *  <p>When this IGraphicElement needs to rebuild its sequence,
-     *  it notifies the parent Group by calling its
+     *  it notifies the <code>IGraphicElementContainer</code> by calling its
      *  <code>invalidateGraphicElementSharing()</code> method.</p>
+     *
+     *  @param sharedDisplayObject The shared DisplayObject.
      * 
      *  @return Returns <code>true</code> when this IGraphicElement can draw itself
      *  to the shared DisplayObject of the sequence.
      *
      *  @see #canShareWithPrevious
      *  @see #canShareWithNext
-     *  @see spark.components.Group#invalidateGraphicElementSharing
+     *  @see spark.core.IGraphicElementContainer#invalidateGraphicElementSharing
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -203,12 +213,13 @@ public interface IGraphicElement extends IVisualElement
      *  share display objects with the previous IGraphicElement
      *  in the sequence.
      * 
-     *  <p>In certain cases the element might be passed to the parent
-     *  Group itself in a call to the <code>setSharedDisplayObject()</code> method.
+     *  <p>In certain cases the element might be passed to the <code>IGraphicElementContainer</code>
+     *  in a call to the <code>setSharedDisplayObject()</code> method.
      *  In those cases, this method is not called.</p>
      * 
      *  @param element The element that comes before this element in the sequence.
-     *  @return Returns true when this element is compatible with the previous
+     *  
+     *  @return Returns <code>true</code> when this element is compatible with the previous
      *  element in the sequence.
      * 
      *  @see #canShareWithNext
@@ -227,7 +238,8 @@ public interface IGraphicElement extends IVisualElement
      *  in the sequence.
      * 
      *  @param element The element that comes after this element in the sequence.
-     *  @return Returns true when this element is compatible with the previous
+     * 
+     *  @return Returns <code>true</code> when this element is compatible with the previous
      *  element in the sequence.
      * 
      *  @see #canShareWithPrevious
@@ -241,28 +253,28 @@ public interface IGraphicElement extends IVisualElement
     function canShareWithNext(element:IGraphicElement):Boolean;
     
     /**
-     *  Called by Group when an IGraphicElement
-     *  is added to or removed from a Group.
-     *  <p>Developers typically never need to call this method.</p>
+     *  Called by <code>IGraphicElementContainer</code> when an IGraphicElement
+     *  is added to or removed from the host component.
+     *  <p>You typically never need to call this method.</p>
      *
-     *  @param parent The parent group of this <code>IGraphicElement</code>.
+     *  @param parent The <code>IGraphicElementContainer</code> of this <code>IGraphicElement</code>.
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
      *  @productversion Flex 4
      */
-    function parentChanged(parent:Group):void;
+    function parentChanged(parent:IGraphicElementContainer):void;
 
     /**
-     *  Called by the parent Group to validate the properties of
+     *  Called by the <code>IGraphicElementContainer</code> to validate the properties of
      *  this element.
      * 
-     *  <p>To ensure that this method is called, notify the parent Group
+     *  <p>To ensure that this method is called, notify the <code>IGraphicElementContainer</code>
      *  by calling its <code>invalidateGraphicElementProperties()</code> method.</p>  
      * 
      *  <p>This method might be called even if this element has not
-     *  notified the parent Group.</p>
+     *  notified the <code>IGraphicElementContainer</code>.</p>
      * 
      *  @see #validateSize
      *  @see #validateDisplayList
@@ -275,18 +287,18 @@ public interface IGraphicElement extends IVisualElement
     function validateProperties():void;
     
     /**
-     *  Called by the parent Group to validate the size of
+     *  Called by the <code>IGraphicElementContainer</code> to validate the size of
      *  this element.
      * 
      *  <p>When the size of the element changes and is going to affect the
-     *  parent Group layout, the implementer is responsible
+     *  <code>IGraphicElementContainer</code> layout, the implementer is responsible
      *  for invalidating the parent's size and display list.</p>
      * 
-     *  <p>To ensure that this method is called, notify the parent Group
+     *  <p>To ensure that this method is called, notify the <code>IGraphicElementContainer</code>
      *  by calling its <code>invalidateGraphicElementSize()</code> method.</p>
      * 
      *  <p>This method might be called even if this element has not
-     *  notified the parent Group.</p>
+     *  notified the <code>IGraphicElementContainer</code>.</p>
      * 
      *  @see #validateProperties
      *  @see #validateDisplayList
@@ -299,7 +311,7 @@ public interface IGraphicElement extends IVisualElement
     function validateSize():void;
     
     /**
-     *  Called by the parent Group to redraw this element
+     *  Called by the <code>IGraphicElementContainer</code> to redraw this element
      *  in its <code>displayObject</code> property.
      *
      *  <p>If the element is the first in the sequence (<code>displayObjectSharingMode</code>
@@ -309,14 +321,14 @@ public interface IGraphicElement extends IVisualElement
      *
      *  <p>The element must alway redraw even if it itself has not changed
      *  since the last time the <code>validateDisplayList()</code> method was called.
-     *  The parent <code>Group</code> will redraw the whole sequence
+     *  The parent <code>IGraphicElementContainer</code> will redraw the whole sequence
      *  if any of its elements need to be redrawn.</p>
      * 
-     *  <p>To ensure this method is called, notify the parent Group
+     *  <p>To ensure this method is called, notify the <code>IGraphicElementContainer</code>
      *  by calling its <code>invalidateGraphicElementSize()</code> method.</p>  
      * 
      *  <p>This method might be called even if this element has not
-     *  notified the parent Group.</p>
+     *  notified the <code>IGraphicElementContainer</code>.</p>
      * 
      *  @see #displayObject
      *  @see #validateProperties

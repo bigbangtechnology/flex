@@ -77,9 +77,9 @@ written permission of Adobe.
 			private var errorID:String = "";
 			
 			private var applicationName:String = "";
-			private var applicationVersion:String = "";
+			private var applicationVersionLabel:String = "";
 			//
-			private var updateVersion:String = "";
+			private var updateVersionLabel:String = "";
 			private var updaterResourceManager:UpdaterResourceManager = new UpdaterResourceManager();
 			private var details:Array = [];
 			//
@@ -438,18 +438,18 @@ written permission of Adobe.
 			private function appCheckStatus(event:Event):void
 			{
                 var updateEvent:StatusUpdateEvent = new StatusUpdateEvent(event.type, event.bubbles, event.cancelable,
-																event["available"], event["version"], event["details"]);
+																event["available"], event["version"], event["details"], event["versionLabel"]);
 				log("appCheckStatus", event);
 				if (updateEvent.available) {
 					currentState = "UpdateAvailable";
 					txtUpdateApplication.text = getApplicationName();
-					txtUpdateCurrentVersion.text = getApplicationVersion();
-					txtUpdateNewVersion.text = updateEvent.version;
+					txtUpdateCurrentVersion.text = getApplicationVersionLabel();
+					txtUpdateNewVersion.text = updateEvent.versionLabel;
 					updateLinkButton.styleName="applicationUpdaterLinkClose";
 					// set text in all textareas
 					details = updateEvent.details;
 					setDetails();
-					updateVersion = updateEvent.version;
+					updateVersionLabel = updateEvent.versionLabel;
 				} else {
 					currentState = "NoUpdates";
 					txtNoUpdateApplication.text = getApplicationName();
@@ -548,8 +548,8 @@ written permission of Adobe.
 					installLinkButton.styleName="applicationUpdaterLinkClose";
 				}
 				txtInstallApplication.text = getApplicationName();
-				txtInstallCurrentVersion.text = getApplicationVersion();
-				txtInstallNewVersion.text = updateVersion;
+				txtInstallCurrentVersion.text = getApplicationVersionLabel();
+				txtInstallNewVersion.text = updateVersionLabel;
 
 				if (isDialogVisible(currentState)) 
 				{
@@ -573,15 +573,15 @@ written permission of Adobe.
 			private function appFileStatus(event:Event):void
 			{
                 var updateEvent:StatusFileUpdateEvent = new StatusFileUpdateEvent(event.type, event.bubbles, event.cancelable,
-                                                        event["available"], event["version"], event["path"]);
+                                                        event["available"], event["version"], event["path"], event["versionLabel"]);
 				log("appFileStatus", event);
 				if (updateEvent.available)
 				{
 					currentState = "FileUpdateAvailable";
 					txtFileApplication.text = getApplicationName();
 					txtFileName.text = new File(updateEvent.path).name;
-					txtFileCurrentVersion.text = getApplicationVersion();
-					txtFileNewVersion.text = updateEvent.version;
+					txtFileCurrentVersion.text = getApplicationVersionLabel();
+					txtFileNewVersion.text = updateEvent.versionLabel;
 				} else {
 					currentState = "FileNoUpdates";
 					txtNoFileName.text = new File(updateEvent.path).name;
@@ -714,18 +714,26 @@ written permission of Adobe.
 				return applicationName;
 			}
 			
-			private function getApplicationVersion():String
+			private function getApplicationVersionLabel():String
 			{
-				if (applicationVersion)
+				if (applicationVersionLabel)
 				{
-					return applicationVersion;
+					return applicationVersionLabel;
 				}
 				var appXML:XML = NativeApplication.nativeApplication.applicationDescriptor;
 				var ns:Namespace = appXML.namespace();
-				applicationVersion = appXML.ns::version; 
-				return applicationVersion;
+				//if <version> is undefined , namespace is >=2.5
+				if(appXML.ns::version == undefined)
+				{
+					applicationVersionLabel = ((appXML.ns::versionLabel == undefined) ? (appXML.ns::versionNumber) : (appXML.ns::versionLabel)); 
+				}
+				else
+				{
+					applicationVersionLabel = appXML.ns::version;
+				}
+				return applicationVersionLabel;
 			}			
-			
+		
 			private function get windowTitle():String
 			{
 				if (m_title != null) return m_title;
@@ -798,19 +806,19 @@ written permission of Adobe.
 					case "UpdateAvailable":
 					case "UpdateAvailable_More":
 						txtUpdateApplication.text = getApplicationName();
-						txtUpdateCurrentVersion.text = getApplicationVersion();
+						txtUpdateCurrentVersion.text = getApplicationVersionLabel();
 						txtUpdateNewVersion.text = "2.0";
 						break;			
 					case "InstallUpdate":
 					case "InstallUpdate_More":
 						txtInstallApplication.text = getApplicationName();
-						txtInstallCurrentVersion.text = getApplicationVersion();
+						txtInstallCurrentVersion.text = getApplicationVersionLabel();
 						txtInstallNewVersion.text = "2.0";
 						break;
 					case "FileUpdateAvailable":
 						txtFileApplication.text = getApplicationName();
 						txtFileName.text = "TestUpdateFile.air";
-						txtFileCurrentVersion.text = getApplicationVersion();
+						txtFileCurrentVersion.text = getApplicationVersionLabel();
 						txtFileNewVersion.text = "2.0";
 						break;
 					case "FileNoUpdates":

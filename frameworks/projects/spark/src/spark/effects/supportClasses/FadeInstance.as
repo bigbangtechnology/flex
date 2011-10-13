@@ -13,6 +13,7 @@ package spark.effects.supportClasses
 {
 import flash.events.Event;
 
+import mx.core.mx_internal;
 import mx.effects.effectClasses.PropertyChanges;
 import mx.events.FlexEvent;
 import mx.managers.LayoutManager;
@@ -23,6 +24,8 @@ import spark.effects.animation.Keyframe;
 import spark.effects.animation.MotionPath;
 import spark.effects.animation.SimpleMotionPath;
 import spark.primitives.supportClasses.GraphicElement;
+
+use namespace mx_internal;
 
 /**
  *  The FadeInstance class implements the instance class
@@ -131,25 +134,105 @@ public class FadeInstance extends AnimateInstance
             {
                 var fadeIn:Boolean = (visibleChange && propertyChanges.end["visible"]) ||
                     (parentChange && propertyChanges.end["parent"]);
+                if (playReversed)
+                    fadeIn = !fadeIn;
                 if (fadeIn)
                 {
                     if (isNaN(alphaFrom))
-                        alphaFrom = 0;
+                        alphaFrom = !(playReversed) ? 0 : toValue;
                     if (alphaFrom == 0)
                         target.alpha = 0;
-                    alphaTo = toValue;
+                    alphaTo = !playReversed ? toValue : 0;
                     if ("visible" in target)
                         target.visible = true;
                 }
                 else if (isNaN(alphaTo)) // fade out
                 {
-                    alphaTo = 0;
+                    if (propertyChanges.end["explicitWidth"] !== undefined &&
+                        isNaN(propertyChanges.end["explicitWidth"]) &&
+                        !isNaN(propertyChanges.start["explicitWidth"]))
+                    {
+                        target.explicitWidth = propertyChanges.start["explicitWidth"];
+                    }
+                    if (propertyChanges.end["explicitHeight"] !== undefined &&
+                        isNaN(propertyChanges.end["explicitHeight"]) &&
+                        !isNaN(propertyChanges.start["explicitHeight"]))
+                    {
+                        target.explicitHeight = propertyChanges.start["explicitHeight"];
+                    }
+                    if (propertyChanges.end["rotation"] !== undefined &&
+                        propertyChanges.end["rotation"] == 0 &&
+                        propertyChanges.start["rotation"] != 0)
+                    {
+                        target.rotation = propertyChanges.start["rotation"];
+                    }
+                    if (propertyChanges.end["x"] !== undefined &&
+                        propertyChanges.end["x"] == 0 &&
+                        propertyChanges.start["x"] != 0)
+                    {
+                        target.x = propertyChanges.start["x"];
+                    }
+                    if (propertyChanges.end["y"] !== undefined &&
+                        propertyChanges.end["y"] == 0 &&
+                        propertyChanges.start["y"] != 0)
+                    {
+                        target.y = propertyChanges.start["y"];
+                    }
+                    if (propertyChanges.end["left"] !== undefined &&
+                        propertyChanges.end["left"] === null &&
+                        propertyChanges.start["left"] !== null)
+                    {
+                        target.left = propertyChanges.start["left"];
+                    }
+                    if (propertyChanges.end["right"] !== undefined &&
+                        propertyChanges.end["right"] === null &&
+                        propertyChanges.start["right"] !== null)
+                    {
+                        target.right = propertyChanges.start["right"];
+                    }
+                    if (propertyChanges.end["top"] !== undefined &&
+                        propertyChanges.end["top"] === null &&
+                        propertyChanges.start["top"] !== null)
+                    {
+                        target.top = propertyChanges.start["top"];
+                    }
+                    if (propertyChanges.end["bottom"] !== undefined &&
+                        propertyChanges.end["bottom"] === null &&
+                        propertyChanges.start["bottom"] !== null)
+                    {
+                        target.bottom = propertyChanges.start["bottom"];
+                    }
+                    if (propertyChanges.end["percentWidth"] !== undefined &&
+                        isNaN(propertyChanges.end["percentWidth"]) &&
+                        !isNaN(propertyChanges.start["percentWidth"]))
+                    {
+                        target.percentWidth = propertyChanges.start["percentWidth"];
+                    }
+                    if (propertyChanges.end["percentHeight"] !== undefined &&
+                        isNaN(propertyChanges.end["percentHeight"]) &&
+                        !isNaN(propertyChanges.start["percentHeight"]))
+                    {
+                        target.percentHeight = propertyChanges.start["percentHeight"];
+                    }
                     restoreAlpha = true;
                     origAlpha = propertyChanges.end["alpha"] !== undefined ?
                         propertyChanges.end["alpha"] :
                         target.alpha;
                     if (visibleChange)
                         makeInvisible = true;
+                    if (!playReversed)
+                    {
+                        alphaTo = 0;
+                    }
+                    else
+                    {
+                        if (isNaN(alphaFrom))
+                        {
+                            target.alpha = 0;
+                            alphaFrom = 0;
+                        }
+                        alphaTo = 1;
+                    }
                 }
             }
         }
@@ -167,6 +250,7 @@ public class FadeInstance extends AnimateInstance
                 target.visible = true;
             }
         }
+            
         motionPaths = new <MotionPath>[new MotionPath("alpha")];
         motionPaths[0].keyframes = new <Keyframe>[new Keyframe(0, alphaFrom), 
             new Keyframe(duration, alphaTo)];

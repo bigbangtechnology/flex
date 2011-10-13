@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout
 {
 	internal class EditClasses
@@ -20,10 +20,14 @@ package flashx.textLayout
 		import flashx.textLayout.events.FlowOperationEvent; FlowOperationEvent;
 		import flashx.textLayout.events.SelectionEvent; SelectionEvent;
  
+		import flashx.textLayout.edit.EditManager; EditManager;
 		import flashx.textLayout.edit.ElementRange; ElementRange;
 		import flashx.textLayout.edit.IEditManager; IEditManager;
 		import flashx.textLayout.edit.Mark; Mark;
 		import flashx.textLayout.edit.SelectionManager; SelectionManager;
+		import flashx.textLayout.edit.ModelEdit; ModelEdit;
+		import flashx.textLayout.edit.IMemento; IMemento;
+		import flashx.textLayout.edit.ElementMark; ElementMark;
 
 		import flashx.textLayout.edit.TextScrap; TextScrap;
 
@@ -33,8 +37,12 @@ package flashx.textLayout
 		import flashx.textLayout.operations.ApplyTCYOperation; ApplyTCYOperation;
 		import flashx.textLayout.operations.ApplyElementIDOperation; ApplyElementIDOperation;
 		import flashx.textLayout.operations.ApplyElementStyleNameOperation; ApplyElementStyleNameOperation;
+		import flashx.textLayout.operations.ApplyElementTypeNameOperation; ApplyElementTypeNameOperation;
+		import flashx.textLayout.operations.CreateDivOperation; CreateDivOperation;
 		import flashx.textLayout.operations.ClearFormatOperation; ClearFormatOperation;
 		import flashx.textLayout.operations.ClearFormatOnElementOperation; ClearFormatOnElementOperation;
+		import flashx.textLayout.operations.CreateListOperation; CreateListOperation;
+		import flashx.textLayout.operations.CreateSubParagraphGroupOperation; CreateSubParagraphGroupOperation;
 		import flashx.textLayout.operations.CompositeOperation; CompositeOperation;
 		import flashx.textLayout.operations.CopyOperation; CopyOperation;
 		import flashx.textLayout.operations.CutOperation; CutOperation;
@@ -46,6 +54,7 @@ package flashx.textLayout
 		import flashx.textLayout.operations.RedoOperation; RedoOperation;
 		import flashx.textLayout.operations.ApplyElementUserStyleOperation; ApplyElementUserStyleOperation;
 		import flashx.textLayout.operations.SplitParagraphOperation; SplitParagraphOperation;
+		import flashx.textLayout.operations.SplitElementOperation; SplitElementOperation;
 		import flashx.textLayout.operations.UndoOperation; UndoOperation;
 
 		import flashx.textLayout.utils.NavigationUtil; NavigationUtil;

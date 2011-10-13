@@ -1,15 +1,18 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.edit
 {
+	import flash.utils.getQualifiedClassName;
+	
+	import flashx.textLayout.conversion.ConverterBase;
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.elements.ContainerFormattedElement;
 	import flashx.textLayout.elements.DivElement;
@@ -17,11 +20,14 @@ package flashx.textLayout.edit
 	import flashx.textLayout.elements.FlowGroupElement;
 	import flashx.textLayout.elements.FlowLeafElement;
 	import flashx.textLayout.elements.LinkElement;
+	import flashx.textLayout.elements.ListItemElement;
 	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.elements.SpanElement;
-	import flashx.textLayout.elements.SubParagraphGroupElement;
+	import flashx.textLayout.elements.SubParagraphGroupElementBase;
 	import flashx.textLayout.elements.TCYElement;
 	import flashx.textLayout.elements.TextFlow;
+	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.TextLayoutFormat;
 	import flashx.textLayout.tlf_internal;
 
 	use namespace tlf_internal;
@@ -33,448 +39,287 @@ package flashx.textLayout.edit
 	 */	
 	public class TextFlowEdit
 	{
-		private static function deleteRange(theFlow:FlowGroupElement, startPos:int, endPos:int):int
+		tlf_internal static function deleteRange(textFlow:TextFlow, startPos:int, endPos:int):ParagraphElement
 		{
-			var curFlowElementIdx:int = 0;
-			var curFlowElement:FlowElement;
-			var needToMergeWhenDone:Boolean = false;
-			var relStart:int = 0;
-			var relEnd:int = 0;
-			var s:SpanElement;
-			var processedAnElement:Boolean = false;
-			var totalItemsDeleted:int = 0;
-			var curNumDeleted:int = 0;
-			var tempFlowElement:FlowElement;
-			var numItems:int;
-			
-			// do the middle all in one big block
-			var beginBlockDeleteIdx:int = -1;
-			var blockDeleteNumElements:int;
-			var blockDeleteLength:int;
-			
-			while (curFlowElementIdx < theFlow.numChildren)
+			var mergePara:ParagraphElement;
+
+			// If the range to be deleted contains the paragraph end, we may have to merge up the paragraphs when we're done.
+			if (endPos > startPos)
 			{
-				curFlowElement = theFlow.getChildAt(curFlowElementIdx);
-				relStart = startPos - curFlowElement.parentRelativeStart;
-				if (relStart < 0) relStart = 0;
-				relEnd = endPos - curFlowElement.parentRelativeStart;
-							
-				if ((relStart < curFlowElement.textLength) && (relEnd > 0))
+				var firstLeafInRange:FlowLeafElement = textFlow.findLeaf(startPos);
+				var lastLeafInRange:FlowLeafElement = textFlow.findLeaf(endPos - 1);
+				var firstParagraphInRange:ParagraphElement = firstLeafInRange.getParagraph();
+				var lastParagraphInRange:ParagraphElement = lastLeafInRange.getParagraph();
+				var firstParaStart:int = firstParagraphInRange.getAbsoluteStart();
+				var lastParaEnd:int = lastParagraphInRange.getAbsoluteStart() + lastParagraphInRange.textLength;
+				// If the selection is inside a single paragraph, merge only if the terminator is included and the start of the paragraph is not.
+				// If the two paragraphs are different, merge unless the start and end match exactly
+				// Don't merge if the paragraph is an empty paragraph in a list item that has other content (it will just come back again in normalize)
+				var doMerge:Boolean = false;
+				if (firstParagraphInRange == lastParagraphInRange)
+					doMerge = (endPos == lastParaEnd && startPos != firstParaStart);
+				else
+					doMerge = (startPos != firstParaStart);
+				if (doMerge)
 				{
-					//at least partially selected
-					if ((relStart <= 0) && ((relEnd > curFlowElement.textLength) || ((relEnd >= curFlowElement.textLength) && (curFlowElement is ParagraphElement))))
+					var followingLeaf:FlowLeafElement = textFlow.findLeaf(endPos);
+					if (followingLeaf)
 					{
-						//completely selected
-						// If the last character of a paragraph is part of the span, it won't get deleted. We will skip over it for now, and may delete it later as 
-						// part of a paragraph merge.
-						curNumDeleted = curFlowElement.textLength;
-						var skippingTerminator:Boolean = curFlowElementIdx == theFlow.numChildren - 1 && (curFlowElement is SpanElement) && (theFlow is ParagraphElement);
-						if (skippingTerminator/* || !(theFlow is TextFlow)*/)
-						{
-							if (beginBlockDeleteIdx != -1)
-							{
-								theFlow.replaceChildren(beginBlockDeleteIdx,beginBlockDeleteIdx+blockDeleteNumElements);
-								curFlowElementIdx -= blockDeleteNumElements;
-								totalItemsDeleted += blockDeleteLength;
-								endPos -= blockDeleteLength;
-								beginBlockDeleteIdx = -1;
-							}
-							theFlow.replaceChildren(curFlowElementIdx, curFlowElementIdx + 1, null);
-							// if (skippingTerminator)
-							++curFlowElementIdx;
-							totalItemsDeleted += curNumDeleted;
-							endPos -= curNumDeleted;
-						}
-						else
-						{
-							// setup for a block delete
-							if (beginBlockDeleteIdx == -1)
-							{
-								beginBlockDeleteIdx = curFlowElementIdx;
-								blockDeleteNumElements = 0;
-								blockDeleteLength = 0;
-							}
-							blockDeleteNumElements++;
-							blockDeleteLength += curNumDeleted;
-							++curFlowElementIdx;
-						}
-					} 
-					else 
-					{ 	//not completely selected
-						if (beginBlockDeleteIdx != -1)
-						{
-							theFlow.replaceChildren(beginBlockDeleteIdx,beginBlockDeleteIdx+blockDeleteNumElements);
-							curFlowElementIdx -= blockDeleteNumElements;
-							totalItemsDeleted += blockDeleteLength;
-							endPos -= blockDeleteLength;
-							beginBlockDeleteIdx = -1;
-						}
-						if (curFlowElement is SpanElement) 
-						{
-							s = curFlowElement as SpanElement;
-							
-							if(relEnd > s.textLength) 
-								relEnd = s.textLength;	
-								
-							s.replaceText(relStart, relEnd, "");
-							curNumDeleted = (relEnd - relStart);
-							totalItemsDeleted += curNumDeleted;
-							endPos -= curNumDeleted;
-						} else if (!(curFlowElement is FlowGroupElement))
-						{
-							curNumDeleted = curFlowElement.textLength;
-							totalItemsDeleted += curFlowElement.textLength;
-							endPos -= curNumDeleted;
-							theFlow.replaceChildren(curFlowElementIdx, curFlowElementIdx + 1, null);			
-						} else { //it must be a FlowGroupElement of some kind
-							if ((!processedAnElement) && (relEnd >= curFlowElement.textLength))
-							{
-								if (curFlowElement is ParagraphElement)
-									needToMergeWhenDone = true;
-								else if (curFlowElement is FlowGroupElement)
-								{
-									numItems = (curFlowElement as FlowGroupElement).numChildren;
-									if (numItems > 0)
-									{
-										tempFlowElement = (curFlowElement as FlowGroupElement).getChildAt(numItems - 1);
-										if (tempFlowElement is ParagraphElement)
-										{
-											needToMergeWhenDone = true;
-										}
-									}
-								}
-							}							
-							curNumDeleted = TextFlowEdit.deleteRange(curFlowElement as FlowGroupElement, relStart, relEnd);
-							totalItemsDeleted += curNumDeleted;
-							endPos -= curNumDeleted;
-							if (needToMergeWhenDone == true) 
-								endPos++;
-							if (!(curFlowElement is ParagraphElement)) 
-								needToMergeWhenDone = false;
-						}
-						if (processedAnElement)
-						{
-							break;
-						}						
-						curFlowElementIdx++;
+						mergePara = followingLeaf.getParagraph();
+						if (mergePara.textLength == 1 && mergePara.parent is ListItemElement && mergePara.parent.numChildren > 1)
+							mergePara = null;
 					}
-					processedAnElement = true;
-				} else if (processedAnElement)
-				{
-					break;
-				} else {
-					curFlowElementIdx++;
 				}
 			}
-			if (beginBlockDeleteIdx != -1)
+
+			deleteRangeInternal(textFlow, startPos, endPos - startPos);
+	
+			if (mergePara)
 			{
-				theFlow.replaceChildren(beginBlockDeleteIdx,beginBlockDeleteIdx+blockDeleteNumElements);
-				curFlowElementIdx -= blockDeleteNumElements;
-				totalItemsDeleted += blockDeleteLength;
-				endPos -= blockDeleteLength;
-			}
-			if (needToMergeWhenDone)
-			{
-				joinNextParagraph(ParagraphElement(curFlowElement.getPreviousSibling()));
+				var previousLeaf:FlowLeafElement = mergePara.getFirstLeaf().getPreviousLeaf();
+				mergePara = previousLeaf ? previousLeaf.getParagraph() : null;
 			}
 			
-			return totalItemsDeleted;
+			return mergePara;
 		}
 		
-		private static function isFlowElementInArray(arr:Array, fl:FlowElement):Boolean
+		private static function deleteRangeInternal(element:FlowGroupElement, relativeStart:int, numToDelete:int):void
 		{
-			if (arr != null)
-			{
-				var arrLen:int = arr.length;
-				var currPos:int = 0;
-				while (currPos < arrLen)
-				{
-					if (arr[currPos] == fl)
-					{
-						return true;
-					}
-					currPos++;
-				}
-			}
-			return false;
-		}
-				
-		private static function getContainer(flEl:FlowElement):ContainerFormattedElement
-		{
-			while (!(flEl.parent is ContainerFormattedElement))
-			{
-				flEl = flEl.parent;
-			}
-			return flEl.parent as ContainerFormattedElement;
-		}
-		
-		private static function isInsertableItem(flItem:FlowElement, missingBeginElements:Array, missingEndElements:Array):Boolean
-		{
-			return ((flItem is ParagraphElement) ||
-					(!TextFlowEdit.isFlowElementInArray(missingBeginElements, flItem) &&
-					 !TextFlowEdit.isFlowElementInArray(missingEndElements, flItem)));
-		}
-		
-		private static function putDivAtEndOfContainer(container:ContainerFormattedElement):DivElement
-		{
-			var tempDiv:DivElement = new DivElement();
-			var tempPar:ParagraphElement = new ParagraphElement();
-			tempPar.replaceChildren(0, 0, new SpanElement());
-			tempDiv.replaceChildren(0, 0, tempPar);
-			container.replaceChildren(container.numChildren, container.numChildren, tempDiv);
-			return tempDiv;			
-		}
-		
-		private static function putDivAtEndOfContainerAndInsertTextFlow(theFlow:TextFlow, pos:int, insertedTextFlow:FlowGroupElement, missingBeginElements:Array, missingEndElements:Array, separatorArray:Array):int
-		{
-			var nextInsertionPosition:int = pos;
-			var insertContainer:ContainerFormattedElement = TextFlowEdit.getContainer(theFlow.findAbsoluteParagraph(nextInsertionPosition));						
-			var tempDiv:DivElement = TextFlowEdit.putDivAtEndOfContainer(insertContainer);
-			separatorArray.push(tempDiv);
-
-			var childArray:Array = insertedTextFlow.mxmlChildren;
-			insertedTextFlow.replaceChildren(0, insertedTextFlow.numChildren);	// removing them from the old parent in a block is much faster
-			for each (var tempFlChild:FlowElement in childArray)
-				nextInsertionPosition = TextFlowEdit.insertTextFlow(theFlow, nextInsertionPosition, tempFlChild as FlowGroupElement, missingBeginElements, missingEndElements, separatorArray);
-
-			var elementIdx:int = tempDiv.parent.getChildIndex(tempDiv);
-			tempDiv.parent.replaceChildren(elementIdx, elementIdx + 1, null);
-			separatorArray.pop();
-			return nextInsertionPosition;
-		}
-		
-		private static function isContainerSeparator(fl:FlowElement, separatorArray:Array):Boolean
-		{
-			var i:int = 0;
-			var numItemsInArray:int = separatorArray.length;
-			while (i < numItemsInArray)
-			{
-				if (separatorArray[i] == fl)
-				{
-					return true;
-				}
-				i++;
-			}
-			return false;
-		}
-		
-		private static var processedFirstFlowElement:Boolean = false;
-		private static function insertTextFlow(theFlow:TextFlow, pos:int, insertedTextFlow:FlowGroupElement, missingBeginElementsInFlow:Array = null, missingEndElementsInFlow:Array = null, separatorArray:Array = null):int
-		{
-			var nextInsertionPosition:int = pos;
-						
-			if (!TextFlowEdit.isInsertableItem(insertedTextFlow, missingBeginElementsInFlow, missingEndElementsInFlow) ||
-				(insertedTextFlow is TextFlow))
-			{
-				if (insertedTextFlow is TextFlow)
-				{
-					processedFirstFlowElement = false;
-					var tempDiv:DivElement = TextFlowEdit.putDivAtEndOfContainer(theFlow as ContainerFormattedElement);
-					separatorArray = new Array();
-					separatorArray.push(tempDiv);
-				}
-				var tempFlChild:FlowElement = insertedTextFlow.getChildAt(0);
-				if (TextFlowEdit.isInsertableItem(tempFlChild, missingBeginElementsInFlow, missingEndElementsInFlow))
-				{
-					nextInsertionPosition = TextFlowEdit.putDivAtEndOfContainerAndInsertTextFlow(theFlow, nextInsertionPosition, insertedTextFlow, missingBeginElementsInFlow, missingEndElementsInFlow, separatorArray);  
-				} else {				
-					while (insertedTextFlow.numChildren > 0)
-					{
-						tempFlChild = insertedTextFlow.getChildAt(0);
-						insertedTextFlow.replaceChildren(0, 1, null);
-						nextInsertionPosition = TextFlowEdit.insertTextFlow(theFlow, nextInsertionPosition, tempFlChild as FlowGroupElement, missingBeginElementsInFlow, missingEndElementsInFlow, separatorArray);
-					}
-				}
-				
-				if (insertedTextFlow is TextFlow)
-				{
-					theFlow.replaceChildren(theFlow.numChildren - 1, theFlow.numChildren, null);
-					if (nextInsertionPosition >= theFlow.textLength)
-					{
-						nextInsertionPosition = theFlow.textLength - 1;
-					}
-					separatorArray.pop();					
-				}				
-			} else {
-				//if you are inserting at the very end of a paragraph, bump up the position
-				//by one.  Otherwise, if you are not at the end of the paragraph, split at
-				//the position, and then move up by 1.
-										
-				var leafEl:FlowLeafElement = null;
-				if (pos > 0) leafEl = theFlow.findLeaf(pos - 1);
-				var para:ParagraphElement = theFlow.findAbsoluteParagraph(pos);
-				var paraSplitIndex:int = pos - para.getAbsoluteStart();
-				var flowElIndex:int = para.parent.getChildIndex(para);
-				var okToMergeWithAfter:Boolean = true;
-				
-				if (paraSplitIndex > 0)
-				{
-					if (paraSplitIndex < (para.textLength - 1))
-					{
-						
-						para.splitAtPosition(paraSplitIndex);
-						
-					} else if ((insertedTextFlow.textLength == 1) && !processedFirstFlowElement) {
-						if (TextFlowEdit.isFlowElementInArray(missingEndElementsInFlow, insertedTextFlow) ||
-							TextFlowEdit.isFlowElementInArray(missingBeginElementsInFlow, insertedTextFlow))
-						{ 
-							processedFirstFlowElement = true;
-							return nextInsertionPosition;
-						} else {
-							
-							para.splitAtPosition(paraSplitIndex);
-									
-						}
-					} else {
-						okToMergeWithAfter = false;
-					}
-					pos++;
-				} else { //no split done. So we want to insert after the previous paragraph.
-					flowElIndex = flowElIndex - 1;
-				}
+			var pendingDeleteStart:int = -1;
+			var pendingDeleteCount:int = 0;
 			
-				//insert the insertedTextFlow after the paragraph at paragraphIndex
-				var paragraphContainer:FlowGroupElement = para.parent;
-				
-				if (TextFlowEdit.isContainerSeparator(paragraphContainer, separatorArray))
+			var childIndex:int = element.findChildIndexAtPosition(relativeStart);
+			while (numToDelete > 0 && childIndex < element.numChildren)
+			{
+				var child:FlowElement = element.getChildAt(childIndex);
+				if (relativeStart <= child.parentRelativeStart && numToDelete >= child.textLength)	// remove the entire child
 				{
-					flowElIndex = paragraphContainer.parent.getChildIndex(paragraphContainer);
-					paragraphContainer = paragraphContainer.parent;
-					flowElIndex--;	
+					if (pendingDeleteStart < 0)
+						pendingDeleteStart = childIndex;
+					pendingDeleteCount++;
+					numToDelete -= child.textLength;
 				}
+				else // deleting part of the child
+				{
+					if (pendingDeleteStart >= 0)
+					{
+						element.replaceChildren(pendingDeleteStart, pendingDeleteStart + pendingDeleteCount);
+						childIndex -= pendingDeleteCount;
+						pendingDeleteStart = -1;
+						pendingDeleteCount = 0;
+					}
+					var childStart:int = child.parentRelativeStart;
+					var childRelativeStart:int = Math.max(relativeStart - childStart, 0);
+					var childNumToDelete:int = Math.min(child.textLength - childRelativeStart, numToDelete);
+					if (child is SpanElement)
+					{
+						var span:SpanElement = child as SpanElement;
+						span.replaceText(childRelativeStart, childRelativeStart + childNumToDelete, "");
+						numToDelete -= childNumToDelete;
+					}
+					else
+					{
+						CONFIG::debug { assert (child is FlowGroupElement, "Expected FlowGroupElement"); }
+						deleteRangeInternal(child as FlowGroupElement, childRelativeStart, childNumToDelete);
+						numToDelete -= childNumToDelete;
+					}
+				}
+				childIndex++
+			}
+			if (pendingDeleteStart >= 0)
+				element.replaceChildren(pendingDeleteStart, pendingDeleteStart + pendingDeleteCount);
+		}
 				
-				paragraphContainer.replaceChildren(flowElIndex + 1, flowElIndex + 1, insertedTextFlow);
-				nextInsertionPosition = pos + insertedTextFlow.textLength;
-
-				if (insertedTextFlow is ParagraphElement)
-				{	
-					var missingEnd:Boolean = TextFlowEdit.isFlowElementInArray(missingEndElementsInFlow, insertedTextFlow);
-					if (okToMergeWithAfter && missingEnd)
+		// Find the lowest possible FlowElement ancestor of element that can accept prospectiveChild as a child element.
+		private static function findLowestPossibleParent(element:FlowGroupElement, prospectiveChild:FlowElement):FlowGroupElement
+		{
+			while (element && !element.canOwnFlowElement(prospectiveChild))
+				element = element.parent;
+			return element;
+		}
+		
+		private static function removePasteAttributes(element:FlowElement):void
+		{
+			if (!element)
+				return;
+			
+			if (element is FlowGroupElement && element.format)
+			{
+				var flowGroupElement:FlowGroupElement = FlowGroupElement(element);
+				if (element.format.getStyle(ConverterBase.MERGE_TO_NEXT_ON_PASTE) !== undefined)
+					removePasteAttributes(flowGroupElement.getChildAt(flowGroupElement.numChildren - 1));
+			}
+			element.setStyle(ConverterBase.MERGE_TO_NEXT_ON_PASTE, undefined);		
+		}
+		
+		// Apply the formatting attributes from the (soon to be) previous element to the insertThis element(s). Used when we're about to 
+		// insert the element(s) and we want it to adopt the formatting of its context.
+		private static function applyFormatToElement(destinationElement:FlowGroupElement, childIndex:int, insertThis:Object):void
+		{
+			var formatSourceSibling:FlowElement;
+			
+			// find the previous sibling and use its formats for the new siblings
+			if (childIndex > 0)
+				formatSourceSibling = destinationElement.getChildAt(childIndex - 1);
+			else
+				formatSourceSibling = destinationElement.getChildAt(0);
+			if (formatSourceSibling)
+			{ 
+				var spanFormat:ITextLayoutFormat;
+				if (formatSourceSibling is FlowGroupElement)	// take all levels from the sibling down to the root into account
+				{
+					var element:FlowElement = FlowGroupElement(formatSourceSibling).getLastLeaf();
+					var concatFormat:TextLayoutFormat;
+					while (element != formatSourceSibling.parent)
 					{
-						// Merge the paragraph with what comes next. If the inserted paragraph is inserted to the middle or end of the paragraph,
-						// then merge the next paragraph into the inserted paragraph. If we're inserting to the start of the paragraph, merge
-						// the inserted paragraph into the next paragraph, so that the original host paragraph maintains its format settings.
-						if (paraSplitIndex == 0)
+						if (element.format)
 						{
-							if (joinToNextParagraph(ParagraphElement(insertedTextFlow)))
-								nextInsertionPosition--;
+							if (!concatFormat)
+								concatFormat = new TextLayoutFormat(element.format);
+							else 
+								concatFormat.concatInheritOnly(element.format);
 						}
-						else if (joinNextParagraph(ParagraphElement(insertedTextFlow)))
-							nextInsertionPosition--;
+						element = element.parent;
 					}
-
-					if (!processedFirstFlowElement)
-					{
-						if (paraSplitIndex > 0)
-						{
-							var prevSibling:ParagraphElement = insertedTextFlow.getPreviousSibling() as ParagraphElement;
-							if (prevSibling && joinNextParagraph(prevSibling))
-								nextInsertionPosition--;
-						}
-					}
+					spanFormat = concatFormat;
+				}
+				else 
+					spanFormat = formatSourceSibling.format;
 					
-					if (missingEnd)
-					{
-						var absolutePar:ParagraphElement = paragraphContainer.getTextFlow().findAbsoluteParagraph(nextInsertionPosition);
-						var absoluteParIndex:int = absolutePar.getAbsoluteStart();
-						if ((nextInsertionPosition - absolutePar.getAbsoluteStart()) == 0)
-						{
-							nextInsertionPosition--;
-						}
-					}
+				if (insertThis is Array)
+				{
+					for each (var scrapElement:FlowElement in insertThis)
+						if (scrapElement is FlowLeafElement)
+							scrapElement.format = spanFormat;
+						else
+							scrapElement.format = formatSourceSibling.format;
 				}
-				
-				
-				processedFirstFlowElement = true;			
+				else if (insertThis is FlowLeafElement)
+					insertThis.format = spanFormat;
+				else
+					insertThis.format = formatSourceSibling.format;
 			}
-			return nextInsertionPosition;
 		}
-		
 		/**
 		 * Replaces the range of text positions that the <code>startPos</code> and
-		 * <code>endPos</code> parameters specify with the <code>newTextFlow</code> parameter in
+		 * <code>endPos</code> parameters specify with the <code>textScrap</code> parameter in
 		 * <code>theFlow</code>.
 		 * <p>To delete elements, pass <code>null</code> for <code>newTextFlow</code>.</p>
 		 * <p>To insert an element, pass the same value for <code>startPos</code> and <code>endPos</code>.
-		 * <p>To insert a newline after the <code>newTextFlow</code> is inserted, pass in
-		 * <code>true</code> for <code>insertParAfter</code></p>   
 		 * <p>The new element will be inserted before the specified index.</p>
 		 * <p>To append the TextFlow, pass <code>theFlow.length</code> for <code>startPos</code> and <code>endPos</code>.</p>
 		 * 
-		 * @param theFlow The TextFlow that is being inserted into.
-		 * @param startPos The index value of the first position of the replacement range in the TextFlow.
-		 * @param endPos The index value following the end position of the replacement range in the TextFlow.
-		 * @param newTextFlow The TextFlow to be merged into theFlow.
-		 * @param missingBeginElementsInFlow Array indicating all the elements within the TextFlow that have their beginning parts chopped off.
-		 * @param missingEndElementsInFlow Array indicating all the elements within the TextFlow that have their ending parts chopped off.
+		 * @param textFlow The TextFlow that is being inserted into.
+		 * @param absoluteStart The index value of the first position of the replacement range in the TextFlow.
+		 * @param textScrap The TextScrap to be pasted into theFlow.
 		 */				
-		public static function replaceRange(theFlow:TextFlow, startPos:int, endPos:int, textScrap:TextScrap = null):int
+		public static function insertTextScrap(textFlow:TextFlow, absoluteStart:int, textScrap:TextScrap, applyFormat:Boolean):int
 		{
-			var nextInsertPosition:int = startPos;
-			if (endPos > startPos)
-			{
-				deleteRange(theFlow, startPos, endPos);
-			}
+			if (!textScrap)
+				return absoluteStart;
 			
-			if (textScrap != null)
-			{
-				textScrap = textScrap.clone();	// make a copy so the original isn't mutated
-				nextInsertPosition = insertTextFlow(theFlow, startPos, textScrap.textFlow, textScrap.beginMissingArray, textScrap.endMissingArray);	
-			}
-			return nextInsertPosition;
-		}
+			var scrapFlow:TextFlow = textScrap.textFlow.deepCopy() as TextFlow;
+			var scrapLeaf:FlowLeafElement = scrapFlow.getFirstLeaf();
 
-		/**
-		 * Creates a copy of the TextFlow in between two positions and returns the TextFlow
-		 * within a TextScrap object.  See TextScrap for more information.
-		 * @param theFlow The TextFlow that is being copied from.
-		 * @param startPos The index value of the first position of the TextFlow being copied from.
-		 * @param endPos The index value following the end position of the TextFlow being copied from.
-		 */			 
-		public static function createTextScrap(theFlow:TextFlow, startPos:int, endPos:int):TextScrap
-		{
-			if (!theFlow || startPos >= endPos) 
-				return null;
-			var newTextFlow:TextFlow = theFlow.deepCopy(startPos, endPos) as TextFlow;
-			newTextFlow.normalize();
-			var retTextScrap:TextScrap = new TextScrap(newTextFlow);
-			if (newTextFlow.textLength > 0)
+			var destinationLeaf:FlowLeafElement = textFlow.findLeaf(absoluteStart);		
+			var insertPosition:int = absoluteStart;
+			
+			var firstParagraph:Boolean = true;
+			var doSplit:Boolean = false;
+			
+			while (scrapLeaf)
 			{
-				var fl:FlowElement = newTextFlow.getLastLeaf();
-			
-				var srcElem:FlowElement = theFlow.findLeaf(startPos);
-				var copyElem:FlowElement = newTextFlow.getFirstLeaf();
-				while (copyElem && srcElem)
+				removePasteAttributes(scrapLeaf);
+				var scrapElement:FlowElement = scrapLeaf;		// highest level complete element in the scrap
+
+				// On the first paragraph, it always merges in to the destination paragraph if the destination paragraph has content
+				var destinationParagraph:ParagraphElement = destinationLeaf.getParagraph();
+				if (firstParagraph && (destinationParagraph.textLength > 1 || applyFormat))
 				{
-					if ((startPos - srcElem.getAbsoluteStart()) > 0)
-					{
-						retTextScrap.addToBeginMissing(copyElem);
-					}
-					copyElem = copyElem.parent;
-					srcElem = srcElem.parent;
+					var scrapParagraph:ParagraphElement = scrapLeaf.getParagraph();
+					if (!scrapParagraph.format || scrapParagraph.format.getStyle(ConverterBase.MERGE_TO_NEXT_ON_PASTE) === undefined)
+						doSplit = true;
+					scrapElement = scrapParagraph.getChildAt(0);
 				}
-			
-				srcElem = theFlow.findLeaf(endPos - 1);
-				copyElem = newTextFlow.getLastLeaf();
-				if ((copyElem is SpanElement) && (!(srcElem is SpanElement)))
+				else
 				{
-					copyElem = newTextFlow.findLeaf(newTextFlow.textLength - 2);
+					if (applyFormat && firstParagraph)
+					{
+						destinationElement = findLowestPossibleParent(destinationLeaf.parent, scrapElement);
+						var currentIndex:int = destinationElement.findChildIndexAtPosition(insertPosition - destinationElement.getAbsoluteStart());
+						applyFormatToElement(destinationElement, currentIndex, scrapElement);
+					}
+					// Normally the root element of the scrap is marked as partial, but if not, just assume that its partial (we never paste the TextFlow element)
+					while (scrapElement && scrapElement.parent && (!scrapElement.parent.format || scrapElement.parent.format.getStyle(ConverterBase.MERGE_TO_NEXT_ON_PASTE) === undefined) && !(scrapElement.parent is TextFlow))
+						scrapElement = scrapElement.parent;
 				}
 				
-				while (copyElem && srcElem)
+
+				// Find the lowest level parent in the TextFlow that can accept the scrapElement as a child. 
+				// If necessary, copy higher up the scrapElement hierarchy to find a match.
+				var destinationElement:FlowGroupElement = findLowestPossibleParent(destinationLeaf.parent, scrapElement);
+				while (!destinationElement)
 				{
-					if (endPos < (srcElem.getAbsoluteStart() + srcElem.textLength))
-					{
-						retTextScrap.addToEndMissing(copyElem);
-					}
-					copyElem = copyElem.parent;
-					srcElem = srcElem.parent;
+					// Nothing in the TextFlow element hierarchy can accept the incoming scrap element.
+					// Go up the scrapElement's hierarchy of partial nodes until we find one that can be inserted.
+					scrapElement = scrapElement.parent;
+					CONFIG::debug { assert(scrapElement != null, "Couldn't find scrapElement that could be pasted"); }
+					destinationElement = findLowestPossibleParent(destinationLeaf.parent, scrapElement);
 				}
-				return retTextScrap;
+				CONFIG::debug { assert(destinationElement != null, "insertTextScrap failed to find a FlowElement that can take the scrap element"); }
+				
+				removePasteAttributes(scrapElement);
+
+				var destinationStart:int = destinationElement.getAbsoluteStart();
+				if (firstParagraph && doSplit)
+				{
+					// Split the paragraph, and merge the scrap paragraph to the end of the first paragraph of the destination
+					CONFIG::debug { assert(destinationElement is ParagraphElement, "We should be splitting a paragraph"); }
+					ModelEdit.splitElement(textFlow, destinationElement, insertPosition - destinationStart);
+					var scrapParent:FlowGroupElement = scrapElement.parent;
+					var scrapChildren:Array = scrapParent.mxmlChildren;
+					scrapParent.replaceChildren(0, scrapParent.numChildren);
+					if (scrapParent.parent)
+						scrapParent.parent.removeChild(scrapParent);
+					if (applyFormat)
+						applyFormatToElement(destinationElement, destinationElement.numChildren, scrapChildren);
+					destinationElement.replaceChildren(destinationElement.numChildren, destinationElement.numChildren, scrapChildren);
+					scrapElement = destinationElement.getChildAt(destinationElement.numChildren - 1);		// last span pasted, so we'll paste next after this
+					firstParagraph = false;
+				}
+				else
+				{
+					// We're going to add scrapElement as a child of destinationElement at the insertPosition.
+					// Split the children of destinationElement if necessary.
+					var childIndex:int = destinationElement.findChildIndexAtPosition(insertPosition - destinationElement.getAbsoluteStart());
+					var child:FlowElement = destinationElement.getChildAt(childIndex);
+					var childStart:int = child.getAbsoluteStart();
+					if (insertPosition == childStart + child.textLength)
+						++childIndex;
+					else if (insertPosition > childStart)
+					{
+						if (child is FlowLeafElement)
+							child.splitAtPosition(insertPosition - childStart);
+						else
+							ModelEdit.splitElement(textFlow, child as FlowGroupElement, insertPosition - childStart);
+						++childIndex;
+					}
+					if (applyFormat)
+						applyFormatToElement(destinationElement, childIndex, scrapElement);
+					destinationElement.replaceChildren(childIndex, childIndex, scrapElement);
+				}
+
+				
+				// Advance to the next destination leaf
+				destinationLeaf = (scrapElement is FlowLeafElement) ? FlowLeafElement(scrapElement).getNextLeaf() : FlowGroupElement(scrapElement).getLastLeaf().getNextLeaf();
+				insertPosition = destinationLeaf ? destinationLeaf.getAbsoluteStart() : textFlow.textLength - 1;
+				
+				scrapLeaf = scrapFlow.getFirstLeaf();
 			}
-			return null;
-		}		
-		
+			
+			return insertPosition;
+		}
+
 		/**
 		 * Creates a TCY run out of the selected positions.
 		 * @param theFlow The TextFlow of interest.
@@ -499,10 +344,7 @@ package flashx.textLayout.edit
 					var new_tcyElem:TCYElement = new TCYElement();
 					
 					//don't hide an error!
-					if(madeTCY)
-						madeTCY = insertNewSPBlock(theFlow, startPos, curEndPos, new_tcyElem, TCYElement);
-					else
-						insertNewSPBlock(theFlow, startPos, curEndPos, new_tcyElem, TCYElement);
+					madeTCY = madeTCY && insertNewSPBlock(theFlow, startPos, curEndPos, new_tcyElem, TCYElement);
 				}
 				else
 					madeTCY = false;
@@ -552,10 +394,7 @@ package flashx.textLayout.edit
 					newLinkElement.target = target;
 				
 					//don't hide an error!
-					if(madeLink)
-						madeLink = insertNewSPBlock(theFlow, startPos, linkEndPos, newLinkElement, LinkElement);
-					else
-						insertNewSPBlock(theFlow, startPos, linkEndPos, newLinkElement, LinkElement);
+					madeLink = madeLink && insertNewSPBlock(theFlow, startPos, linkEndPos, newLinkElement, LinkElement);
 				}	
 				if(paraEnd < endPos)
 				{
@@ -583,7 +422,7 @@ package flashx.textLayout.edit
 				return false;
 			}
 			
-			return findAndRemoveFlowGroupElement(theFlow, startPos, endPos, TCYElement);;
+			return findAndRemoveFlowGroupElement(theFlow, startPos, endPos, TCYElement);
 		}
 		
 		/**
@@ -605,7 +444,7 @@ package flashx.textLayout.edit
 		
 		/**
 		 * @private
-		 * insertNewSPBlock - add a SubParagraphGroupElement (spg) to <code>theFlow</code> at the indicies specified by <code>startPos</code> and
+		 * insertNewSPBlock - add a SubParagraphGroupElementBase (spg) to <code>theFlow</code> at the indicies specified by <code>startPos</code> and
 		 * <code>endPos</code>.  The <code>newSPB</code> will take ownership of any FlowElements within the range and will split them
 		 * as needed.  If the parent of the FlowGroupElement indicated by <code>startPos</code> is the same as <code>spgClass</code> then
 		 * the method fails and returns false because a spg cannot own children of the same class as itself.  Any spg of type <code>spgClass</code>
@@ -614,7 +453,7 @@ package flashx.textLayout.edit
 		 * @param theFlow:TextFlow - The TextFlow that is the destination for the newSPB
 		 * @param startPos:int - The absolute index value of the first position of the range in the TextFlow to perform the insertion.
 		 * @param endPos:int - The index value following the end position of the range in the TextFlow to perform the insertion.
-		 * @param newSPB:SubParagraphGroupElement - The new SubParagraphElement which is to be added into theFlow.
+		 * @param newSPB:SubParagraphGroupElementBase - The new SubParagraphElement which is to be added into theFlow.
 		 * @param spgClass:Class - the class of the fbe we intend to add.
 		 * 
 		 * Examples: Simple and complex where insertion is of <code>spgClass</code> b.  Selection is l~o
@@ -623,7 +462,7 @@ package flashx.textLayout.edit
 		 * 		3) <a><span>ghijk</span><c><span>lmn</span></c><span>op</span></a>
 		 * 
 		 */
-		tlf_internal static function insertNewSPBlock(theFlow:TextFlow, startPos:int, endPos:int, newSPB:SubParagraphGroupElement, spgClass:Class):Boolean
+		tlf_internal static function insertNewSPBlock(theFlow:TextFlow, startPos:int, endPos:int, newSPB:SubParagraphGroupElementBase, spgClass:Class):Boolean
 		{
 			var curPos:int = startPos;
 			var curFBE:FlowGroupElement = theFlow.findAbsoluteFlowGroupElement(curPos);
@@ -718,11 +557,11 @@ package flashx.textLayout.edit
 		/**
 		 * @private
 		 * splitElement - split <code>elem</code> at the relative index of <code>splitPos</code>.  If <code>splitSubBlockContents</code>
-		 * is true, split the contents of <code>elem</code> if it is a SubParagraphGroupElement, otherwise just split <code>elem</code>
+		 * is true, split the contents of <code>elem</code> if it is a SubParagraphGroupElementBase, otherwise just split <code>elem</code>
 		 * 
 		 * @param elem:FlowElement - the FlowElement to split
 		 * @param splitPos:int - The elem relative index indicating where to split
-		 * @param splitSubBlockContents:Boolean - boolean indicating whether a SubParagraphGroupElement is to be split OR that it's contents
+		 * @param splitSubBlockContents:Boolean - boolean indicating whether a SubParagraphGroupElementBase is to be split OR that it's contents
 		 * should be split.  For example, are we splitting a link or are we splitting the child of the link
 		 * 
 		 * <spg><span>ABCDEF</span></spg>
@@ -743,9 +582,9 @@ package flashx.textLayout.edit
 			{
 				SpanElement(elem).splitAtPosition(splitPos);
 			}
-			else if(elem is SubParagraphGroupElement && splitSubBlockContents)
+			else if(elem is SubParagraphGroupElementBase && splitSubBlockContents)
 			{
-				var subBlock:SubParagraphGroupElement = SubParagraphGroupElement(elem);
+				var subBlock:SubParagraphGroupElementBase = SubParagraphGroupElementBase(elem);
 				// Split the SpanElement of the block at splitPos.  If the item at the splitPos is not a SpanElement, no action occurs.
 				var tempElem:SpanElement = subBlock.findLeaf(splitPos) as SpanElement;
 				if (tempElem)
@@ -813,7 +652,7 @@ package flashx.textLayout.edit
 		 * @param parentFBE:FlowGroupElement - the FBE into which the newSPB is being inserted.
 		 * @param startPos:int - The index value of the first position of the replacement range in the TextFlow.
 		 * @param endPos:int - The index value following the end position of the replacement range in the TextFlow.
-		 * @param newSPB:SubParagraphGroupElement - the new SubParagraphGroupElement we intend to insert.
+		 * @param newSPB:SubParagraphGroupElementBase - the new SubParagraphGroupElementBase we intend to insert.
 		 * @param spgClass:Class - the class of the fbe we intend to insert.
 		 * 
 		 * @return int - the aboslute index in the text flow after insertion.
@@ -828,7 +667,7 @@ package flashx.textLayout.edit
 		 *  endPos = 9
 		 *  newSPB is of type <b>
 		 */
-		tlf_internal static function subsumeElementsToSPBlock(parentFBE:FlowGroupElement, elementIdx:int, curPos:int, endPos:int, newSPB:SubParagraphGroupElement, spgClass:Class):int
+		tlf_internal static function subsumeElementsToSPBlock(parentFBE:FlowGroupElement, elementIdx:int, curPos:int, endPos:int, newSPB:SubParagraphGroupElementBase, spgClass:Class):int
 		{
 			var curFlowEl:FlowElement = null;
 			
@@ -885,7 +724,7 @@ package flashx.textLayout.edit
 				//
 				//	2) curFlowEl = <b><span>lm</span></b>
 				//		<a><span>ghij</span><b><span>k</span></b><b></b>{curFlowEl}<span>nop</span></a>
-				parentFBE.replaceChildren(elementIdx, elementIdx + 1, null);
+				parentFBE.replaceChildren(elementIdx, elementIdx + 1);
 				
 				//if the curFlowEl is of type spgClass, then we need to take its children and
 				//add them to the newSPB because a spg cannot contain a child of the same class
@@ -894,14 +733,14 @@ package flashx.textLayout.edit
 				// exmaple: 2) curFlowEl = <b><span>lm</span></b>
 				if (curFlowEl is spgClass)
 				{
-					var subBlock:SubParagraphGroupElement = curFlowEl as SubParagraphGroupElement;
+					var subBlock:SubParagraphGroupElementBase = curFlowEl as SubParagraphGroupElementBase;
 					//elementCount == 1 - <span>lm</span>
 					while (subBlock.numChildren > 0)
 					{
 						//fe[0] = <span>lm</span>
 						var fe:FlowElement = subBlock.getChildAt(0);
 						//<span></span>
-						subBlock.replaceChildren(0, 1, null);
+						subBlock.replaceChildren(0, 1);
 						//<b><span>lm</span></b>
 						newSPB.replaceChildren(newSPB.numChildren, newSPB.numChildren, fe);
 					}
@@ -917,7 +756,7 @@ package flashx.textLayout.edit
 					// curFlowEl = <b>bar<a>other</a><b>
 					//
 					// since <b> is a spg, we need to walk it's contents and remove any <a> elements
-					if(curFlowEl is SubParagraphGroupElement)
+					if(curFlowEl is SubParagraphGroupElementBase)
 					{
 						//we need to dive into this spgClass and remove any fbes of type spgClass
 						//pass in the curFlowEl as the newSPB, remove any spgs of type spgClass, then 
@@ -925,13 +764,13 @@ package flashx.textLayout.edit
 						//
 						//ignore the return value of the recursive call as the length has already been
 						//accounted for above
-						flushSPBlock(curFlowEl as SubParagraphGroupElement, spgClass);
+						flushSPBlock(curFlowEl as SubParagraphGroupElementBase, spgClass);
 					}
 					newSPB.replaceChildren(newSPB.numChildren, newSPB.numChildren, curFlowEl);
 					
-					if(newSPB.numChildren == 1 && curFlowEl is SubParagraphGroupElement)
+					if(newSPB.numChildren == 1 && curFlowEl is SubParagraphGroupElementBase)
 					{
-						var childSPGE:SubParagraphGroupElement = curFlowEl as SubParagraphGroupElement;
+						var childSPGE:SubParagraphGroupElementBase = curFlowEl as SubParagraphGroupElementBase;
 						//running example:
 						//a.precedence = 800, tcy.precedence = kMinSPGEPrecedence
 						//this = <tcy><a><span>fooBar</span></a><tcy>
@@ -945,7 +784,7 @@ package flashx.textLayout.edit
 							{
 								//first, remove the child
 								//this = <tcy></tcy>
-								newSPB.replaceChildren(0,1,null);
+								newSPB.replaceChildren(0,1);
 								
 								//we need to flop this object for the child
 								while(childSPGE.numChildren > 0)
@@ -953,13 +792,13 @@ package flashx.textLayout.edit
 									//tempFE = <span>fooBar</span>
 									var tempFE:FlowElement = childSPGE.getChildAt(0);
 									//child = <a></a>
-									childSPGE.replaceChildren(0,1,null);
+									childSPGE.replaceChildren(0,1);
 									//this = <tcy><span>fooBar</span></tcy>
 									newSPB.replaceChildren(newSPB.numChildren, newSPB.numChildren, tempFE);
 								}
 								
 								var myIdx:int = newSPB.parent.getChildIndex(newSPB);
-								CONFIG::debug{ assert(myIdx >= 0, "Invalid index!  How can a SubParagraphGroupElement normalizing not have a parent!"); }
+								CONFIG::debug{ assert(myIdx >= 0, "Invalid index!  How can a SubParagraphGroupElementBase normalizing not have a parent!"); }
 								
 								//add childSPGE in my place
 								newSPB.parent.replaceChildren(myIdx, myIdx + 1, childSPGE)
@@ -1014,7 +853,7 @@ package flashx.textLayout.edit
 				//the one which starts at our start AND is the topmost object at that index.
 				//example: <a><b>foo</b> bar</a> - getting the object at "f" will yield the <b> element, not <a>
 				while(containerFBE.parent && containerFBE.parent.getAbsoluteStart() == containerFBE.getAbsoluteStart() && 
-					!(containerFBE.parent is ParagraphElement)) //don't go beyond paragraph
+					!(containerFBE.parent is ParagraphElement) && !(containerFBE is ParagraphElement)) //don't go beyond paragraph
 				{
 					containerFBE = containerFBE.parent;
 				}
@@ -1050,7 +889,7 @@ package flashx.textLayout.edit
 				curEl = containerFBE.getChildAt(childIdx);
 				if(curEl is fbeClass)
 				{
-					CONFIG::debug{ assert(curEl is SubParagraphGroupElement, "Wrong FBE type!  Trying to remove illeage FBE!") };
+					CONFIG::debug{ assert(curEl is SubParagraphGroupElementBase, "Wrong FBE type!  Trying to remove illeage FBE!"); }
 					var curFBE:FlowGroupElement = curEl as FlowGroupElement;
 					
 					//get it's parent and the index of the curFBE
@@ -1080,17 +919,17 @@ package flashx.textLayout.edit
 					while (curFBE.numChildren > 0)
 					{
 						var childFE:FlowElement = curFBE.getChildAt(0);
-						curFBE.replaceChildren(0, 1, null);
+						curFBE.replaceChildren(0, 1);
 						parentBlock.replaceChildren(idxInParent, idxInParent, childFE);
 						idxInParent++; 
 					}
 					
 					//remove the curFBE
-					parentBlock.replaceChildren(idxInParent, idxInParent + 1, null);
+					parentBlock.replaceChildren(idxInParent, idxInParent + 1);
 				}
-				else if(curEl is SubParagraphGroupElement) //check all the parents...
+				else if(curEl is SubParagraphGroupElementBase) //check all the parents...
 				{
-					var curSPB:SubParagraphGroupElement = SubParagraphGroupElement(curEl);
+					var curSPB:SubParagraphGroupElementBase = SubParagraphGroupElementBase(curEl);
 					if(curSPB.numChildren == 1)
 						curPos = curSPB.getAbsoluteStart() + curSPB.textLength;
 					else
@@ -1119,7 +958,7 @@ package flashx.textLayout.edit
 		 * follows:
 		 * 	endPos > start
 		 * 	the new block will not span multiple paragraphs
-		 *  if the block is going into a SubParagraphGroupElement, it must not split the block:
+		 *  if the block is going into a SubParagraphGroupElementBase, it must not split the block:
 		 * 		example:  Text 		- ABCDEFG with a link on CDE
 		 * 		legal new Block		- D, CD, CDE, [n-chars]CDE[n1-chars]
 		 * 		illegal new Block 	- [1 + n-chars]C[D], [D]E[1 + n-chars]
@@ -1145,7 +984,7 @@ package flashx.textLayout.edit
 			if(tailFBE.getParentByType(blockClass))
 				tailFBE = tailFBE.getParentByType(blockClass) as FlowGroupElement;
 			
-			//if these are the same FBEs then we are safe to insert a SubParagraphGroupElement
+			//if these are the same FBEs then we are safe to insert a SubParagraphGroupElementBase
 			if(anchorFBE == tailFBE)
 				return true;
 			//make sure that the two FBEs belong to the same paragraph!
@@ -1153,13 +992,13 @@ package flashx.textLayout.edit
 				return false;
 			else if(anchorFBE is blockClass && tailFBE is blockClass)//they're the same class, OK to merge, split, etc...
 				return true;
-			else if(anchorFBE is SubParagraphGroupElement && !(anchorFBE is blockClass))
+			else if(anchorFBE is SubParagraphGroupElementBase && !(anchorFBE is blockClass))
 			{
 				var anchorStart:int = anchorFBE.getAbsoluteStart();
 				if(startPos > anchorStart && endPos > anchorStart + anchorFBE.textLength)
 					return false;
 			}
-			else if((anchorFBE.parent is SubParagraphGroupElement || tailFBE.parent is SubParagraphGroupElement)
+			else if((anchorFBE.parent is SubParagraphGroupElementBase || tailFBE.parent is SubParagraphGroupElementBase)
 				&& anchorFBE.parent != tailFBE.parent)
 			{
 				//if either FBE parent is a SPGE and they are not the same, prevent the split.  
@@ -1168,7 +1007,7 @@ package flashx.textLayout.edit
 			
 			//if we got here, then the anchorFBE is OK, check the tail.  If endPos is pointing to the
 			//0th character of a FlowGroupElement, we don't need to worry about the tail.
-			if(tailFBE is SubParagraphGroupElement && !(tailFBE is blockClass) && endPos > tailFBE.getAbsoluteStart())
+			if(tailFBE is SubParagraphGroupElementBase && !(tailFBE is blockClass) && endPos > tailFBE.getAbsoluteStart())
 			{
 				var tailStart:int = tailFBE.getAbsoluteStart();
 				if(startPos < tailStart && endPos < tailStart + tailFBE.textLength)
@@ -1184,7 +1023,7 @@ package flashx.textLayout.edit
 		 * 
 		 * example: subPB = <b>bar<a>other</a><b> extending an <a> element to include all of "other"
 		 */ 
-		tlf_internal static function flushSPBlock(subPB:SubParagraphGroupElement, spgClass:Class):void
+		tlf_internal static function flushSPBlock(subPB:SubParagraphGroupElementBase, spgClass:Class):void
 		{
 			var subParaIter:int = 0;
 	
@@ -1203,7 +1042,7 @@ package flashx.textLayout.edit
 						//subFEChild = <span>other</span>
 						var subFEChild:FlowElement = subChildFBE.getChildAt(0);
 						//subFEChild = <a></a>
-						subChildFBE.replaceChildren(0, 1, null);
+						subChildFBE.replaceChildren(0, 1);
 						//subPB = <b>barother<a></a><b>
 						subPB.replaceChildren(subParaIter, subParaIter, subFEChild);
 					}
@@ -1212,72 +1051,142 @@ package flashx.textLayout.edit
 					++subParaIter;
 					//remove the empty child
 					//subPB = <b>barother<b>
-					subPB.replaceChildren(subParaIter, subParaIter + 1, null);
+					subPB.replaceChildren(subParaIter, subParaIter + 1);
 				}
-				else if(subFE is SubParagraphGroupElement)
+				else if(subFE is SubParagraphGroupElementBase)
 				{
-					flushSPBlock(subFE as SubParagraphGroupElement, spgClass);
+					flushSPBlock(subFE as SubParagraphGroupElementBase, spgClass);
 					++subParaIter;
 				}
 				else
 					++subParaIter;//go to next child
 			}
 		}
-		/** Joins this paragraph's next sibling to this if it is a paragraph */
-		static public function joinNextParagraph(para:ParagraphElement):Boolean
-		{		
+		
+		/** returns next paragraph in reading order after para. Used for merging paragraphs after delete.  */
+		tlf_internal static function findNextParagraph(para:ParagraphElement):ParagraphElement
+		{
+			if (para)
+			{
+				var leaf:FlowLeafElement = para.getLastLeaf();
+				leaf = leaf.getNextLeaf();
+				if (leaf)
+					return leaf.getParagraph();
+			}
+			return null;
+		/*	var sibParagraph:ParagraphElement;
 			if (para && para.parent)
 			{
-				var myidx:int = para.parent.getChildIndex(para);
-				if (myidx != para.parent.numChildren-1)
+				var child:FlowGroupElement = para;
+				var parent:FlowGroupElement = para.parent;
+				
+				var myidx:int = parent.getChildIndex(child);
+				
+				// go up the chain till not on last child
+				while(myidx == parent.numChildren-1)
 				{
-					// right now, you can only merge with other paragraphs
-					var sibParagraph:ParagraphElement = para.parent.getChildAt(myidx+1) as ParagraphElement;
-					if (sibParagraph)
-					{						
-						while (sibParagraph.numChildren > 0)
-						{
-							var curFlowElement:FlowElement = sibParagraph.getChildAt(0);
-							sibParagraph.replaceChildren(0, 1, null);
-							para.replaceChildren(para.numChildren, para.numChildren, curFlowElement);
-						}
-						para.parent.replaceChildren(myidx+1, myidx+2, null);
-						return true;
-					}
+					child = parent;
+					parent = parent.parent;
+					myidx = parent.getChildIndex(child);
 				}
-			} 
-			return false;
+				if (myidx != parent.numChildren-1)
+				{
+					// go down the first child descendents till reach a paragraph
+					var sibElement:FlowGroupElement = parent.getChildAt(myidx+1) as FlowGroupElement;
+					while(sibElement && !(sibElement is ParagraphElement))
+					{
+						sibElement = sibElement.getChildAt(0) as FlowGroupElement;	
+					}
+					sibParagraph = sibElement as ParagraphElement;
+				}
+			}
+			return sibParagraph; */
+		}
+		
+		/** if parent is a singleton element, deletes it, then repeats deletion of singletons up the parent chain.  Used after paragraph merge. */
+		tlf_internal static function removeEmptyParentChain(parent:FlowGroupElement):IMemento
+		{
+			var mementoList:MementoList = new MementoList(parent.getTextFlow());
+			while(parent && (parent.numChildren == 0))
+			{
+				var grandParent:FlowGroupElement = parent.parent;
+				if(grandParent)
+				{
+					var parentIdx:int = grandParent.getChildIndex(parent);
+					mementoList.push(ModelEdit.removeElements(grandParent.getTextFlow(), grandParent, parentIdx, 1));
+					//grandParent.replaceChildren(parentIdx, parentIdx+1);
+				}
+				parent = grandParent;
+			}
+			return mementoList;
+		}
+		
+		/** Joins this paragraph's next sibling to this if it is a paragraph */
+		static public function joinNextParagraph(para:ParagraphElement, inSameParent:Boolean):IMemento
+		{		
+			var nextPara:ParagraphElement = findNextParagraph(para);
+			if (nextPara && (!inSameParent || para.parent == nextPara.parent))
+				return joinToElement(para, nextPara);
+			return null;
 		}
 
 		/** Joins this paragraph's next sibling to this if it is a paragraph */
-		static public function joinToNextParagraph(para:ParagraphElement):Boolean
+		static public function joinToNextParagraph(para:ParagraphElement, inSameParent:Boolean):MementoList
 		{		
-			if (para && para.parent)
-			{
-				var myidx:int = para.parent.getChildIndex(para);
-				if (myidx != para.parent.numChildren-1)
-				{
-					// right now, you can only merge with other paragraphs
-					var sibParagraph:ParagraphElement = para.parent.getChildAt(myidx+1) as ParagraphElement;
-					if (sibParagraph)
-					{			
-						// Add the first paragraph's children to the front of the next paragraph's child list
-						var addAtIndex:int = 0;
-						while (para.numChildren > 0)
-						{
-							var curFlowElement:FlowElement = para.getChildAt(0);
-							para.replaceChildren(0, 1, null);
-							sibParagraph.replaceChildren(addAtIndex, addAtIndex, curFlowElement);
-							++addAtIndex;
-						}
-						para.parent.replaceChildren(myidx, myidx+1, null);
-						return true;
-					}
-				}
-			} 
-			return false;
+			var sibParagraph:ParagraphElement = findNextParagraph(para);
+			if (sibParagraph && (!inSameParent || para.parent == sibParagraph.parent))
+				return joinToNextElement(para, sibParagraph);
+			return null;
 		}
 
+		/** Joins this element2 to element1 -- all children of element2 added to end of element1 */
+		static public function joinToElement(element1:FlowGroupElement, element2:FlowGroupElement):IMemento
+		{	
+			var list:MementoList;
+			
+			if (element1 && element2)
+			{
+		/*		list = new MementoList(element1.getTextFlow());
+				
+				var elementList:Array = element2.mxmlChildren;
+				
+				list.push(ModelEdit.removeElements(element2.getTextFlow(), element2, 0, element2.numChildren)); // remove children of the second element
+
+				for(var i:int=0; i<elementList.length; ++i) // add them to the first element
+				{
+					list.push(ModelEdit.addElement(element1.getTextFlow(), elementList[i], element1, element1.numChildren));
+				}
+				// remove (empty) element2 and chain of any empty parents
+				list.push(removeEmptyParentChain(element2));
+				return list;
+				*/
+				return ModelEdit.joinElement(element2.getTextFlow(), element1, element2);
+			}
+			return list;
+		}
+		
+		/** Joins this element1 to element2 -- all children of element1 added to front of element2 */
+		static public function joinToNextElement(element1:FlowGroupElement, element2:FlowGroupElement):MementoList
+		{		
+			var list:MementoList;
+
+			if (element1 && element2)
+			{
+				list = new MementoList(element1.getTextFlow());
+
+				var elementList:Array = element1.mxmlChildren;
+				list.push(ModelEdit.removeElements(element1.getTextFlow(), element1, 0, element1.numChildren)); // remove children of the first element
+				for(var i:int=elementList.length - 1; i>=0; --i) // add them to the second element
+				{
+					list.push(ModelEdit.addElement(element2.getTextFlow(), elementList[i], element2, 0));
+				}
+				// remove (empty) element1 and chain of any empty parents
+				list.push(removeEmptyParentChain(element1));
+				return list;
+			}
+			return list;
+		}
+		
 								
 	}
 }

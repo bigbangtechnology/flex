@@ -1,21 +1,20 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-//  ADOBE SYSTEMS INCORPORATED
-//  Copyright 2008-2009 Adobe Systems Incorporated
-//  All Rights Reserved.
+// ADOBE SYSTEMS INCORPORATED
+// Copyright 2007-2010 Adobe Systems Incorporated
+// All Rights Reserved.
 //
-//  NOTICE: Adobe permits you to use, modify, and distribute this file
-//  in accordance with the terms of the license agreement accompanying it.
+// NOTICE:  Adobe permits you to use, modify, and distribute this file 
+// in accordance with the terms of the license agreement accompanying it.
 //
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 package flashx.textLayout.conversion 
-{
-	import __AS3__.vec.Vector;
-	
+{	
 	import flash.display.Shape;
 	import flash.text.engine.TextRotation;
 	import flash.utils.Dictionary;
 	
+	import flashx.textLayout.TextLayoutVersion;
 	import flashx.textLayout.container.ContainerController;
 	import flashx.textLayout.debug.assert;
 	import flashx.textLayout.elements.BreakElement;
@@ -26,6 +25,8 @@ package flashx.textLayout.conversion
 	import flashx.textLayout.elements.IConfiguration;
 	import flashx.textLayout.elements.InlineGraphicElement;
 	import flashx.textLayout.elements.LinkElement;
+	import flashx.textLayout.elements.ListElement;
+	import flashx.textLayout.elements.ListItemElement;
 	import flashx.textLayout.elements.ParagraphElement;
 	import flashx.textLayout.elements.SpanElement;
 	import flashx.textLayout.elements.SubParagraphGroupElement;
@@ -33,11 +34,9 @@ package flashx.textLayout.conversion
 	import flashx.textLayout.elements.TabElement;
 	import flashx.textLayout.elements.TextFlow;
 	import flashx.textLayout.formats.ITextLayoutFormat;
+	import flashx.textLayout.formats.ListMarkerFormat;
 	import flashx.textLayout.formats.TextLayoutFormat;
-	import flashx.textLayout.formats.TextLayoutFormatValueHolder;
-	import flashx.textLayout.property.EnumStringProperty;
-	import flashx.textLayout.property.NumberProperty;
-	import flashx.textLayout.property.StringProperty;
+	import flashx.textLayout.property.Property;
 	import flashx.textLayout.tlf_internal;
 	
 	use namespace tlf_internal;
@@ -47,7 +46,7 @@ package flashx.textLayout.conversion
 	 * @private
 	 * TextLayoutImporter converts from XML to TextLayout data structures and back.
 	 */ 	
-	public class TextLayoutImporter extends BaseTextLayoutImporter 
+	public class TextLayoutImporter extends BaseTextLayoutImporter implements ITextLayoutImporter
 	{
 		private static var _defaultConfiguration:ImportExportConfiguration;
 		
@@ -62,21 +61,35 @@ package flashx.textLayout.conversion
 			if (!_defaultConfiguration)
 			{
 				_defaultConfiguration = new ImportExportConfiguration();
-				// shared by TextLayout and FXG markup
-	 			_defaultConfiguration.addIEInfo("TextFlow", TextFlow,        BaseTextLayoutImporter.parseTextFlow, BaseTextLayoutExporter.exportTextFlow, true);
-				_defaultConfiguration.addIEInfo("br", BreakElement,          BaseTextLayoutImporter.parseBreak, BaseTextLayoutExporter.exportFlowElement, false);
-				_defaultConfiguration.addIEInfo("p", ParagraphElement,       BaseTextLayoutImporter.parsePara, BaseTextLayoutExporter.exportParagraphFormattedElement, true);
-				_defaultConfiguration.addIEInfo("span", SpanElement,         BaseTextLayoutImporter.parseSpan, BaseTextLayoutExporter.exportSpan, false);
-				_defaultConfiguration.addIEInfo("tab", TabElement,           BaseTextLayoutImporter.parseTab, BaseTextLayoutExporter.exportFlowElement, false);
-				// shared by TextLayoutMarkup only
-				_defaultConfiguration.addIEInfo("tcy", TCYElement,           TextLayoutImporter.parseTCY, TextLayoutExporter.exportTCY, false);
-				_defaultConfiguration.addIEInfo("a", LinkElement,            TextLayoutImporter.parseLink, TextLayoutExporter.exportLink, false);
-	 			_defaultConfiguration.addIEInfo("div", DivElement,           TextLayoutImporter.parseDivElement, TextLayoutExporter.exportDiv, true);
-				_defaultConfiguration.addIEInfo("img", InlineGraphicElement, TextLayoutImporter.parseInlineGraphic, TextLayoutExporter.exportImage, false);							 
+				// elements
+	 			_defaultConfiguration.addIEInfo("TextFlow", TextFlow,        BaseTextLayoutImporter.parseTextFlow,	BaseTextLayoutExporter.exportTextFlow);
+				_defaultConfiguration.addIEInfo("br", BreakElement,          BaseTextLayoutImporter.parseBreak,		BaseTextLayoutExporter.exportFlowElement);
+				_defaultConfiguration.addIEInfo("p", ParagraphElement,       BaseTextLayoutImporter.parsePara,		BaseTextLayoutExporter.exportParagraphFormattedElement);
+				_defaultConfiguration.addIEInfo("span", SpanElement,         BaseTextLayoutImporter.parseSpan,		BaseTextLayoutExporter.exportSpan);
+				_defaultConfiguration.addIEInfo("tab", TabElement,           BaseTextLayoutImporter.parseTab,		BaseTextLayoutExporter.exportFlowElement);
+				_defaultConfiguration.addIEInfo("list", ListElement,  		 BaseTextLayoutImporter.parseList,		BaseTextLayoutExporter.exportList);
+				_defaultConfiguration.addIEInfo("li", ListItemElement,       BaseTextLayoutImporter.parseListItem,	BaseTextLayoutExporter.exportListItem);
+				_defaultConfiguration.addIEInfo("g", SubParagraphGroupElement, TextLayoutImporter.parseSPGE, 		TextLayoutExporter.exportSPGE);
+				_defaultConfiguration.addIEInfo("tcy", TCYElement,           TextLayoutImporter.parseTCY, 			TextLayoutExporter.exportTCY);
+				_defaultConfiguration.addIEInfo("a", LinkElement,            TextLayoutImporter.parseLink, 			TextLayoutExporter.exportLink);
+	 			_defaultConfiguration.addIEInfo("div", DivElement,           TextLayoutImporter.parseDivElement, 	TextLayoutExporter.exportDiv);
+				_defaultConfiguration.addIEInfo("img", InlineGraphicElement, TextLayoutImporter.parseInlineGraphic, TextLayoutExporter.exportImage);	
+				
+				// validate the defaultTypeName values.  They are to match the TLF format export xml names
+				CONFIG::debug 
+				{
+					for (var name:String in _defaultConfiguration.flowElementInfoList)
+					{
+						var info:FlowElementInfo = _defaultConfiguration.flowElementInfoList[name];
+						assert(name == (new info.flowClass).defaultTypeName,"Bad defaultTypeName in "+info.flowClass);
+					}
+				}
 				// customized link formats
-				_defaultConfiguration.addIEInfo(LinkElement.LINK_NORMAL_FORMAT_NAME,null,TextLayoutImporter.parseLinkNormalFormat,null, false);
-				_defaultConfiguration.addIEInfo(LinkElement.LINK_ACTIVE_FORMAT_NAME,null,TextLayoutImporter.parseLinkActiveFormat,null, false);
-				_defaultConfiguration.addIEInfo(LinkElement.LINK_HOVER_FORMAT_NAME, null,TextLayoutImporter.parseLinkHoverFormat, null, false);
+				_defaultConfiguration.addIEInfo(LinkElement.LINK_NORMAL_FORMAT_NAME,null,TextLayoutImporter.parseLinkNormalFormat,null);
+				_defaultConfiguration.addIEInfo(LinkElement.LINK_ACTIVE_FORMAT_NAME,null,TextLayoutImporter.parseLinkActiveFormat,null);
+				_defaultConfiguration.addIEInfo(LinkElement.LINK_HOVER_FORMAT_NAME, null,TextLayoutImporter.parseLinkHoverFormat, null);
+				// list marker format
+				_defaultConfiguration.addIEInfo(ListElement.LIST_MARKER_FORMAT_NAME,null,TextLayoutImporter.parseListMarkerFormat,null);
 			}
 			
 			return _defaultConfiguration;
@@ -91,33 +104,33 @@ package flashx.textLayout.conversion
 		{
 			_defaultConfiguration = null;
 		}
-		
 				
-		protected var bindingsArray:Array;
-		
-		static private const _formatImporter:TLFormatImporter = new TLFormatImporter(TextLayoutFormatValueHolder,TextLayoutFormat.description);
+		static private const _formatImporter:TLFormatImporter = new TLFormatImporter(TextLayoutFormat,TextLayoutFormat.description);
 		static private const _idImporter:SingletonAttributeImporter = new SingletonAttributeImporter("id");
-		static private const _styleNameImporter:SingletonAttributeImporter = new SingletonAttributeImporter("styleName");
+		static private const _typeNameImporter:SingletonAttributeImporter = new SingletonAttributeImporter("typeName");
 		static private const _customFormatImporter:CustomFormatImporter = new CustomFormatImporter();
 		
-		static private const _flowElementFormatImporters:Array = [ _formatImporter,_idImporter,_styleNameImporter,_customFormatImporter ];
+		static private const _flowElementFormatImporters:Array = [ _formatImporter,_idImporter,_typeNameImporter,_customFormatImporter ];
+		
+		private var _imageSourceResolveFunction:Function;
 
 		/** Constructor */
-		public function TextLayoutImporter(textFlowConfiguration:IConfiguration)
+		public function TextLayoutImporter()
 		{
-			super(textFlowConfiguration, flowNS, defaultConfiguration);
-		}
-
-		override protected function clear():void
-		{
-			bindingsArray = null;
-			super.clear();
+			super(new Namespace("flow", "http://ns.adobe.com/textLayout/2008"), defaultConfiguration);
 		}
 		
-		private static function get flowNS():Namespace
-		{
-			return new Namespace("flow", "http://ns.adobe.com/textLayout/2008");
-		}
+		/** @copy ITextLayoutImporter#imageSourceResolveFunction
+		 * 
+		 * @playerversion Flash 10.0
+		 * @playerversion AIR 2.0
+		 * @langversion 3.0
+		 */
+		public function get imageSourceResolveFunction():Function
+		{ return _imageSourceResolveFunction; }
+		public function set imageSourceResolveFunction(resolver:Function):void
+		{ _imageSourceResolveFunction = resolver; }
+		
 		
 		/**  @private */
 		override protected function parseContent(rootStory:XML):TextFlow
@@ -156,11 +169,23 @@ package flashx.textLayout.conversion
 				importers = _flowElementFormatImporters;
 			// all the standard ones have to be in importers - some check needed
 			parseAttributes(xmlToParse,importers);
-			flowElem.format = extractTextFormatAttributesHelper(flowElem.format,_formatImporter) as ITextLayoutFormat;
+			
+			var textFormat:TextLayoutFormat = extractTextFormatAttributesHelper(flowElem.format,_formatImporter) as TextLayoutFormat;
+			if (textFormat)
+			{
+				CONFIG::debug { assert(textFormat.getStyles() != null,"Bad TextFormat in parseStandardFlowElementAttributes"); }
+				flowElem.format = textFormat;
+			}
 
-			flowElem.id = _idImporter.result as String;
-			flowElem.styleName = _styleNameImporter.result as String;
-			flowElem.userStyles = _customFormatImporter.result as Dictionary;
+			if (_idImporter.result)
+				flowElem.id = _idImporter.result as String;
+			if (_typeNameImporter.result)
+				flowElem.typeName = _typeNameImporter.result as String;
+			if (_customFormatImporter.result)
+			{
+				for (var styleName:String in _customFormatImporter.result)
+					flowElem.setStyle(styleName,_customFormatImporter.result[styleName]);
+			}
 		}
 		
 
@@ -168,23 +193,34 @@ package flashx.textLayout.conversion
 		{
 			// allocate the TextFlow and set the TextContainer's rootElement to it.
 			var newFlow:TextFlow = null;
-			if (xmlToParse.@["id"] != undefined)
-			{
-				var flowName:String = null;
-				flowName = xmlToParse.@["id"];
-				newFlow = getBoundObjNamed(flowName, TextFlow) as TextFlow;
-			}
 
 			if (!checkNamespace(xmlToParse))
 				return newFlow;
 
+			if (xmlToParse.hasOwnProperty("@version"))
+			{
+				var version:String = xmlToParse.@["version"];
+				if (version == "2.0.0")
+					_importVersion = TextLayoutVersion.VERSION_2_0;
+				else if (version == "1.1.0" || version == "1.0.0")
+					_importVersion = TextLayoutVersion.VERSION_1_0;
+				else
+				{
+					reportError(GlobalSettings.resourceStringFunction("unsupportedVersion",[ xmlToParse.@["version"] ]));
+					_importVersion = TextLayoutVersion.CURRENT_VERSION;
+				}
+			}
+			else		// we must be the first version
+				_importVersion = TextLayoutVersion.VERSION_1_0;
+				
 			// allocate the TextFlow and initialize the container attributes
 			if (!newFlow)
 				newFlow = new TextFlow(_textFlowConfiguration);
 	
+			// parse formatting
 			parseStandardFlowElementAttributes(newFlow,xmlToParse);
 			
-			// TextFlow can have CharacterFormat, ParagraphFormat and ContainerFormat children.  Filter them out here
+			// descend into children
 			parseFlowGroupElementChildren(xmlToParse, newFlow);
 			
 			CONFIG::debug { newFlow.debugCheckNormalizeAll() ; }
@@ -212,6 +248,13 @@ package flashx.textLayout.conversion
 			return paraElem;
 		}
 		
+		public function createSubParagraphGroupFromXML(xmlToParse:XML):SubParagraphGroupElement
+		{
+			var elem:SubParagraphGroupElement = new SubParagraphGroupElement();
+			parseStandardFlowElementAttributes(elem,xmlToParse);
+			return elem;
+		}
+		
 		public function createTCYFromXML(xmlToParse:XML):TCYElement
 		{
 			var tcyElem:TCYElement = new TCYElement();
@@ -221,11 +264,11 @@ package flashx.textLayout.conversion
 		
 			
 		static internal const _linkDescription:Object = {
-			href : new StringProperty("href",null, false, null),
-			target : new StringProperty("target",null, false, null)
+			href : Property.NewStringProperty("href",null, false, null),
+			target : Property.NewStringProperty("target",null, false, null)
 		}
 		static private const _linkFormatImporter:TLFormatImporter = new TLFormatImporter(Dictionary,_linkDescription);
-		static private const _linkElementFormatImporters:Array = [ _linkFormatImporter, _formatImporter,_idImporter,_styleNameImporter,_customFormatImporter ];
+		static private const _linkElementFormatImporters:Array = [ _linkFormatImporter, _formatImporter,_idImporter,_typeNameImporter,_customFormatImporter ];
 
 		/** Parse a LinkElement Block.
 		 * 
@@ -259,12 +302,12 @@ package flashx.textLayout.conversion
 		static private const _imageDescription:Object = {
 			height:InlineGraphicElement.heightPropertyDefinition,
 			width:InlineGraphicElement.widthPropertyDefinition,
-			source: new StringProperty("source", null, false, null),
-			float: new StringProperty("float", null, false, null),
+			source: Property.NewStringProperty("source", null, false, null),
+			float: Property.NewStringProperty("float", null, false, null),
 			rotation: InlineGraphicElement.rotationPropertyDefinition }
 		
 		static private const _ilgFormatImporter:TLFormatImporter = new TLFormatImporter(Dictionary,_imageDescription);
-		static private const _ilgElementFormatImporters:Array = [ _ilgFormatImporter, _formatImporter/*,_boundTextLayoutFormatImporter*/,_idImporter,_styleNameImporter,_customFormatImporter ];
+		static private const _ilgElementFormatImporters:Array = [ _ilgFormatImporter, _formatImporter, _idImporter, _typeNameImporter, _customFormatImporter ];
 
 		public function createInlineGraphicFromXML(xmlToParse:XML):InlineGraphicElement
 		{				
@@ -275,69 +318,55 @@ package flashx.textLayout.conversion
 			if (_ilgFormatImporter.result)
 			{
 				var source:String = _ilgFormatImporter.result["source"];
-				imgElem.source = source;
+				imgElem.source = _imageSourceResolveFunction != null ? _imageSourceResolveFunction(source) : source;
 				
 				// if not defined then let InlineGraphic set its own default
-				imgElem.height = InlineGraphicElement.heightPropertyDefinition.setHelper(imgElem.height,_ilgFormatImporter.result["height"]);
-				imgElem.width  = InlineGraphicElement.widthPropertyDefinition.setHelper(imgElem.width,_ilgFormatImporter.result["width"]);
+				imgElem.height = _ilgFormatImporter.result["height"];
+				imgElem.width  = _ilgFormatImporter.result["width"];
 				/*	We don't support rotation yet because of bugs in the player. */		
 				// imgElem.rotation  = InlineGraphicElement.heightPropertyDefinition.setHelper(imgElem.rotation,_ilgFormatImporter.result["rotation"]);
-				imgElem.float = InlineGraphicElement.floatPropertyDefinition.setHelper(imgElem.float,_ilgFormatImporter.result["float"]);
+				imgElem.float = _ilgFormatImporter.result["float"];
 			}
 			
 			return imgElem;
 		}
 	
+		public override function createListFromXML(xmlToParse:XML):ListElement
+		{
+			var rslt:ListElement = new ListElement;
+			parseStandardFlowElementAttributes(rslt,xmlToParse);
+			return rslt;
+		}
+
+		public override function createListItemFromXML(xmlToParse:XML):ListItemElement
+		{
+			var rslt:ListItemElement = new ListItemElement;
+			parseStandardFlowElementAttributes(rslt,xmlToParse);
+			return rslt;
+		}
+		
 		public function extractTextFormatAttributesHelper(curAttrs:Object, importer:TLFormatImporter):Object
 		{
 			return extractAttributesHelper(curAttrs,importer);
 		}
-
-		protected function parseNamedFormatDefinition(xmlToParse:XML, importer:TLFormatImporter) : void
-		{
-			if (!checkNamespace(xmlToParse))
-				return;
-			
-			var idName:String = xmlToParse.@id.toString();
-			if (idName == null || idName.length == 0)
-				return;
-				
-			importer.reset();
-			for each (var item:XML in xmlToParse.attributes())
-				importer.importOneFormat(item.name().localName,item.toString());
-			
-			if (!bindingsArray)
-				bindingsArray = new Array();
-			bindingsArray[idName] = importer.result ? importer.result : new importer.classType();
-		}
 		
-		// Find string in array
-		static private function arrayHasString(arr:Array, str:String):Boolean
+		/** Parse an SPGE element
+		 * 
+		 * @param - importFilter:BaseTextLayoutImporter - parser object
+		 * @param - xmlToParse:XML - the xml describing the TCY Block
+		 * @param - parent:FlowBlockElement - the parent of the new TCY Block
+		 * @return SubParagraphGroupElement - a new TCYBlockElement and its children
+		 */
+		static public function parseSPGE(importFilter:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
 		{
-			for each (var item:String in arr)
-				if (str == item)
-					return true;
-			return false;
-		}
-		
-		// Return a "bindings" object. This method allows us to encounter a object via a binding
-		// (it appears within "{}" or we can encounter the actual tag (e.g, <CharacterFormat ... >). Either way
-		// this method will allocate an object with the given name, and assign the attributes as they become
-		// available in the BaseTextLayoutImportFilter.
-		internal function getBoundObjNamed(name:String, typeClass:Class):Object
-		{
-			CONFIG::debug {assert(name != null && name.length > 0, "null string for a bound object")}
-			if (!bindingsArray)
-				bindingsArray = new Array();
-			if (bindingsArray[name] == null) 
+			var elem:SubParagraphGroupElement = TextLayoutImporter(importFilter).createSubParagraphGroupFromXML(xmlToParse);
+			if (importFilter.addChild(parent, elem))
 			{
-				if (typeClass == TextFlow)
-					bindingsArray[name] = new typeClass(this._textFlowConfiguration);
-				else
-					bindingsArray[name] = new typeClass();
- 			}
-
-			return bindingsArray[name];
+				importFilter.parseFlowGroupElementChildren(xmlToParse, elem);
+				//if parsing an empty tcy, create a Span for it.
+				if (elem.numChildren == 0)
+					elem.addChild(new SpanElement());
+			}
 		}
 
 		/** Parse a TCY Block.
@@ -390,24 +419,7 @@ package flashx.textLayout.conversion
 			
 			var parseThis:XML = formatList.length() > 0 ? formatList[0] : xmlToParse;
 			parseAttributes(parseThis,formatImporters);
-			var styleDictionary:Dictionary = _customFormatImporter.result as Dictionary;
-
-			// Link style property values may have been brought through as literal String values. We need to convert
-			// them into typed values, so they get output as canonical translation of the value type into String. 
-			// The color property is an example, where it can get input in 3 different formats, but can only be output in one.
-			var description:Object = TextLayoutFormat.description;
-			for (var prop:String in description)
-			{
-				var val:* = styleDictionary[prop];
-				if (val !== undefined)
-				{
-					val = description[prop].setHelper(undefined,val)
-					if (val !== undefined)
-						styleDictionary[prop] = val;
-				}
-			}
-			
-			return styleDictionary;
+			return _customFormatImporter.result as Dictionary;
 		}
 
 		static public function parseLinkNormalFormat(importFilter:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
@@ -416,6 +428,23 @@ package flashx.textLayout.conversion
 		{ parent.linkActiveFormat = TextLayoutImporter(importFilter).createDictionaryFromXML(xmlToParse); }
 		static public function parseLinkHoverFormat(importFilter:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
 		{ parent.linkHoverFormat = TextLayoutImporter(importFilter).createDictionaryFromXML(xmlToParse); }
+		
+		public function createListMarkerFormatDictionaryFromXML(xmlToParse:XML):Dictionary
+		{
+			var formatImporters:Array = [ _customFormatImporter ];
+			
+			// parse the TextLayoutFormat child object		
+			var formatList:XMLList = xmlToParse..*::ListMarkerFormat;
+			if (formatList.length() != 1)
+				reportError(GlobalSettings.resourceStringFunction("expectedExactlyOneListMarkerFormat",[ xmlToParse.name() ]));
+			
+			var parseThis:XML = formatList.length() > 0 ? formatList[0] : xmlToParse;
+			parseAttributes(parseThis,formatImporters);
+			return _customFormatImporter.result as Dictionary;
+		}
+		
+		static public function parseListMarkerFormat(importFilter:BaseTextLayoutImporter, xmlToParse:XML, parent:FlowGroupElement):void
+		{ parent.listMarkerFormat = TextLayoutImporter(importFilter).createListMarkerFormatDictionaryFromXML(xmlToParse); }
 
 		/** Parse the <div ...> tag and all its children
 		 * 

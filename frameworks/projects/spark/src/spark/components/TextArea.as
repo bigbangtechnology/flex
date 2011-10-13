@@ -17,8 +17,8 @@ import flash.events.Event;
 import flashx.textLayout.elements.TextFlow;
 import flashx.textLayout.formats.TextLayoutFormat;
 
-import mx.core.mx_internal;
 import mx.core.ScrollPolicy;
+import mx.core.mx_internal;
 import mx.events.FlexEvent;
 
 import spark.components.supportClasses.SkinnableTextBase;
@@ -61,30 +61,6 @@ use namespace mx_internal;
 [Style(name="verticalScrollPolicy", type="String", inherit="no", enumeration="off,on,auto")]
 
 //--------------------------------------
-//  Skin states
-//--------------------------------------
-
-/**
- *  Normal State
- *  
- *  @langversion 3.0
- *  @playerversion Flash 10
- *  @playerversion AIR 1.5
- *  @productversion Flex 4
- */
-[SkinState("normal")]
-
-/**
- *  Disabled State
- *  
- *  @langversion 3.0
- *  @playerversion Flash 10
- *  @playerversion AIR 1.5
- *  @productversion Flex 4
- */
-[SkinState("disabled")]
-
-//--------------------------------------
 //  Other metadata
 //--------------------------------------
 
@@ -99,23 +75,26 @@ use namespace mx_internal;
  *  multiple lines of richly formatted text. It can display horizontal and vertical scrollbars
  *  for scrolling through the text and supports vertical scrolling with the mouse wheel.
  *
- *  <p>It does not include any user interface for changing
+ *  <p><b>The skin for the Spark theme
+ *  uses the RichEditableText class. This means that the Spark TextArea control supports 
+ *  the Text Layout Framework (TLF) library,
+ *  which builds on the Flash Text Engine (FTE).</b>
+ *  In combination, these layers provide text editing with
+ *  high-quality international typography and layout.</p>
+ * 
+ *  <p><b>The skin for the mobile theme uses the StyleableTextField class instead of RichEditableText.</b>
+ *  As a result, TLF-only features are not supported in the mobile theme including
+ *  TextFlow, right-to-left or bidirectional text, and advanced text 
+ *  styles.</p>
+ *
+ *  <p>The TextArea control does not include any user interface for changing
  *  the formatting of the text but contains 
  *  APIs that you can use to programmatically format text.
  *  For example, you can create a 
  *  a button that, when clicked, makes the selected text bold.</p>
  *
- *  <p>The Spark version of TextArea 
- *  uses the Text Layout Framework (TLF) library,
- *  which builds on the Flash Text Engine (FTE)
- *  in Flash Player 10.
- *  In combination, these layers provide text editing with
- *  high-quality international typography and layout.
- *  The older MX version of TextArea displays text using the older
- *  TextField class.</p>
- *
  *  <p>The most important differences between Spark TextArea and the
- *  MX TextArea control are as follows:
+ *  MX/mobile TextArea control are as follows:
  *  <ul>
  *    <li>Spark TextArea offers better typography, better support
  *        for international languages, and better text layout.</li>
@@ -182,9 +161,13 @@ use namespace mx_internal;
  *  In those cases, a horizontal scrollbar automatically appears
  *  if any lines of text are wider than the control.</p>
  *
- *  <p>The <code>widthInChars</code> and <code>heightInChars</code>
+ *  <p>The <code>widthInChars</code> and <code>heightInLines</code>
  *  properties let you specify the width and height of the TextArea 
  *  in a way that scales with the font size.
+ *  You can use the <code>typicalText</code> property as well.
+ *  Note that if you use <code>typicalText</code>, the
+ *  <code>widthInChars</code> and <code>heightInLines</code>
+ *  are ignored.
  *  You can also specify an explicit width or height in pixels,
  *  or use a percent width and height or constraints such as
  *  <code>left</code> and <code>right</code>
@@ -194,11 +177,12 @@ use namespace mx_internal;
  *  of character that the user can enter and the <code>restrict</code>
  *  to limit which characters the user can enter.</p>
  *
- *  <p>This control is a skinnable control whose skin uses a
- *  RichEditableText control to display and edit the text
+ *  <p>This control is a skinnable control whose default skin uses a
+ *  RichEditableText class to display and edit the text
  *  and a Scroller control to provide scrollbars.
  *  The RichEditableText can be accessed as <code>textDisplay</code>
- *  and the Scroller as <code>scroller</code>.</p>
+ *  and the Scroller as <code>scroller</code>. When used with the mobile theme, this control uses 
+ *  the StyleableTextField class to display and edit text.</p>
  *
  *  <p>The Spark TextArea
  *  can display left-to-right (LTR) text, such as French,
@@ -216,6 +200,12 @@ use namespace mx_internal;
  *  unlimited undo/redo within one editing session.
  *  An editing session starts when the control gets keyboard focus
  *  and ends when the control loses focus.</p>
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  <p>The TextArea control has the following default characteristics:</p>
  *     <table class="innertable">
@@ -251,6 +241,7 @@ use namespace mx_internal;
  *    <strong>Properties</strong>
  *    heightInLines="<i>Calculated default</i>"
  *    textFlow="<i>TextFlow</i>"
+ *    typicalText=null
  *    widthInChars="<i>Calculated default</i>"
  *  
  *    <strong>Styles</strong>
@@ -439,6 +430,8 @@ public class TextArea extends SkinnableTextBase
      *  to a TextFlow object. When you get the value of this property, you get
      *  the resulting TextFlow object.</p>
      * 
+     *  <p><b>For the Mobile theme, this is not supported.</b></p>
+     * 
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
@@ -463,8 +456,19 @@ public class TextArea extends SkinnableTextBase
     //  heightInLines
     //----------------------------------
 
+    [Inspectable(category="General", minValue="0.0")]
+
     /**
-     *  @copy spark.components.RichEditableText#heightInLines
+     *  The default height of the control, measured in lines.
+     *
+     *  <p>For the Spark theme, see
+     *  <b>spark.components.RichEditableText.heightInLines</b></p>
+     *
+     *  <p>For the Mobile theme, this is not supported.</p>
+     * 
+     *  @see spark.components.RichEditableText#heightInLines
+     * 
+     *  @default NaN
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -494,8 +498,17 @@ public class TextArea extends SkinnableTextBase
     // TLF work.
 
     /**
-     *  @copy spark.components.RichEditableText#textFlow
-     *  
+     *  The TextFlow representing the rich text displayed by this component.
+     *
+     *  <p>For the Spark theme, see
+     *  <b>spark.components.RichEditableText.textFlow</b></p>
+     *
+     *  <p>For the Mobile theme, this is not supported.</p>
+     * 
+     *  @see spark.components.RichEditableText#textFlow
+     * 
+     *  @default null
+     * 
      *  @langversion 3.0
      *  @playerversion Flash 10
      *  @playerversion AIR 1.5
@@ -520,8 +533,19 @@ public class TextArea extends SkinnableTextBase
     //  widthInChars
     //----------------------------------
 
+    [Inspectable(category="General", minValue="0.0")]
+
     /**
-     *  @copy spark.components.RichEditableText#widthInChars
+     *  The default width of the control, measured in em units.
+     *
+     *  <p>For the Spark theme, see
+     *  <b>spark.components.RichEditableText.widthInChars</b></p>
+     *
+     *  <p>For the Mobile theme, this is not supported.</p>
+     * 
+     *  @see spark.components.RichEditableText#widthInChars
+     * 
+     *  @default NaN
      *  
      *  @langversion 3.0
      *  @playerversion Flash 10
@@ -641,11 +665,11 @@ public class TextArea extends SkinnableTextBase
                                      anchorPosition:int=-1,
                                      activePosition:int=-1):TextLayoutFormat
     {
-        if (!textDisplay)
+        if (!(textDisplay is RichEditableText))
             return null;
 
-        return textDisplay.getFormatOfRange(requestedFormats, anchorPosition, 
-                                            activePosition);
+        return RichEditableText(textDisplay).getFormatOfRange(
+                    requestedFormats, anchorPosition, activePosition);
     }
 
     /**
@@ -660,10 +684,11 @@ public class TextArea extends SkinnableTextBase
                                      anchorPosition:int=-1, 
                                      activePosition:int=-1):void
     {
-        if (!textDisplay)
+        if (!(textDisplay is RichEditableText))
             return;
 
-        textDisplay.setFormatOfRange(format, anchorPosition, activePosition);
+        RichEditableText(textDisplay).setFormatOfRange(
+                    format, anchorPosition, activePosition);
     }
 
     /**

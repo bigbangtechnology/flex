@@ -33,6 +33,27 @@ use namespace mx_internal;
 //--------------------------------------
 
 /**
+ *  Orientation of the icon in relation to the label.
+ *  Valid MXML values are <code>right</code>, <code>left</code>,
+ *  <code>bottom</code>, and <code>top</code>.
+ *
+ *  <p>In ActionScript, you can use the following constants
+ *  to set this property:
+ *  <code>IconPlacement.RIGHT</code>,
+ *  <code>IconPlacement.LEFT</code>,
+ *  <code>IconPlacement.BOTTOM</code>, and
+ *  <code>IconPlacement.TOP</code>.</p>
+ *
+ *  @default IconPlacement.LEFT
+ * 
+ *  @langversion 3.0
+ *  @playerversion Flash 10
+ *  @playerversion AIR 1.5
+ *  @productversion Flex 4
+ */
+[Style(name="iconPlacement", type="String", enumeration="top,bottom,right,left", inherit="no", theme="mobile")]
+
+/**
  *  @copy spark.components.supportClasses.GroupBase#style:symbolColor
  *  
  *  @langversion 3.0
@@ -40,13 +61,15 @@ use namespace mx_internal;
  *  @playerversion AIR 1.5
  *  @productversion Flex 4
  */ 
-[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark")]
+[Style(name="symbolColor", type="uint", format="Color", inherit="yes", theme="spark, mobile")]
 
 //--------------------------------------
 //  Excluded APIs
 //--------------------------------------
 
 [Exclude(name="cornerRadius", kind="style")]
+[Exclude(name="icon", kind="style")]
+[Exclude(name="textAlign", kind="style")]
 
 //--------------------------------------
 //  Other metadata
@@ -70,6 +93,12 @@ use namespace mx_internal;
  *  The user selects only one member of the group at a time.
  *  Selecting an unselected group member deselects the currently selected
  *  RadioButton component within that group.</p>
+ *
+ *  <p>To use this component in a list-based component, such as a List or DataGrid, 
+ *  create an item renderer.
+ *  For information about creating an item renderer, see 
+ *  <a href="http://help.adobe.com/en_US/flex/using/WS4bebcd66a74275c3-fc6548e124e49b51c4-8000.html">
+ *  Custom Spark item renderers</a>. </p>
  *
  *  <p>The RadioButton component has the following default characteristics:</p>
  *     <table class="innertable">
